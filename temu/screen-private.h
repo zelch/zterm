@@ -59,6 +59,10 @@ struct _TemuScreenPrivate {
 	GdkRectangle update_rect;
 	GdkRegion *update_region;
 
+	GdkCursor *cursor_bar;		/* I beam cursor */
+	GdkCursor *cursor_dot;		/* The blank cursor */
+	GdkCursor *cursor_current;	/* The current cursor */
+
 	gint idle_id;
 };
 

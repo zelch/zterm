@@ -173,4 +173,8 @@ void		temu_screen_move_rect		(TemuScreen *screen, gint x, gint y, gint width, gi
 void		temu_screen_emit_bell		(TemuScreen *screen);
 G_END_DECLS
 
+/* Show/Hide the pointer. */
+void		temu_screen_show_pointer	(TemuScreen *screen);
+void		temu_screen_hide_pointer	(TemuScreen *screen);
+
 #endif

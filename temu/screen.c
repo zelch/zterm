@@ -189,8 +189,12 @@ static void temu_screen_realize(GtkWidget *widget)
 
 	GdkWindowAttr attributes;
 	gint attributes_mask;
-	GdkCursor *cursor;
 	GdkRectangle *urect;
+	GdkPixmap *cursor_dot_pm;
+
+	GdkDisplay *display = gtk_widget_get_display(widget);
+	GdkVisual *visual = gtk_widget_get_visual(widget);
+	GdkColormap *colormap = gtk_widget_get_colormap(widget);
 
 	gint i;
 
@@ -210,7 +214,7 @@ static void temu_screen_realize(GtkWidget *widget)
 				|	GDK_KEY_RELEASE_MASK
 				|	GDK_BUTTON_PRESS_MASK
 				|	GDK_BUTTON_RELEASE_MASK
-				|	GDK_BUTTON1_MOTION_MASK;
+				|	GDK_POINTER_MOTION_MASK;
 	attributes_mask = GDK_WA_X | GDK_WA_Y | GDK_WA_VISUAL | GDK_WA_COLORMAP;
 
 	widget->window = gdk_window_new(
@@ -230,8 +234,20 @@ static void temu_screen_realize(GtkWidget *widget)
 
 	gdk_window_show(widget->window);
 
-	cursor = gdk_cursor_new_for_display(gtk_widget_get_display(widget), GDK_XTERM);
-	gdk_window_set_cursor(widget->window, cursor);
+	cursor_dot_pm = gdk_pixmap_create_from_data(widget->window,
+			"\0", 1, 1, 1,
+			&widget->style->black,
+			&widget->style->black);
+
+	priv->cursor_bar = gdk_cursor_new_for_display(display, GDK_XTERM);
+	priv->cursor_dot = gdk_cursor_new_from_pixmap(cursor_dot_pm, cursor_dot_pm,
+			&widget->style->black,
+			&widget->style->black,
+			0, 0);
+
+	gdk_window_set_cursor(widget->window, priv->cursor_bar);
+	priv->cursor_current = priv->cursor_bar;
+	g_object_unref (cursor_dot_pm);
 
 	if (priv->double_buffered) {
 		priv->pixmap = gdk_pixmap_new(
@@ -549,10 +565,32 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 	temu_screen_apply_updates(screen);
 }
 
+void temu_screen_show_pointer (TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (priv->cursor_current != priv->cursor_bar) {
+		gdk_window_set_cursor (GTK_WIDGET(screen)->window, priv->cursor_bar);
+		priv->cursor_current = priv->cursor_bar;
+	}
+}
+
+void temu_screen_hide_pointer (TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (priv->cursor_current != priv->cursor_dot) {
+		gdk_window_set_cursor (GTK_WIDGET(screen)->window, priv->cursor_dot);
+		priv->cursor_current = priv->cursor_dot;
+	}
+}
+
 static gboolean temu_screen_button_press_event(GtkWidget *widget, GdkEventButton *event)
 {
 	TemuScreen *screen = TEMU_SCREEN(widget);
 	TemuScreenPrivate *priv = screen->priv;
+
+	temu_screen_show_pointer (screen);
 
 	if (event->button != 1)
 		return FALSE;
@@ -569,6 +607,8 @@ static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotio
 	TemuScreen *screen = TEMU_SCREEN(widget);
 	TemuScreenPrivate *priv = screen->priv;
 	gint tx, ty;
+
+	temu_screen_show_pointer (screen);
 
 	if (!(event->state & GDK_BUTTON1_MASK))
 		return FALSE;
@@ -596,6 +636,7 @@ static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButt
 {
 	TemuScreenPrivate *priv = TEMU_SCREEN(widget)->priv;
 	priv->select_x = priv->select_y = -1;
+	temu_screen_show_pointer (TEMU_SCREEN(widget));
 	return TRUE;
 }
 

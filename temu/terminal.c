@@ -319,6 +319,8 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 	guchar buf[16];
 	gint count;
 
+	temu_screen_hide_pointer (screen);
+
 	switch (event->keyval) {
 	  case GDK_Page_Up:
 		if (GDK_SHIFT_MASK == (event->state & TEMU_TERMINAL_SCROLL_MASK)) {
@@ -351,7 +353,7 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 
 		return TRUE;
 	} else {
-		fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
+//		fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
 	}
 
 	return FALSE;
@@ -364,6 +366,8 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 	TemuScreenClass *screen_class;
 	GtkClipboard *clipboard;
 	gchar *text;
+
+	temu_screen_show_pointer (TEMU_SCREEN(terminal));
 
 	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
 	if (GTK_WIDGET_CLASS(screen_class)->button_press_event) {
