@@ -28,7 +28,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height);
  */
 
 static void temu_screen_init(TemuScreen *screen);
-static void temu_screen_finalize(GObject *object);
+static void temu_screen_destroy(GtkObject *object);
 
 static void temu_screen_realize(GtkWidget *widget);
 static void temu_screen_unrealize(GtkWidget *widget);
@@ -54,7 +54,7 @@ static void temu_screen_class_init(TemuScreenClass *klass)
 	gobject_class = G_OBJECT_CLASS(klass);
 	widget_class = GTK_WIDGET_CLASS(klass);
 
-	gobject_class->finalize = temu_screen_finalize;
+	GTK_OBJECT_CLASS (klass)->destroy = temu_screen_destroy;
 	widget_class->realize = temu_screen_realize;
 	widget_class->unrealize = temu_screen_unrealize;
 	widget_class->size_request = temu_screen_size_request;
@@ -363,7 +363,7 @@ static void temu_screen_unrealize(GtkWidget *widget)
 	GTK_WIDGET_UNSET_FLAGS(widget, GTK_REALIZED);
 }
 
-static void temu_screen_finalize(GObject *object)
+static void temu_screen_destroy(GtkObject *object)
 {
 	GtkWidget *widget;
 	GtkWidgetClass *widget_class;
@@ -377,6 +377,8 @@ static void temu_screen_finalize(GObject *object)
 
 	screen = TEMU_SCREEN(object);
 	priv = screen->priv;
+	if (!priv)
+		goto destroy_chain;
 
 	/* cell screen */
 	for (i = 0; i < priv->height; i++)
@@ -392,10 +394,12 @@ static void temu_screen_finalize(GObject *object)
 	temu_screen_unrealize(widget);
 
 	g_free(priv);
+	screen->priv = NULL;
 
+destroy_chain:
 	widget_class = g_type_class_peek(GTK_TYPE_WIDGET);
-	if (G_OBJECT_CLASS(widget_class)->finalize) {
-		(G_OBJECT_CLASS(widget_class))->finalize(object);
+	if (GTK_OBJECT_CLASS(widget_class)->destroy) {
+		(GTK_OBJECT_CLASS(widget_class))->destroy(object);
 	}
 }
 

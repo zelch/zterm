@@ -5,6 +5,7 @@
 #include "terminal.h"
 
 static void testgtk_title_changed(TemuTerminal *, gpointer);
+static gboolean testgtk_destroyed(TemuTerminal *, gpointer);
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -22,6 +23,7 @@ int main(int argc, char *argv[], char *envp[])
 	term = temu_terminal_new();
 
 	g_signal_connect(G_OBJECT(term), "title_changed", G_CALLBACK(testgtk_title_changed), window);
+	g_signal_connect(G_OBJECT(term), "destroy", G_CALLBACK(testgtk_destroyed), window);
 
 	gtk_container_add(GTK_CONTAINER(window), term);
 	gtk_widget_realize(term);
@@ -75,4 +77,11 @@ static void testgtk_title_changed(TemuTerminal *terminal, gpointer data)
 	g_value_init(&value, G_TYPE_STRING);
 	g_object_get_property(G_OBJECT(terminal), "window_title", &value);
 	gtk_window_set_title(GTK_WINDOW(win), g_value_get_string(&value));
+}
+
+static gboolean testgtk_destroyed (TemuTerminal *term, gpointer data)
+{
+	gtk_main_quit();
+
+	return TRUE;
 }

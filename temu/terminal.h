@@ -22,9 +22,10 @@ struct _TemuTerminal {
 typedef struct _TemuTerminalClass	TemuTerminalClass;
 struct _TemuTerminalClass {
 	TemuScreenClass parent_class;
-	
+
 	/* signal handlers */
 	void (*title_changed)		(TemuTerminal *); /* , int, const gchar *); */
+	void (*child_died)		(TemuTerminal *);
 };
 
 #define TEMU_TYPE_TERMINAL	(temu_terminal_get_type())

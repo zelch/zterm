@@ -39,7 +39,7 @@ static void temu_terminal_init(TemuTerminal *terminal);
 static void temu_terminal_realize(GtkWidget *widget);
 static void temu_terminal_unrealize(GtkWidget *widget);
 
-static void temu_terminal_finalize(GObject *object);
+static void temu_terminal_destroy(GtkObject *object);
 static void temu_terminal_set_property(GObject *object, guint id, const GValue *value, GParamSpec *pspec);
 static void temu_terminal_get_property(GObject *object, guint id, GValue *value, GParamSpec *pspec);
 
@@ -62,7 +62,7 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 	widget_class = GTK_WIDGET_CLASS(klass);
 	screen_class = TEMU_SCREEN_CLASS(klass);
 
-	gobject_class->finalize = temu_terminal_finalize;
+	GTK_OBJECT_CLASS(klass)->destroy = temu_terminal_destroy;
 	gobject_class->set_property = temu_terminal_set_property;
 	gobject_class->get_property = temu_terminal_get_property;
 	
@@ -108,6 +108,16 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 	widget_class->size_allocate = temu_terminal_size_allocate;
 	widget_class->key_press_event = temu_terminal_key_press_event;
 	widget_class->button_press_event = temu_terminal_button_press_event;
+
+	g_signal_new ("child_died",
+			G_TYPE_FROM_CLASS (gobject_class),
+			G_SIGNAL_RUN_LAST,
+			G_STRUCT_OFFSET (TemuTerminalClass, child_died),
+			NULL,
+			NULL,
+			g_cclosure_marshal_VOID__VOID,
+			G_TYPE_NONE,
+			0);
 }
 
 GType temu_terminal_get_type(void)
@@ -201,11 +211,16 @@ static void temu_terminal_unrealize(GtkWidget *widget)
 	}
 }
 
-static void temu_terminal_finalize(GObject *object)
+static void temu_terminal_destroy(GtkObject *object)
 {
 	TemuTerminal *terminal = TEMU_TERMINAL(object);
 	TemuTerminalPrivate *priv = terminal->priv;
 	TemuScreenClass *screen_class;
+
+	g_return_if_fail (TEMU_IS_TERMINAL(object));
+
+	if (!priv)
+		goto chain_destroy;
 
 	if (priv->pty) {
 		temu_pty_destroy(priv->pty);
@@ -214,10 +229,12 @@ static void temu_terminal_finalize(GObject *object)
 
 	temu_emul_destroy(priv->emul);
 	g_free(priv);
+	terminal->priv = NULL;
 
+chain_destroy:
 	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
-	if (G_OBJECT_CLASS(screen_class)->finalize) {
-		G_OBJECT_CLASS(screen_class)->finalize(object);
+	if (GTK_OBJECT_CLASS(screen_class)->destroy) {
+		GTK_OBJECT_CLASS(screen_class)->destroy(object);
 	}
 }
 
@@ -403,8 +420,10 @@ static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond
 	TemuTerminalPrivate *priv = terminal->priv;
 	const gchar text[] = "\033[0;41;37;1mError.";
 	temu_emul_emulate(priv->emul, text, sizeof(text)-1);
-	gtk_main_quit();
-	return FALSE;
+	g_object_ref (G_OBJECT(terminal));
+	g_signal_emit_by_name (terminal, "child_died", 0);
+	gtk_widget_destroy (GTK_WIDGET(terminal));
+	return TRUE;
 }
 
 static gboolean temu_terminal_display_from_app(GIOChannel *chan, GIOCondition cond, gpointer data)
