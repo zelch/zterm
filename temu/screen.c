@@ -428,15 +428,13 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 
 	widget->allocation = *allocation;
 
-	if (GTK_WIDGET_REALIZED(widget)) {
-		gdk_window_move_resize(
-			widget->window,
-			allocation->x,
-			allocation->y,
-			allocation->width,
-			allocation->height
-		);
-	}
+	gdk_window_move_resize(
+		widget->window,
+		allocation->x,
+		allocation->y,
+		allocation->width,
+		allocation->height
+	);
 }
 
 /*
@@ -701,11 +699,7 @@ static gboolean temu_screen_idle_func(gpointer data)
 		event.expose.type = GDK_EXPOSE;
 		event.expose.window = g_object_ref(widget->window);
 		event.expose.count = 0;
-		if (priv->update_region) {
-			event.expose.region = gdk_region_copy(priv->update_region);
-		} else {
-			event.expose.region = gdk_region_new();
-		}
+		event.expose.region = gdk_region_new();
 
 		gtk_widget_send_expose(widget, &event);
 

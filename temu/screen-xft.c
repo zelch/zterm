@@ -343,6 +343,7 @@ void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 			temu_screen_render_line_text(screen, draw.x, draw.y, &priv->lines[mod_y].c[x], w);
 		}
 
+		gdk_region_union(region, draw_region);
 		gdk_region_destroy(draw_region);
 	}
 
