@@ -1884,7 +1884,7 @@ static void emul_reset_soft(TemuEmul *S)
 	S->o_DECOM	= FALSE;
 	S->o_DECAWM	= TRUE;		/* Real VT520/525's default this to OFF. */
 
-	S->o_DECNCSM	= TRUE;		/* No idea what VT520/525's default to. */
+	S->o_DECNCSM	= FALSE;	/* xterm defaults to this */
 }
 
 static void emul_reset(TemuEmul *S)
