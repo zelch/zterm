@@ -588,7 +588,12 @@ static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotio
 		return FALSE;
 
 	tx = event->x / screen->font_width;
+	if (tx < 0) tx = 0;
+	else if (tx >= priv->width) tx = priv->width-1;
+
 	ty = event->y / screen->font_height;
+	if (ty < 0) ty = 0;
+	else if (ty >= priv->visible_height) ty = priv->visible_height-1;
 
 	temu_screen_select(
 		screen,
