@@ -862,10 +862,12 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 {
 	switch (c0) {
 	  case C_ENQ:
+	  	IMPL("ENQ", "Enquiry", "partially");
 	  	/* FIXME:? xterm (and a real VT) will let you configure the ENQ reply */
 		emul_add_output(S, EMUL_ENQ_REPLY, 4);
 		break;
 	  case C_BEL:
+	  	IMPL("BEL", "Audible bell", "fully");
 		temu_screen_emit_bell(T);
 		break;
 	  case C_BS:
