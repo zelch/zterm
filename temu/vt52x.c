@@ -2,6 +2,7 @@
  * vt52x emulation core
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <glib/gprintf.h>
 #include <gdk/gdkkeysyms.h>
@@ -11,17 +12,22 @@
 #include "emul.h"
 
 #define WARN_NOTIMPL		1
+#undef SHOW_IMPL
 #undef OUTPUT_EVERYTHING
 
 #if WARN_NOTIMPL
-#define NOTIMPL(id,desc,reason...)	g_warning("%s (%s) not implemented" "%s" reason , id, desc, reason?"; confidence: ":"")
+#define NOTIMPL(id,desc,reason)		g_warning("%s (%s) not implemented%s" reason , id, desc, reason?"; confidence: ":"")
 #define NOTIMPL_UNKNOWN(fmt,args...)	g_warning("UNKNOWN (" fmt ") not implemented" , ## args )
 #else
-#define NOTIMPL(id,desc,reason...)	do{}while(0)
+#define NOTIMPL(id,desc,reason)		do{}while(0)
 #define NOTIMPL_UNKNOWN(fmt,args...)	do{}while(0)
 #endif
 
-#define IMPL(id,desc,support...)
+#if SHOW_IMPL
+#define IMPL(id,desc,support)	fprintf(stderr, "Implemented %s: %s (" support ")\n", id, desc)
+#else
+#define IMPL(id,desc,support)	do{}while(0)
+#endif
 
 #define VTPARSE_MAX_PARAMS	17	/* We overwrite the last one endlessly */
 #define VTPARSE_MAX_STR		1024
@@ -799,7 +805,8 @@ static void vt52x_esc(TemuEmul *S)
 	  case E(0,0,'#','6'):
 		NOTIMPL("DECDWL", "Double-Width, Single-Height line", "probably");
 		break;
-	  case E(0,0,0,'6'):	/* DECBI: Back Index */
+	  case E(0,0,0,'6'):
+		IMPL("DECBI", "Back Index", "fully");
 		emul_DECBI(S);
 		break;
 	  case E(0,0,0,'7'):	/* DECSC: Save Cursor */
@@ -808,7 +815,8 @@ static void vt52x_esc(TemuEmul *S)
 	  case E(0,0,0,'8'):	/* DECRC: Restore Cursor */
 		emul_cursor_restore(S);
 		break;
-	  case E(0,0,0,'9'):	/* DECFI: Forward Index */
+	  case E(0,0,0,'9'):
+		IMPL("DECFI", "Forward Index", "fully");
 		emul_DECFI(S);
 		break;
 	  case E(0,0,'#','8'):	/* DECALN: Screen Alignment Pattern */
@@ -880,11 +888,13 @@ static void vt52x_esc(TemuEmul *S)
 static void vt52x_csi(TemuEmul *S)
 {
 	switch (E(S->strt,S->pre,S->intr,S->fin)) {
-	  case E(C_CSI,0,0,'@'):	/* ICH: Insert Character */
+	  case E(C_CSI,0,0,'@'):
+		IMPL("ICH", "Insert Character", "fully");
 		PARM_DEF(0, 1);
 		emul_ICH(S, P(0));
 		break;
-	  case E(C_CSI,0,' ','@'):	/* SL: Scroll Left (Not vt52x) */
+	  case E(C_CSI,0,' ','@'):
+		IMPL("SL", "Scroll Left (not vt52x)", "fully");
 		PARM_DEF(0, 1);
 		temu_screen_move_rect(T, P(0), S->scroll_top, WIDTH, S->scroll_height, -P(0), 0, &ECELL);
 		emul_cursor_cleared(S);
@@ -893,7 +903,8 @@ static void vt52x_csi(TemuEmul *S)
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, S->cursor_x, S->cursor_y - P(0));
 		break;
-	  case E(C_CSI,0,' ','A'):	/* SR: Scroll Right (Not vt52x) */
+	  case E(C_CSI,0,' ','A'):
+		IMPL("SR", "Scroll Right (not vt52x)", "fully");
 		PARM_DEF(0, 1);
 		emul_cursor_clear(S);
 		temu_screen_move_rect(T, 0, S->scroll_top, WIDTH, S->scroll_height, P(0), 0, &ECELL);
@@ -957,7 +968,8 @@ static void vt52x_csi(TemuEmul *S)
 		temu_screen_do_scroll(T, P(0), S->cursor_y, (S->scroll_top + S->scroll_height) - S->cursor_y, &ECELL);
 		emul_cursor_cleared(S);
 		break;
-	  case E(C_CSI,0,0,'P'):	/* DCH: Delete Character */
+	  case E(C_CSI,0,0,'P'):
+		IMPL("DCH", "Delete Character", "fully");
 		PARM_DEF(0, 1);
 		temu_screen_move_rect(T, S->cursor_x + P(0), S->cursor_y, WIDTH, 1, -P(0), 0, &ECELL);
 		emul_cursor_cleared(S);
@@ -1215,7 +1227,8 @@ static void vt52x_csi(TemuEmul *S)
 	  case E(C_CSI,0,' ','v'):
 		NOTIMPL("DECSLCK", "Set Lock Key Style", "mmaybe");
 		break;
-	  case E(C_CSI,0,'$','v'):	/* DECCRA: Copy Rectangular Area */
+	  case E(C_CSI,0,'$','v'):
+		IMPL("DECCRA", "Copy Rectangular Area", "no pages");
 		{
 			gint x, y, w, h, dx, dy;
 
@@ -1333,7 +1346,8 @@ static void vt52x_csi(TemuEmul *S)
 	  case E(C_CSI,0,'$','}'):
 		NOTIMPL("DECSASD", "Set Active Status Display", "maybe");
 		break;
-	  case E(C_CSI,0,'\'','}'):	/* DECIC: Insert Column */
+	  case E(C_CSI,0,'\'','}'):
+		IMPL("DECIC", "Insert Column", "fully");
 		PARM_DEF(0, 1);
 		emul_cursor_clear(S);
 		temu_screen_move_rect(T, S->cursor_x, S->scroll_top, WIDTH, S->scroll_height, P(0), 0, &ECELL);
@@ -1353,7 +1367,8 @@ static void vt52x_csi(TemuEmul *S)
 	  case E(C_CSI,0,'$','~'):
 		NOTIMPL("DECSSDT", "Select Status Display (Line) Type", "maybe");
 		break;
-	  case E(C_CSI,0,'\'','~'):	/* DECDC: Delete Column */
+	  case E(C_CSI,0,'\'','~'):
+		IMPL("DECDC", "Delete Column", "fully");
 		PARM_DEF(0, 1);
 		temu_screen_move_rect(T, S->cursor_x + P(0), S->scroll_top, WIDTH, S->scroll_height, -P(0), 0, &ECELL);
 		emul_cursor_cleared(S);
