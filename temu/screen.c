@@ -719,7 +719,7 @@ static void temu_screen_invalidate_cell(TemuScreen *screen, gint x, gint y)
 
 	y -= priv->scroll_offset + priv->view_offset;
 	while (y < 0) y += priv->height;
-	while (y > priv->height) y -= priv->height;
+	while (y >= priv->height) y -= priv->height;
 
 	if (!priv->update_rect.width) {
 		priv->update_rect.x = x;
