@@ -129,7 +129,7 @@ struct _TemuEmul {
 	gint scroll_top, scroll_height;
 	gint saved_cursor_x, saved_cursor_y, saved_attr;
 	gint cursor_x, cursor_y;
-	gboolean cursor_redraw;
+	gboolean cursor_redraw, cursor_hide;
 
 	guchar strt, pre, intr, fin;
 
@@ -244,6 +244,7 @@ static void emul_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 	emul_move_cursor(S, S->cursor_x, S->cursor_y);
 	emul_cursor_draw(S);
 	S->cursor_redraw = FALSE;
+	S->cursor_hide = FALSE;
 }
 
 TemuEmul *temu_emul_new(TemuScreen *screen)
@@ -1743,7 +1744,9 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 			NOTIMPL("DECPEX", "Print Extent Mode", "never");
 			break;
 		  case 25:
-			NOTIMPL("DECTCEM", "Text Cursor Mode Enable", "definitely");
+			IMPL("DECTCEM", "Text Cursor Mode Enable", "fully");
+			S->cursor_hide = set;
+			emul_cursor_clear (S);
 			break;
 		  case 34:
 			NOTIMPL("DECRLM", "Right-to-Left Mode", "maybe");
@@ -1896,6 +1899,7 @@ static void emul_reset_soft(TemuEmul *S)
 
 	S->saved_cursor_x = 0;
 	S->saved_cursor_y = 0;
+	S->cursor_hide = FALSE;
 
 	if (S->tabstop) g_free(S->tabstop);
 	S->tabstop = NULL;
@@ -1916,6 +1920,7 @@ static void emul_reset_soft(TemuEmul *S)
 	S->o_DECAWM	= TRUE;		/* Real VT520/525's default this to OFF. */
 
 	S->o_DECNCSM	= FALSE;	/* xterm defaults to this */
+
 }
 
 static void emul_reset(TemuEmul *S)
@@ -1972,6 +1977,9 @@ static void emul_cursor_draw(TemuEmul *S)
 {
 	temu_cell_t cell;
 	gint x;
+
+	if (S->cursor_hide)
+		return;
 
 	if (S->cursor_x >= WIDTH)
 		x = WIDTH - 1;
