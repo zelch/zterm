@@ -30,6 +30,8 @@ static void temu_terminal_size_allocate(GtkWidget *widget, GtkAllocation *alloca
 static void temu_terminal_im_commit(GtkIMContext *im, gchar *text, gpointer data);
 static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *event);
 
+static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButton *event);
+
 static void temu_terminal_class_init(TemuTerminalClass *klass)
 {
 	GObjectClass *gobject_class;
@@ -45,6 +47,7 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 	widget_class->unrealize = temu_terminal_unrealize;
 	widget_class->size_allocate = temu_terminal_size_allocate;
 	widget_class->key_press_event = temu_terminal_key_press_event;
+	widget_class->button_press_event = temu_terminal_button_press_event;
 }
 
 GType temu_terminal_get_type(void)
@@ -201,6 +204,42 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 	}
 
 	return FALSE;
+}
+
+static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButton *event)
+{
+	TemuTerminal *terminal = TEMU_TERMINAL(widget);
+	TemuTerminalPrivate *priv = terminal->priv;
+	TemuScreenClass *screen_class;
+	GtkClipboard *clipboard;
+	gchar *text;
+
+	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
+	if (GTK_WIDGET_CLASS(screen_class)->button_press_event) {
+		if (GTK_WIDGET_CLASS(screen_class)->button_press_event(widget, event))
+			return TRUE;
+	}
+
+	if (event->button != 2)
+		return FALSE;
+
+	if (GTK_WIDGET_REALIZED(widget)) {
+		clipboard = gtk_clipboard_get_for_display(gtk_widget_get_display(widget), GDK_SELECTION_PRIMARY);
+	} else {
+		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY); /* wing it */
+	}
+
+	text = gtk_clipboard_wait_for_text(clipboard);
+	if (text) {
+		g_io_channel_write_chars(
+			priv->pty->master,
+			text, strlen(text),
+			NULL, NULL
+		);
+		g_free(text);
+	}
+
+	return TRUE;
 }
 
 static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond, gpointer data)
