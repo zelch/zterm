@@ -772,7 +772,6 @@ static void temu_screen_apply_updates(TemuScreen *screen)
 
 static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, gint dx, gint dy)
 {
-	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	TScreenMove *prev = priv->moves.prev;
 	GdkRectangle clear_rect;
@@ -800,26 +799,22 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 	   the old one (and thus, scrolls the scrolled stuff) */
 	if (dx < 0) {
 		if (prev->rect.x > 0 && (rect->x - prev->rect.x) != dx) {
-			g_warning("not batched: move left without margin");
 			return FALSE;
 		}
 	} else if (dx > 0) {
 		if ((prev->rect.x+prev->rect.width) < sw
 		 && ((rect->x+rect->width) - (prev->rect.x+prev->rect.width)) != dx) {
-			g_warning("not batched: move right without margin");
 			return FALSE;
 		}
 	}
 
 	if (dy < 0) {
 		if (prev->rect.y > 0 && (rect->y - prev->rect.y) != dy) {
-			g_warning("not batched: move up without margin");
 			return FALSE;
 		}
 	} else if (dy > 0) {
 		if ((prev->rect.y+prev->rect.height) < sh
 		 && ((rect->y+rect->height) - (prev->rect.y+prev->rect.height)) != dy) {
-			g_warning("not batched: move down without margin");
 			return FALSE;
 		}
 	}
@@ -847,7 +842,6 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 
 		if (gdk_region_rect_in(priv->update_region, &clear_rect)
 		 != GDK_OVERLAP_RECTANGLE_IN) {
-			g_warning("not batched: without clear x");
 			return FALSE; /* Cleared area wasn't fully updated (copying) */
 		}
 	}
@@ -873,8 +867,9 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 		}
 
 		if (gdk_region_rect_in(priv->update_region, &clear_rect)
-		 != GDK_OVERLAP_RECTANGLE_IN)
+		 != GDK_OVERLAP_RECTANGLE_IN) {
 			return FALSE; /* Cleared area wasn't fully updated (copying) */
+		}
 	}
 
 	/* Yay, we can batch it! */
@@ -1220,7 +1215,7 @@ void temu_screen_set_line_attr(TemuScreen *screen, gint line, guint attr)
 
 	g_return_if_fail(line >= 0 && line < priv->visible_height);
 
-	line += priv->scroll_offset;
+	line = (line + priv->scroll_offset) % priv->height;
 
 	if (GET_ATTR_BASE(priv->lines[line].attr,LINE_UPDATE)
 	 != GET_ATTR_BASE(attr,LINE_UPDATE)) {
@@ -1614,6 +1609,7 @@ void temu_screen_fill_rect(TemuScreen *screen, gint x, gint y, gint width, gint 
 /* scrolling back */
 void temu_screen_scroll_offset(TemuScreen *screen, gint offset)
 {
+	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	gint min_offset;
 	gint delta;
@@ -1631,19 +1627,16 @@ void temu_screen_scroll_offset(TemuScreen *screen, gint offset)
 
 	delta = priv->view_offset - offset;
 
+	/* Move the stuff currently on the screen */
 	rect.x = 0;
 	rect.y = priv->scroll_offset + priv->view_offset;
 	rect.width = priv->width;
 	rect.height = priv->visible_height;
-	temu_screen_apply_move(
-		screen,
-		&rect,
-		0,
-		delta
-	);
+	temu_screen_apply_move(screen, &rect, 0, delta);
 
 	priv->view_offset = offset;
 
+	/* Redraw the new area */
 	urect = &priv->update_rect;
 	urect->x = 0;
 	urect->width = priv->width;
