@@ -182,6 +182,7 @@ static void temu_screen_realize(GtkWidget *widget)
 
 	GdkWindowAttr attributes;
 	gint attributes_mask;
+	GdkCursor *cursor;
 
 	gint i;
 
@@ -220,6 +221,9 @@ static void temu_screen_realize(GtkWidget *widget)
 	);
 
 	gdk_window_show(widget->window);
+
+	cursor = gdk_cursor_new_for_display(gtk_widget_get_display(widget), GDK_XTERM);
+	gdk_window_set_cursor(widget->window, cursor);
 
 	if (priv->double_buffered) {
 		priv->pixmap = gdk_pixmap_new(
