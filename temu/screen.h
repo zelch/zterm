@@ -156,6 +156,16 @@ void		temu_screen_set_resize_cell	(TemuScreen *screen, const temu_cell_t *cell);
 void		temu_screen_do_scroll		(TemuScreen *screen, gint rows, gint y, gint height, const temu_cell_t *cell);
 void		temu_screen_fill_rect		(TemuScreen *screen, gint x, gint y, gint width, gint height, const temu_cell_t *cell);
 
+/* scrollback */
+void		temu_screen_scroll_offset(TemuScreen *screen, gint offset);
+void		temu_screen_scroll_back(TemuScreen *screen, gint lines);
+#define		temu_screen_scroll_forward(screen,lines) \
+			temu_screen_scroll_back(screen, -(lines))
+void		temu_screen_scroll_top(TemuScreen *screen);
+#define		temu_screen_scroll_bottom(screen) \
+			temu_screen_scroll_offset(screen, 0)
+gint temu_screen_scroll_offset_max(TemuScreen *screen);
+
 /* move text around */
 void		temu_screen_move_rect		(TemuScreen *screen, gint x, gint y, gint width, gint height, gint dx, gint dy, const temu_cell_t *cell);
 

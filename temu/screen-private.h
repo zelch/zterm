@@ -40,6 +40,8 @@ struct _TemuScreenPrivate {
 
 	gint width, height;
 	gint visible_height;
+
+	gint scroll_top;
 	gint scroll_offset, view_offset;
 
 	gint select_x, select_y;

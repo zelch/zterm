@@ -8,6 +8,9 @@
 #include "pty.h"
 #include "emul.h"
 
+/* Only scroll if only shift is set, out of these */
+#define TEMU_TERMINAL_SCROLL_MASK	(GDK_SHIFT_MASK|GDK_CONTROL_MASK|GDK_MOD1_MASK)
+
 struct _TemuTerminalPrivate {
 	TemuPty *pty;
 	GtkIMContext *im_context;
@@ -184,9 +187,27 @@ static void temu_terminal_im_commit(GtkIMContext *im, gchar *text, gpointer data
 static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *event)
 {
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
+	TemuScreen *screen = TEMU_SCREEN(terminal);
 	TemuTerminalPrivate *priv = terminal->priv;
 	guchar buf[16];
 	gint count;
+
+	switch (event->keyval) {
+	  case GDK_Page_Up:
+		if (GDK_SHIFT_MASK == (event->state & TEMU_TERMINAL_SCROLL_MASK)) {
+			temu_screen_scroll_back(screen, temu_screen_get_rows(screen) / 2);
+			return TRUE;
+		}
+		break;
+	  case GDK_Page_Down:
+		if (GDK_SHIFT_MASK == (event->state & TEMU_TERMINAL_SCROLL_MASK)) {
+			temu_screen_scroll_forward(screen, temu_screen_get_rows(screen) / 2);
+			return TRUE;
+		}
+		break;
+	}
+
+	temu_screen_scroll_offset(screen, 0);
 
 	if (gtk_im_context_filter_keypress(priv->im_context, event))
 		return TRUE;

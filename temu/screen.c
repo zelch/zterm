@@ -120,6 +120,7 @@ static void temu_screen_init(TemuScreen *screen)
 	/* cell screen */
 	priv->screen_attr = 0;
 
+	priv->scroll_top = 0;
 	priv->scroll_offset = 0;
 	priv->view_offset = 0;
 
@@ -508,7 +509,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 	count++;
 
 	/* Slurp up the -whole- last line if we're past its end */
-	ty = (ty + priv->scroll_offset + priv->view_offset) % priv->height;
+	ty = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
 	if (tx >= priv->lines[ty].len) {
 		count += priv->width - tx - 1;
 	}
@@ -520,7 +521,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 	);
 
 	x = fx;
-	y = fy + priv->scroll_offset + priv->view_offset;
+	y = (fy + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
 	SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
 	for (i = 0; i < count; i++) {
 		if (x < priv->lines[y].len
@@ -610,6 +611,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 {
 	TemuScreenPrivate *priv = screen->priv;
 	gint old_width, old_height;
+	gint min_top;
 	gint i;
 
 	old_width = priv->width;
@@ -646,6 +648,13 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 			&priv->resize_cell
 		);
 	}
+
+	/* Update top of scroll buffer */
+	min_top = priv->scroll_offset + priv->visible_height;
+	if (priv->scroll_top <= priv->scroll_offset)
+		min_top -= priv->height;
+	if (min_top > priv->scroll_top)
+		priv->scroll_top = (min_top + priv->height) % priv->height;
 }
 
 /* updates */
@@ -1465,6 +1474,9 @@ void temu_screen_do_scroll(TemuScreen *screen, gint rows, gint y, gint height, c
 	if (scroll_lines > height)
 		rows = scroll_lines = height;
 
+	if (priv->select_y >= y && priv->select_y < (y+height))
+		priv->select_y -= rows;
+
 	keep_lines = height - scroll_lines;
 	clear_lines = height - keep_lines;
 
@@ -1473,7 +1485,12 @@ void temu_screen_do_scroll(TemuScreen *screen, gint rows, gint y, gint height, c
 	/* scroll up in to scrollback */
 	if (y == priv->scroll_offset && rows > 0) {
 		GdkRectangle rect;
+		gint min_top;
 
+		/* FIXME: Make this support the view_offset instead of clearing it. */
+		temu_screen_scroll_offset(screen, 0);
+
+		/* scroll stuff up */
 		rect.x = 0;
 		rect.y = y;
 		rect.width = priv->width;
@@ -1488,12 +1505,14 @@ void temu_screen_do_scroll(TemuScreen *screen, gint rows, gint y, gint height, c
 		priv->scroll_offset += rows;
 		priv->scroll_offset %= priv->height;
 
+		/* move stuff down that's past the region (so it stays in the same spot) */
 		if (height < priv->visible_height) {
 			start = y + height;
 			end = y + priv->visible_height - start;
 			temu_screen_move_lines_noupdate(screen, -clear_lines, start, end);
 		}
 
+		/* clear the new area */
 		start = y + height;
 		end = clear_lines;
 
@@ -1503,6 +1522,13 @@ void temu_screen_do_scroll(TemuScreen *screen, gint rows, gint y, gint height, c
 			priv->width, end,
 			cell
 		);
+
+		/* Update top of scroll buffer */
+		min_top = priv->scroll_offset + priv->visible_height;
+		if (priv->scroll_top < priv->scroll_offset)
+			min_top -= priv->height;
+		if (min_top > priv->scroll_top)
+			priv->scroll_top = (min_top + priv->height) % priv->height;
 
 		return;
 	}
@@ -1559,4 +1585,82 @@ void temu_screen_fill_rect(TemuScreen *screen, gint x, gint y, gint width, gint 
 		width, height,
 		cell
 	);
+}
+
+/* scrolling back */
+void temu_screen_scroll_offset(TemuScreen *screen, gint offset)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	gint min_offset;
+	gint delta;
+	GdkRectangle rect, *urect;
+
+	min_offset = priv->scroll_top - priv->scroll_offset;
+	if (min_offset > 0) min_offset -= priv->height;
+
+	offset = -offset; /* internally, we use a negative offset :x */
+
+	if (offset > 0)
+		offset = 0;
+	if (offset < min_offset)
+		offset = min_offset;
+
+	delta = priv->view_offset - offset;
+
+	rect.x = 0;
+	rect.y = priv->scroll_offset + priv->view_offset;
+	rect.width = priv->width;
+	rect.height = priv->visible_height;
+	temu_screen_apply_move(
+		screen,
+		&rect,
+		0,
+		delta
+	);
+
+	priv->view_offset = offset;
+
+	urect = &priv->update_rect;
+	urect->x = 0;
+	urect->width = priv->width;
+	if (delta < 0) {
+		/* Scrolling up, refresh bottom */
+		urect->y = priv->visible_height + delta;
+		urect->height = -delta;
+	} else {
+		/* Scrolling down, refresh top */
+		urect->y = 0;
+		urect->height = delta;
+	}
+	temu_screen_apply_updates(screen);
+}
+
+void temu_screen_scroll_back(TemuScreen *screen, gint lines)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	temu_screen_scroll_offset(screen, -priv->view_offset + lines);
+}
+
+void temu_screen_scroll_top(TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	temu_screen_scroll_offset(screen, priv->scroll_top);
+}
+
+void temu_screen_scroll_clear(TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	temu_screen_scroll_offset(screen, 0);
+	priv->scroll_top = priv->scroll_offset;
+}
+
+gint temu_screen_scroll_offset_max(TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	gint min_offset;
+
+	min_offset = priv->scroll_top - priv->scroll_offset;
+	if (min_offset > 0) min_offset -= priv->height;
+
+	return -min_offset;
 }

@@ -322,7 +322,7 @@ void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 		y2 = (clip.y + clip.height - 1) / screen->font_height;
 
 		for (y = y1; y <= y2; y++) {
-			gint mod_y = (y + priv->scroll_offset + priv->view_offset) % priv->height;
+			gint mod_y = (y + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
 			gint x, w;
 
 			x = x1;
