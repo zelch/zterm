@@ -102,7 +102,7 @@ enum _vtstate {
 	VT_ESC, VT_ESC_IGNORE,
 	VT_CSI, VT_CSI_FIN, VT_CSI_IGNORE,
 	VT_STR, VT_STR_FIN, VT_STR_IGNORE, VT_STR_DATA,
-	VT_STRX, VT_STRX_FIN, VT_STRX_IGNORE, VT_STRX_DATA
+	VT_STRX
 };
 
 struct _TemuEmul {
@@ -432,6 +432,7 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 		S->pre = S->intr = S->fin = 0;				\
 		memset(S->parm, 0, sizeof(S->parm));			\
 		S->parms = 0;						\
+		S->strs = 0;						\
 	} while (0)
 
 #define BEGIN_ESC() do {						\
@@ -626,7 +627,6 @@ static void vt52x_parse(TemuEmul *S, const gchar *text, gint len)
 		      case 0x40 ... 0x7e:
 		      case 0x80 ... 0xff: VT_STR_fin:
 			S->fin = ch;
-			S->strs = 0;
 			S->state = VT_STR_DATA;
 			continue;
 		      default:
@@ -668,21 +668,7 @@ static void vt52x_parse(TemuEmul *S, const gchar *text, gint len)
 			continue;
 		    }
 
-		  case VT_STRX: state_parms(VT_STRX);
-		  case VT_STRX_FIN:
-		    nonground_C0();
-		    switch (ch) {
-		      case 0x40 ... 0x7e:
-		      case 0x80 ... 0xff: VT_STRX_fin:
-			S->fin = ch;
-			S->strs = 0;
-			S->state = VT_STRX_DATA;
-			continue;
-		      default:
-			S->state = VT_STRX_IGNORE;
-			continue;
-		    }
-		  case VT_STRX_DATA:
+		  case VT_STRX:
 		    data_C0();
 		    switch (ch) {
 		      case C_NUL ... (C_BEL-1):
@@ -701,16 +687,6 @@ static void vt52x_parse(TemuEmul *S, const gchar *text, gint len)
 		      case C_ESC:
 			vt52x_osc(S);
 			BEGIN_ESC();
-			continue;
-		    }
-		  case VT_STRX_IGNORE:
-		    data_C0();
-		    switch (ch) {
-		      case C_ST:
-		      case C_BEL:
-			S->state = VT_GROUND;
-			continue;
-		      default:
 			continue;
 		    }
 		}
@@ -1445,13 +1421,59 @@ static void vt52x_apc(TemuEmul *S)
 
 static void vt52x_osc(TemuEmul *S)
 {
-	/*
-	2L;...ST, NOTIMPL, DECSIN: Set Icon Name
-	21;...ST, NOTIMPL, DECSWT: Set Window Title
-	*/
-	switch (E(S->strt,S->pre,S->intr,S->fin)) {
-	  default:
-		NOTIMPL_UNKNOWN("OSC %08x (%d characters of data)", E(S->strt,S->pre,S->intr,S->fin), S->strs);
+	gint i;
+	gint mode;
+
+	mode = 0;
+	for (i = 0; i < S->strs; i++) {
+		if (S->str[i] >= '0' && S->str[i] <= '9') {
+			mode *= 10;
+			mode += S->str[i] - '0';
+		} else if (S->str[i] == ';') {
+			break;
+		} else {
+			if (S->fin && S->fin != S->str[i])
+				goto ignore;
+			S->fin = S->str[i];
+		}
+	}
+
+	switch (mode) {
+	  case 0: if (S->fin) goto ignore;
+		NOTIMPL("(xterm)", "Change Icon Name and Window Title", "probably");
+		break;
+	  case 1: if (S->fin) goto ignore;
+		NOTIMPL("(xterm)", "Change Icon Name", "probably");
+		break;
+	  case 2:
+		switch (S->fin) {
+		  case 0:
+			NOTIMPL("(xterm)", "Change Window Title", "probably");
+			break;
+		  case 'L':
+			NOTIMPL("DECSIN", "Set Icon Name", "maybe");
+			break;
+		  default:
+			goto ignore;
+		}
+		break;
+	  case 3: if (S->fin) goto ignore;
+		NOTIMPL("(xterm)", "Set X property on top-level window", "mmaybe");
+		break;
+	  case 4: if (S->fin) goto ignore;
+		NOTIMPL("(xterm)", "Change Color", "mmaybe");
+		break;
+	  case 10 ... 17:
+		NOTIMPL("(xterm)", "Dynamic colors", "???");
+		break;
+	  case 21:
+		NOTIMPL("DECSWT", "Set Window Title", "maybe");
+		break;
+	  case 46:
+		NOTIMPL("(xterm)", "Log file", "probably not");
+		break;
+	  default: ignore:
+		NOTIMPL_UNKNOWN("OSC: %d characters of data", S->strs);
 		break;
 	}
 }
