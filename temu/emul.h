@@ -5,6 +5,7 @@ typedef struct _TemuEmul TemuEmul;
 
 typedef enum {
 	CHARSET_NONE,
+	CHARSET_GRAPHIC,
 	CHARSET_UTF8
 } temu_cset_t;
 

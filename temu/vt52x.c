@@ -886,10 +886,12 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 	  case C_LF:	emul_LF(S); break;
 	  case C_CR:	emul_CR(S); break;
 	  case C_SO:
-		NOTIMPL("SO", "Shift-Out", "definitely");
+		IMPL("SO", "Shift-Out", "partially");
+		S->charset = CHARSET_GRAPHIC;
 		break;
 	  case C_SI:
-		NOTIMPL("SI", "Shift-In", "definitely");
+		IMPL("SI", "Shift-In", "partially");
+		S->charset = CHARSET_UTF8;
 		break;
 	  case C_DC1:
 		NOTIMPL("DC1", "aka XON", "maybe");
@@ -2625,30 +2627,78 @@ static void emul_add_char(TemuEmul *S, guchar ch)
 {
 	gunichar glyph;
 
-	if (S->charset == CHARSET_UTF8) {
-		if (ch == C_DEL)
-			return;
+	switch (S->charset) {
+		case CHARSET_UTF8:
+UTF8:
+			if (ch == C_DEL)
+				return;
 
-		if (S->chars >= 6) {
-			/* FIXME: This is actually a big problem. */
-			memmove(&S->char_buf, &S->char_buf[1], 5);
-			S->char_buf[5] = ch;
-		} else {
-			S->char_buf[S->chars++] = ch;
-		}
+			if (S->chars >= 6) {
+				/* FIXME: This is actually a big problem. */
+				memmove(&S->char_buf, &S->char_buf[1], 5);
+				S->char_buf[5] = ch;
+			} else {
+				S->char_buf[S->chars++] = ch;
+			}
 
-		glyph = g_utf8_get_char_validated(S->char_buf, S->chars);
-		if (glyph == (gunichar)-1) {
+			glyph = g_utf8_get_char_validated(S->char_buf, S->chars);
+			if (glyph == (gunichar)-1) {
+				glyph = G_UNICHAR_UNKNOWN_GLYPH;
+				memmove(&S->char_buf, &S->char_buf[1], 5);
+				S->chars--;
+			} else if (glyph == (gunichar)-2) {
+				return;
+			} else {
+				S->chars = 0;
+			}
+			break;
+		case CHARSET_GRAPHIC:
+			switch (ch) {
+				case 'q':	// Horizontal line.
+					glyph = 0x2500;
+					break;
+				case 'x':	// Verticle line.
+					glyph = 0x2502;
+					break;
+				case 'l':	// Upper left cornor.
+					glyph = 0x250C;
+					break;
+				case 'k':	// Upper right cornor.
+					glyph = 0x2510;
+					break;
+				case 'm':	// Lower left corner.
+					glyph = 0x2514;
+					break;
+				case 'j':	// Lower right corner.
+					glyph = 0x2518;
+					break;
+				case 'w':	// Tee down.
+					glyph = 0x252C;
+					break;
+				case 'u':	// Tee left.
+					glyph = 0x2524;
+					break;
+				case 't':	// Tee right.
+					glyph = 0x251C;
+					break;
+				case 'v':	// Tee up.
+					glyph = 0x2534;
+					break;
+				case 'n':	// Cross.
+					glyph = 0x253C;
+					break;
+				case 'a':	// Checker board.
+					glyph = 0x2592;
+					break;
+				default:
+					goto UTF8;
+					break;
+			}
+			break;
+
+		default:
 			glyph = G_UNICHAR_UNKNOWN_GLYPH;
-			memmove(&S->char_buf, &S->char_buf[1], 5);
-			S->chars--;
-		} else if (glyph == (gunichar)-2) {
-			return;
-		} else {
-			S->chars = 0;
-		}
-	} else {
-		glyph = G_UNICHAR_UNKNOWN_GLYPH;
+			break;
 	}
 
 	emul_add_glyph(S, glyph);
