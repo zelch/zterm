@@ -46,6 +46,8 @@ static void temu_terminal_get_property(GObject *object, guint id, GValue *value,
 static void temu_terminal_size_allocate(GtkWidget *widget, GtkAllocation *allocation);
 
 static void temu_terminal_im_commit(GtkIMContext *im, gchar *text, gpointer data);
+static void temu_terminal_im_preedit_changed(GtkIMContext *im, gpointer data);
+
 static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *event);
 
 static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButton *event);
@@ -157,6 +159,7 @@ static void temu_terminal_realize(GtkWidget *widget)
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
 	TemuTerminalPrivate *priv = terminal->priv;
 	TemuScreenClass *screen_class;
+	GdkRectangle area;
 
 	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
 	if (GTK_WIDGET_CLASS(screen_class)->realize) {
@@ -165,8 +168,20 @@ static void temu_terminal_realize(GtkWidget *widget)
 
 	priv->im_context = gtk_im_multicontext_new();
 	gtk_im_context_set_client_window(priv->im_context, widget->window);
+
 	g_signal_connect(G_OBJECT(priv->im_context), "commit",
 		G_CALLBACK(temu_terminal_im_commit), terminal);
+	g_signal_connect(G_OBJECT(priv->im_context), "preedit-changed",
+		G_CALLBACK(temu_terminal_im_preedit_changed), terminal);
+
+	gtk_im_context_focus_in(priv->im_context);
+		
+	/* HACK: do this properly, set to the cursor position */
+	area.x = 1;
+	area.y = 1;
+	area.width = 1;
+	area.height = 1;
+	gtk_im_context_set_cursor_location(priv->im_context, &area);
 }
 
 static void temu_terminal_unrealize(GtkWidget *widget)
@@ -267,6 +282,35 @@ static void temu_terminal_im_commit(GtkIMContext *im, gchar *text, gpointer data
 	return;
 }
 
+static void temu_terminal_im_preedit_changed(GtkIMContext *im, gpointer data)
+{
+	TemuTerminal *terminal = TEMU_TERMINAL(data);
+	TemuTerminalPrivate *priv = terminal->priv;
+	gchar *text, *next;
+	gint pos, x, b;
+	
+	gtk_im_context_get_preedit_string(priv->im_context, &text, NULL, &pos);
+	
+	fprintf(stderr, "FIXME: Pre-edit: ", pos);
+	for (x = b = 0; x < pos; x++) {
+		next = g_utf8_next_char(&text[b]);
+		for (; b < next - text; b++)
+			fprintf(stderr, "%c", text[b]);
+	}
+
+	fprintf(stderr, "\e[7m");
+	next = g_utf8_next_char(&text[b]);
+	for (; b < next - text; b++)
+		fprintf(stderr, "%c", text[b]);
+
+	fprintf(stderr, "\e[0m");
+	if (b < strlen(text))
+		fprintf(stderr, "%s", &text[b]);
+	fprintf(stderr, "\n");
+
+	g_free(text);
+}
+
 static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *event)
 {
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
@@ -292,8 +336,11 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 
 	temu_screen_scroll_offset(screen, 0);
 
-	if (gtk_im_context_filter_keypress(priv->im_context, event))
-		return TRUE;
+	/* rain - temporary hack to make the xim input-method work properly */
+	if (!(event->state & GDK_MOD1_MASK)) {
+		if (gtk_im_context_filter_keypress(priv->im_context, event))
+			return TRUE;
+	}
 
 	if (temu_emul_translate(priv->emul, event, buf, &count)) {
 		g_io_channel_write_chars(

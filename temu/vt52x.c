@@ -28,7 +28,7 @@
 #define IMPL(id,desc,support)	g_warning("Implemented %s: %s (" support ")", id, desc)
 #else
 #if WARN_NOTIMPL
-#define IMPL(id,desc,support)	do { if (strcmp(desc, "fully")) g_warning("Implemented %s: %s (" support ")", id, desc); } while (0)
+#define IMPL(id,desc,support)	do { if (strcmp(support, "fully")) g_warning("Implemented %s: %s (" support ")", id, desc); } while (0)
 #else
 #define IMPL(id,desc,support)	do{}while(0)
 #endif
