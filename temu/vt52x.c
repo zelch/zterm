@@ -559,6 +559,12 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 		STRCAT_MODIFIER("");
 		*p++ += '~';
 		goto done;
+	
+	  case GDK_Break:
+		if (key->state & GDK_CONTROL_MASK) {
+			p = g_stpcpy(p, EMUL_ENQ_REPLY);
+			goto done;
+		}
 	}
 
 	if (key->keyval >= 0x00 && key->keyval <= 0xff) {
