@@ -31,7 +31,13 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 
 static gboolean temu_screen_expose(GtkWidget *widget, GdkEventExpose *event);
 
+static gboolean temu_screen_button_press_event(GtkWidget *widget, GdkEventButton *event);
+static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotion *event);
+static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButton *event);
+
 static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, gint width, gint height, const temu_cell_t *cell);
+static void temu_screen_invalidate_cell(TemuScreen *screen, gint x, gint y);
+static void temu_screen_apply_updates(TemuScreen *screen);
 
 static void temu_screen_class_init(TemuScreenClass *klass)
 {
@@ -46,7 +52,12 @@ static void temu_screen_class_init(TemuScreenClass *klass)
 	widget_class->unrealize = temu_screen_unrealize;
 	widget_class->size_request = temu_screen_size_request;
 	widget_class->size_allocate = temu_screen_size_allocate;
+
 	widget_class->expose_event = temu_screen_expose;
+
+	widget_class->button_press_event = temu_screen_button_press_event;
+	widget_class->button_release_event = temu_screen_button_release_event;
+	widget_class->motion_notify_event = temu_screen_button_motion_event;
 }
 
 GType temu_screen_get_type(void)
@@ -123,6 +134,10 @@ static void temu_screen_init(TemuScreen *screen)
 	screen->font_width = 0;
 	screen->font_height = 0;
 
+	/* selections */
+	priv->selected = FALSE;
+	priv->select_x = priv->select_y = 0;
+
 	/* options */
 	priv->double_buffered = TRUE;
 
@@ -182,7 +197,10 @@ static void temu_screen_realize(GtkWidget *widget)
 	attributes.event_mask = gtk_widget_get_events(widget);
 	attributes.event_mask |=	GDK_EXPOSURE_MASK
 				|	GDK_KEY_PRESS_MASK
-				|	GDK_KEY_RELEASE_MASK;
+				|	GDK_KEY_RELEASE_MASK
+				|	GDK_BUTTON_PRESS_MASK
+				|	GDK_BUTTON_RELEASE_MASK
+				|	GDK_BUTTON1_MOTION_MASK;
 	attributes_mask = GDK_WA_X | GDK_WA_Y | GDK_WA_VISUAL | GDK_WA_COLORMAP;
 
 	widget->window = gdk_window_new(
@@ -438,6 +456,152 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 }
 
 /*
+ * Selections
+ */
+
+/* They're implemented like this, because it's easier to handle
+   scrolling and such. */
+void temu_screen_select_clear(TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	gint y, x;
+
+	if (!priv->selected)
+		return;
+
+	for (y = 0; y < priv->height; y++) {
+		if (!GET_ATTR(priv->lines[y].attr, LINE_SELECTED))
+			continue;
+
+		SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 0);
+		for (x = 0; x < priv->width; x++) {
+			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 0);
+			temu_screen_invalidate_cell(screen, x, y);
+		}
+	}
+
+	priv->selected = FALSE;
+
+	temu_screen_apply_updates(screen);
+}
+
+void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) {
+	GtkWidget *widget = GTK_WIDGET(screen);
+	TemuScreenPrivate *priv = screen->priv;
+	gint i, count;
+	gint x, y;
+	gchar *buffer, *p;
+	GtkClipboard *clipboard;
+
+	g_return_if_fail(fx >= 0 && fx < priv->width && fy >= 0 && fy < priv->visible_height);
+	g_return_if_fail(tx >= 0 && tx < priv->width && ty >= 0 && ty < priv->visible_height);
+
+	temu_screen_select_clear(screen);
+
+	count = (ty*priv->width+tx) - (fy*priv->width+fx);
+	if (count < 0) {
+		gint tmp;
+		tmp = fx; fx = tx; tx = tmp;
+		tmp = fy; fy = ty; ty = tmp;
+		count = -count;
+	}
+	count++;
+
+	/* Slurp up the -whole- last line if we're past its end */
+	ty = (ty + priv->scroll_offset + priv->view_offset) % priv->height;
+	if (tx >= priv->lines[ty].len) {
+		count += priv->width - tx - 1;
+	}
+
+	p = buffer = g_alloca(
+		count*6		/* utf-8 chars, overkill alloc :x */
+		+(fy - ty + 1)	/* newlines for non-wrapped lines */
+		+1		/* NUL */
+	);
+
+	x = fx;
+	y = fy + priv->scroll_offset + priv->view_offset;
+	SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+	for (i = 0; i < count; i++) {
+		if (x < priv->lines[y].len
+		 && (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
+			p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+		}
+
+		SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
+		temu_screen_invalidate_cell(screen, x, y);
+		x++;
+		if (x >= priv->width) {
+			if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
+				*p++ = '\n';
+
+			x = 0;
+			y = (y + 1) % priv->height;
+			if (count - i)
+				SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+		}
+	}
+
+	*p = '\0';
+
+	if (GTK_WIDGET_REALIZED(widget)) {
+		clipboard = gtk_clipboard_get_for_display(gtk_widget_get_display(widget), GDK_SELECTION_PRIMARY);
+	} else {
+		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY); /* wing it */
+	}
+	gtk_clipboard_set_text(clipboard, buffer, p - buffer);
+
+	priv->selected = TRUE;
+
+	temu_screen_apply_updates(screen);
+}
+
+static gboolean temu_screen_button_press_event(GtkWidget *widget, GdkEventButton *event)
+{
+	TemuScreen *screen = TEMU_SCREEN(widget);
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (event->button != 1)
+		return FALSE;
+
+	temu_screen_select_clear(screen);
+	priv->select_x = event->x / screen->font_width;
+	priv->select_y = event->y / screen->font_height;
+
+	return TRUE;
+}
+
+static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotion *event)
+{
+	TemuScreen *screen = TEMU_SCREEN(widget);
+	TemuScreenPrivate *priv = screen->priv;
+	gint tx, ty;
+
+	if (!(event->state & GDK_BUTTON1_MASK))
+		return FALSE;
+	if (priv->select_x == -1)
+		return FALSE;
+
+	tx = event->x / screen->font_width;
+	ty = event->y / screen->font_height;
+
+	temu_screen_select(
+		screen,
+		priv->select_x, priv->select_y,
+		tx, ty
+	);
+
+	return TRUE;
+}
+
+static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButton *event)
+{
+	TemuScreenPrivate *priv = TEMU_SCREEN(widget)->priv;
+	priv->select_x = priv->select_y = -1;
+	return TRUE;
+}
+
+/*
  * Internal low-level screen management
  */
 
@@ -471,6 +635,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 
 		for (i = old_height; i < height; i++) {
 			priv->lines[i].attr = 0;
+			priv->lines[i].len = 0;
 			priv->lines[i].c = g_malloc(priv->width*sizeof(*priv->lines[i].c));
 		}
 
@@ -794,8 +959,20 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 	gint x2 = x + width, y2 = y + height;
 	gint i, j;
 
+	gboolean shorten;
+
+	shorten = (cell->glyph == L' ');
+
 	for (i = y; i < y2; i++) {
 		gint mod_i = i % priv->height;
+
+		if (x2 > priv->lines[mod_i].len) {
+			if (shorten)
+				priv->lines[mod_i].len = x;
+			else
+				priv->lines[mod_i].len = x2;
+		}
+
 		for (j = x; j < x2; j += step)
 			temu_screen_cell_set(screen, j, mod_i, cell);
 	}
@@ -1055,11 +1232,17 @@ const temu_cell_t *temu_screen_get_cell(TemuScreen *screen, gint x, gint y)
 void temu_screen_set_cell(TemuScreen *screen, gint x, gint y, const temu_cell_t *cell)
 {
 	TemuScreenPrivate *priv = screen->priv;
+	gint mod_y;
 
 	if (x < 0 || y < 0 || x >= priv->width || y >= priv->visible_height)
 		return;
 
-	temu_screen_cell_set(screen, x, (y + priv->scroll_offset) % priv->height, cell);
+	mod_y = (y + priv->scroll_offset) % priv->height;
+
+	if (x >= priv->lines[mod_y].len)
+		priv->lines[mod_y].len = x + 1;
+
+	temu_screen_cell_set(screen, x, mod_y, cell);
 	temu_screen_apply_updates(screen);
 }
 
@@ -1083,6 +1266,9 @@ gint temu_screen_set_cell_text(TemuScreen *screen, gint x, gint y, const temu_ce
 		temu_screen_cell_set(screen, x+cols, y, &cells[i]);
 		cols += GET_ATTR(cells[i].attr, WIDE)?2:1;
 	}
+
+	if ((x+cols) > priv->lines[y].len)
+		priv->lines[y].len = x+cols;
 
 	if (written)
 		*written = i;
@@ -1128,6 +1314,9 @@ gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *
 		cols += GET_ATTR(cell.attr, WIDE)?2:1;
 	}
 
+	if ((x+cols) > priv->lines[y].len)
+		priv->lines[y].len = x+cols;
+
 	if (written)
 		*written = i;
 
@@ -1162,6 +1351,9 @@ gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunicha
 		temu_screen_cell_set(screen, x+cols, y, &cell);
 		cols += GET_ATTR(cell.attr, WIDE)?2:1;
 	}
+
+	if ((x+cols) > priv->lines[y].len)
+		priv->lines[y].len = x+cols;
 
 	if (written)
 		*written = i;
@@ -1215,6 +1407,13 @@ void temu_screen_move_rect(TemuScreen *screen, gint x, gint y, gint width, gint 
 		for (ty = y1; ty != y2; ty += ydir) {
 			gint mod_y = ty % priv->height;
 			gint mod_y_from = (ty - dy + priv->height) % priv->height;
+
+			if (x < priv->lines[mod_y].len) {
+				priv->lines[mod_y].len += dx;
+				if (priv->lines[mod_y].len < 0)
+					priv->lines[mod_y].len = 0;
+			}
+
 			for (tx = x1; tx != x2; tx += xdir)
 				priv->lines[mod_y].c[tx] = priv->lines[mod_y_from].c[tx - dx];
 		}

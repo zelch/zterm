@@ -20,6 +20,7 @@ struct _TScreenMove {
 
 struct _TScreenLine {
 	guint attr;
+	gint len;
 	temu_cell_t *c;
 };
 
@@ -41,6 +42,9 @@ struct _TemuScreenPrivate {
 	gint visible_height;
 	gint scroll_offset, view_offset;
 
+	gint select_x, select_y;
+	gboolean selected;
+	
 	guint screen_attr;
 	TScreenLine *lines;
 
