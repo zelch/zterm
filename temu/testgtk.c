@@ -55,7 +55,7 @@ int main(int argc, char *argv[], char *envp[])
 			NULL
 		};
 #else
-		setenv("TERM", "xterm", 1);
+		setenv("TERM", "temu", 1);
 		setenv("COLORTERM", "temu", 1);
 #endif
 
