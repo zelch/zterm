@@ -241,7 +241,7 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 			return TRUE;
 	}
 
-	if (event->button != 2)
+	if (event->button != 2 || event->type != GDK_BUTTON_PRESS)
 		return FALSE;
 
 	if (GTK_WIDGET_REALIZED(widget)) {
