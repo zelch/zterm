@@ -518,6 +518,9 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 		count += priv->width - tx - 1;
 	}
 
+	if (tx < (priv->width-1) && GET_ATTR(priv->lines[y].c[tx].attr, WIDE))
+		count++;
+
 	p = buffer = g_alloca(
 		count*6		/* utf-8 chars, overkill alloc :x */
 		+(fy - ty + 1)	/* newlines for non-wrapped lines */
