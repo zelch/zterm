@@ -37,7 +37,7 @@ int main(int argc, char *argv[], char *envp[])
 		};
 #else
 		char *argv[] = {
-			"/bin/bash",
+			getenv("SHELL"), // one good temp. hack deserves another
 			"--login",
 			NULL
 		};
