@@ -489,14 +489,22 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 	}
 	count++;
 
+	/* Slurp up whole double-width char at start */
+	y = (fy + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
+	if (fx > 0 && GET_ATTR(priv->lines[y].c[fx-1].attr, WIDE)) {
+		fx--; count++;
+	}
+
 	/* Slurp up the -whole- last line if we're past its end */
 	y = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
 	if (tx >= priv->lines[y].len) {
 		count += priv->width - tx - 1;
 	}
 
+	/* Slurp up whole double-width char at end */
 	if (tx < (priv->width-1) && GET_ATTR(priv->lines[y].c[tx].attr, WIDE))
 		count++;
+
 
 	p = buffer = g_alloca(
 		count*6		/* utf-8 chars, overkill alloc :x */
