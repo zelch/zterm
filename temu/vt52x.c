@@ -570,6 +570,8 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 	if (key->keyval >= 0x00 && key->keyval <= 0xff) {
 		if (key->state & GDK_MOD1_MASK) *p++ = C_ESC;
 		*p++ = key->keyval;
+		if (S->o_LNM && key->keyval == C_CR)
+			*p++ = '\n';
 		goto done;
 	}
 
@@ -1658,7 +1660,8 @@ static void emul_SM_ansi(TemuEmul *S, gboolean set)
 			S->o_IRM = set; break;
 		  case 12:	/* SRM: Local Echo: Send/Recieve Mode (Set local echo off) */
 			S->o_SRM = set; break;
-		  case 20:	/* LNM: Line Feed/New Line Mode (set == LF == NEL) */
+		  case 20:
+			IMPL("LNM", "Line Feed/New Line Mode (set == LF == NEL)", "fully");
 			S->o_LNM = set; break;
 		  case 81:
 			NOTIMPL("DECKPM", "Key Position Mode", "definitely");
