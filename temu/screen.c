@@ -513,8 +513,8 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 	count++;
 
 	/* Slurp up the -whole- last line if we're past its end */
-	ty = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
-	if (tx >= priv->lines[ty].len) {
+	y = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
+	if (tx >= priv->lines[y].len) {
 		count += priv->width - tx - 1;
 	}
 
