@@ -206,8 +206,8 @@ static void temu_screen_realize(GtkWidget *widget)
 	attributes.width = widget->allocation.width;
 	attributes.height = widget->allocation.height;
 	attributes.wclass = GDK_INPUT_OUTPUT;
-	attributes.visual = gtk_widget_get_visual(widget);
-	attributes.colormap = gtk_widget_get_colormap(widget);
+	attributes.visual = visual;
+	attributes.colormap = colormap;
 	attributes.event_mask = gtk_widget_get_events(widget);
 	attributes.event_mask |=	GDK_EXPOSURE_MASK
 				|	GDK_KEY_PRESS_MASK
@@ -273,10 +273,10 @@ static void temu_screen_realize(GtkWidget *widget)
 	}
 
 	priv->xftdraw = XftDrawCreate(
-		GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(widget)),
+		GDK_DISPLAY_XDISPLAY(display),
 		GDK_DRAWABLE_XID(priv->pixmap),
-		GDK_VISUAL_XVISUAL(gtk_widget_get_visual(widget)),
-		GDK_COLORMAP_XCOLORMAP(gtk_widget_get_colormap(widget))
+		GDK_VISUAL_XVISUAL(visual),
+		GDK_COLORMAP_XCOLORMAP(colormap)
 	);
 
 	for (i = 0; i < TEMU_SCREEN_MAX_COLORS; i++) {
@@ -288,9 +288,9 @@ static void temu_screen_realize(GtkWidget *widget)
 		};
 
 		XftColorAllocValue(
-			GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(widget)),
-			GDK_VISUAL_XVISUAL(gtk_widget_get_visual(widget)),
-			GDK_COLORMAP_XCOLORMAP(gtk_widget_get_colormap(widget)),
+			GDK_DISPLAY_XDISPLAY(display),
+			GDK_VISUAL_XVISUAL(visual),
+			GDK_COLORMAP_XCOLORMAP(colormap),
 			&rcolor,
 			&priv->color[i]
 		);
@@ -298,7 +298,7 @@ static void temu_screen_realize(GtkWidget *widget)
 		priv->gdk_color[i].red = rcolor.red;
 		priv->gdk_color[i].green = rcolor.green;
 		priv->gdk_color[i].blue = rcolor.blue;
-		gdk_rgb_find_color(gtk_widget_get_colormap(widget), &priv->gdk_color[i]);
+		gdk_rgb_find_color(colormap, &priv->gdk_color[i]);
 	}
 
 	temu_screen_set_font_description(screen, priv->fontdesc);
@@ -316,6 +316,9 @@ static void temu_screen_unrealize(GtkWidget *widget)
 	TemuScreen *screen = TEMU_SCREEN(widget);
 	TemuScreenPrivate *priv = screen->priv;
 	gint i;
+	GdkDisplay *display = gtk_widget_get_display(widget);
+	GdkVisual *visual = gtk_widget_get_visual(widget);
+	GdkColormap *colormap = gtk_widget_get_colormap(widget);
 
 	if (priv->idle_id) {
 		g_source_remove(priv->idle_id);
@@ -332,9 +335,9 @@ static void temu_screen_unrealize(GtkWidget *widget)
 
 		for (i = 0; i < TEMU_SCREEN_MAX_COLORS; i++) {
 			XftColorFree(
-				GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(widget)),
-				GDK_VISUAL_XVISUAL(gtk_widget_get_visual(widget)),
-				GDK_COLORMAP_XCOLORMAP(gtk_widget_get_colormap(widget)),
+				GDK_DISPLAY_XDISPLAY(display),
+				GDK_VISUAL_XVISUAL(visual),
+				GDK_COLORMAP_XCOLORMAP(colormap),
 				&priv->color[i]
 			);
 		}
@@ -1753,7 +1756,7 @@ void temu_screen_emit_bell(TemuScreen *screen)
 #ifdef HAVE_XKB /* XkbBell way */
 	static Atom TerminalBellAtom = None;
 	Display *dpy;
-	
+
 	dpy = GDK_WINDOW_XDISPLAY(GTK_WIDGET(screen)->window);
 
 	if (TerminalBellAtom == None)
