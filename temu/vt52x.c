@@ -1169,14 +1169,14 @@ static void vt52x_csi(TemuEmul *S)
 			break;
 		}
 		break;
-	  case E(C_CSI,0,'>','c'):
+	  case E(C_CSI,'>',0,'c'):
 		PARM_DEF(0, 0);
 		switch (P(0)) {
 		  case 0: NOTIMPL("DA2", "Secondary Device Attributes", "probably"); break;
 		  default: NOTIMPL_UNKNOWN("%08x %d", E(S->strt,S->pre,S->intr,S->fin), P(0)); break;
 		}
 		break;
-	  case E(C_CSI,0,'=','c'):
+	  case E(C_CSI,'=',0,'c'):
 		PARM_DEF(0, 0);
 		switch (P(0)) {
 		  case 0: NOTIMPL("DA3", "Tertiary Device Attributes", "probably"); break;
