@@ -10,11 +10,17 @@
 #include "glyphcache.h"
 
 typedef struct _TScreenMove TScreenMove;
+typedef struct _TScreenLine TScreenLine;
 
 struct _TScreenMove {
 	TScreenMove *next, *prev;
 	gint dx, dy;
 	GdkRectangle rect;
+};
+
+struct _TScreenLine {
+	guint attr;
+	temu_cell_t *c;
 };
 
 struct _TemuScreenPrivate {
@@ -33,8 +39,10 @@ struct _TemuScreenPrivate {
 
 	gint width, height;
 	gint visible_height;
-	temu_cell_t **screen;
 	gint scroll_offset, view_offset;
+
+	guint screen_attr;
+	TScreenLine *lines;
 
 	temu_cell_t clear_cell, resize_cell;
 

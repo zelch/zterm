@@ -72,7 +72,9 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 
 static void temu_screen_fg_bg(TemuScreen *screen, temu_attr_t attr, gint *fg, gint *bg)
 {
-	if (GET_ATTR(attr, NEGATIVE)) {
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (GET_ATTR(attr, NEGATIVE) ^ GET_ATTR(priv->screen_attr, SCREEN_NEGATIVE)) {
 		*fg = GET_ATTR(attr, BG);
 		if (*fg == TEMU_SCREEN_BG_DEFAULT) *fg = 0;
 		*bg = GET_ATTR(attr, FG);
@@ -324,7 +326,7 @@ void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 			gint x, w;
 
 			x = x1;
-			if (x1 > 0 && GET_ATTR(priv->screen[mod_y][x1-1].attr, WIDE))
+			if (x1 > 0 && GET_ATTR(priv->lines[mod_y].c[x1-1].attr, WIDE))
 				x--;
 
 			w = x2 - x1 + 1;
@@ -337,8 +339,8 @@ void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 			if (gdk_region_rect_in(draw_region, &draw) == GDK_OVERLAP_RECTANGLE_OUT)
 				continue;
 
-			temu_screen_render_line_bg(screen, draw.x, draw.y, &priv->screen[mod_y][x], w);
-			temu_screen_render_line_text(screen, draw.x, draw.y, &priv->screen[mod_y][x], w);
+			temu_screen_render_line_bg(screen, draw.x, draw.y, &priv->lines[mod_y].c[x], w);
+			temu_screen_render_line_text(screen, draw.x, draw.y, &priv->lines[mod_y].c[x], w);
 		}
 
 		gdk_region_destroy(draw_region);

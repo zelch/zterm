@@ -107,12 +107,14 @@ static void temu_screen_init(TemuScreen *screen)
 	priv->moves_free = NULL;
 
 	/* cell screen */
+	priv->screen_attr = 0;
+
 	priv->scroll_offset = 0;
 	priv->view_offset = 0;
 
 	priv->width = 0;
 	priv->height = 0;
-	priv->screen = NULL;
+	priv->lines = NULL;
 
 	priv->visible_height = 25;
 	temu_screen_resize(screen, 80, 100);
@@ -330,8 +332,8 @@ static void temu_screen_finalize(GObject *object)
 
 	/* cell screen */
 	for (i = 0; i < priv->height; i++)
-		g_free(priv->screen[i]);
-	g_free(priv->screen);
+		g_free(priv->lines[i].c);
+	g_free(priv->lines);
 
 	g_mem_chunk_destroy(priv->moves_chunk);
 
@@ -453,7 +455,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 		priv->width = width;
 
 		for (i = 0; i < priv->height; i++)
-			priv->screen[i] = g_realloc(priv->screen[i], width * sizeof(*priv->screen[i]));
+			priv->lines[i].c = g_realloc(priv->lines[i].c, width*sizeof(*priv->lines[i].c));
 
 		temu_screen_fill_rect_internal(
 			screen,
@@ -465,10 +467,12 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 	
 	if (old_height != height) {
 		priv->height = height;
-		priv->screen = g_realloc(priv->screen, height * sizeof(*priv->screen));
+		priv->lines = g_realloc(priv->lines, height * sizeof(*priv->lines));
 
-		for (i = old_height; i < height; i++)
-			priv->screen[i] = g_malloc(priv->width * sizeof(*priv->screen[i]));
+		for (i = old_height; i < height; i++) {
+			priv->lines[i].attr = 0;
+			priv->lines[i].c = g_malloc(priv->width*sizeof(*priv->lines[i].c));
+		}
 
 		temu_screen_fill_rect_internal(
 			screen,
@@ -752,23 +756,23 @@ static void temu_screen_apply_move(TemuScreen *screen, GdkRectangle *rect, gint 
 static inline const temu_cell_t *temu_screen_cell_get(TemuScreen *screen, gint x, gint y)
 {
 	TemuScreenPrivate *priv = screen->priv;
-	return &priv->screen[y][x];
+	return &priv->lines[y].c[x];
 }
 
 static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_cell_t *cell)
 {
 	TemuScreenPrivate *priv = screen->priv;
 
-	if (x > 0 && GET_ATTR(priv->screen[y][x-1].attr, WIDE)) {
-		temu_cell_t tmp_cell = priv->screen[y][x-1];
+	if (x > 0 && GET_ATTR(priv->lines[y].c[x-1].attr, WIDE)) {
+		temu_cell_t tmp_cell = priv->lines[y].c[x-1];
 
 		tmp_cell.glyph = L' ';
 		SET_ATTR(tmp_cell.attr, WIDE, 0);
-		priv->screen[y][x-1] = tmp_cell;
+		priv->lines[y].c[x-1] = tmp_cell;
 		temu_screen_invalidate_cell(screen, x-1, y);
 	}
 
-	priv->screen[y][x] = *cell;
+	priv->lines[y].c[x] = *cell;
 	temu_screen_invalidate_cell(screen, x, y);
 
 	if (GET_ATTR(cell->attr, WIDE) && x < (priv->width-1)) {
@@ -777,7 +781,7 @@ static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_
 		tmp_cell.glyph = L' ';
 		SET_ATTR(tmp_cell.attr, WIDE, 0);
 
-		priv->screen[y][x+1] = tmp_cell;
+		priv->lines[y].c[x+1] = tmp_cell;
 		temu_screen_invalidate_cell(screen, x+1, y);
 	}
 }
@@ -803,7 +807,7 @@ static void temu_screen_move_lines_noupdate(TemuScreen *screen, gint lines, gint
 {
 	TemuScreenPrivate *priv = screen->priv;
 	gint abslines = lines<0?-lines:lines;
-	temu_cell_t **saved;
+	TScreenLine *saved;
 	gint i;
 
 	saved = g_alloca(sizeof(*saved) * abslines);
@@ -812,35 +816,35 @@ static void temu_screen_move_lines_noupdate(TemuScreen *screen, gint lines, gint
 		/* move them down */
 		for (i = 0; i < abslines; i++) {
 			gint mod_y = (y + height + i) % priv->height;
-			saved[i] = priv->screen[mod_y];
+			saved[i] = priv->lines[mod_y];
 		}
 
 		for (i = height-1; i >= 0; i--) {
 			gint mod_y = (y + i - lines) % priv->height;
 			gint mod_y_from = (y + i) % priv->height;
-			priv->screen[mod_y] = priv->screen[mod_y_from];
+			priv->lines[mod_y] = priv->lines[mod_y_from];
 		}
 
 		for (i = 0; i < abslines; i++) {
 			gint mod_y = (y + i) % priv->height;
-			priv->screen[mod_y] = saved[i];
+			priv->lines[mod_y] = saved[i];
 		}
 	} else {
 		/* move them up */
 		for (i = 0; i < lines; i++) {
 			gint mod_y = (y + i - lines + priv->height) % priv->height;
-			saved[i] = priv->screen[mod_y];
+			saved[i] = priv->lines[mod_y];
 		}
 
 		for (i = 0; i < height; i++) {
 			gint mod_y = (y + i - lines + priv->height) % priv->height;
 			gint mod_y_from = (y + i) % priv->height;
-			priv->screen[mod_y] = priv->screen[mod_y_from];
+			priv->lines[mod_y] = priv->lines[mod_y_from];
 		}
 
 		for (i = 0; i < lines; i++) {
 			gint mod_y = (y + i - lines + height) % priv->height;
-			priv->screen[mod_y] = saved[i];
+			priv->lines[mod_y] = saved[i];
 		}
 	}
 }
@@ -973,6 +977,64 @@ void temu_screen_set_resize_cell(TemuScreen *screen, const temu_cell_t *cell)
 {
 	TemuScreenPrivate *priv = screen->priv;
 	priv->resize_cell = *cell;
+}
+
+/* global attr, line attr */
+void temu_screen_set_screen_attr(TemuScreen *screen, guint attr)
+{
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (GET_ATTR_BASE(priv->screen_attr,SCREEN_UPDATE)
+	 != GET_ATTR_BASE(attr,SCREEN_UPDATE)) {
+		GdkRectangle *urect = &priv->update_rect;
+
+		urect->x = urect->y = 0;
+		urect->width = priv->width;
+		urect->height = priv->visible_height;
+
+		temu_screen_apply_updates(screen);
+	}
+
+	priv->screen_attr = attr;
+}
+
+guint temu_screen_get_screen_attr(TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	return priv->screen_attr;
+}
+
+void temu_screen_set_line_attr(TemuScreen *screen, gint line, guint attr)
+{
+	TemuScreenPrivate *priv = screen->priv;
+
+	g_return_if_fail(line >= 0 && line < priv->visible_height);
+
+	line += priv->scroll_offset;
+
+	if (GET_ATTR_BASE(priv->lines[line].attr,LINE_UPDATE)
+	 != GET_ATTR_BASE(attr,LINE_UPDATE)) {
+		GdkRectangle *urect = &priv->update_rect;
+
+		if (urect->width)
+			temu_screen_apply_updates(screen);
+
+		urect->x = 0;
+		urect->y = line;
+		urect->width = priv->width;
+		urect->height = 1;
+
+		temu_screen_apply_updates(screen);
+	}
+
+	priv->lines[line].attr = attr;
+}
+
+guint temu_screen_get_line_attr(TemuScreen *screen, gint line)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	g_return_val_if_fail(line >= 0 && line < priv->visible_height, 0);
+	return priv->lines[line].attr;
 }
 
 /*
@@ -1154,7 +1216,7 @@ void temu_screen_move_rect(TemuScreen *screen, gint x, gint y, gint width, gint 
 			gint mod_y = ty % priv->height;
 			gint mod_y_from = (ty - dy + priv->height) % priv->height;
 			for (tx = x1; tx != x2; tx += xdir)
-				priv->screen[mod_y][tx] = priv->screen[mod_y_from][tx - dx];
+				priv->lines[mod_y].c[tx] = priv->lines[mod_y_from].c[tx - dx];
 		}
 
 		rect.x = x;

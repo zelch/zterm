@@ -21,6 +21,8 @@
 #define NOTIMPL_UNKNOWN(fmt,args...)	do{}while(0)
 #endif
 
+#define IMPL(id,desc,support...)
+
 #define VTPARSE_MAX_PARAMS	17	/* We overwrite the last one endlessly */
 #define VTPARSE_MAX_STR		1024
 
@@ -1491,9 +1493,11 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 		  case 4:
 			NOTIMPL("DECSCLM", "Scrolling Mode", "probably not");
 			break;
-		  case 5:
-			NOTIMPL("DECSCNM", "Screen Mode: Light or Dark Screen", "definitely");
+		  case 5: {
+			IMPL("DECSCNM", "Screen Mode: Light or Dark Screen", "fully");
+			SET_SCREEN_ATTR(T, SCREEN_NEGATIVE, set);
 			break;
+		  }
 		  case 6:	/* DECOM: Origin Mode */
 			S->o_DECOM = set;
 			if (set) emul_move_cursor(S, S->cursor_x, S->cursor_y);
@@ -1652,7 +1656,7 @@ static void emul_reset_soft(TemuEmul *S)
 {
 	ECELL.glyph = L' ';
 	ATTR_NORMAL();
-	ECELL.attr = GET_ATTR_BASE(ATTR);
+	ECELL.attr = GET_ATTR_BASE(ATTR, BASE);
 	S->saved_attr = ECELL.attr;
 
 	S->charset = CHARSET_UTF8;
@@ -2347,7 +2351,7 @@ static void emul_SGR(TemuEmul *S)
 		}
 	}
 	
-	ECELL.attr = GET_ATTR_BASE(ATTR);
+	ECELL.attr = GET_ATTR_BASE(ATTR, BASE);
 }
 
 static void emul_add_glyph(TemuEmul *S, gunichar glyph)
@@ -2359,12 +2363,16 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 	cell.attr = ATTR;
 	SET_ATTR(cell.attr, WIDE, g_unichar_iswide(cell.glyph));
 
-	if (S->o_IRM)
+	if (S->o_IRM) {
 		emul_ICH(S, 1 + GET_ATTR(cell.attr, WIDE));
+		SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 0);
+	}
 
 	if (S->o_DECAWM) {
 		temu_screen_set_cell_text(T, S->cursor_x, S->cursor_y, &cell, 1, &written);
 		if (written <= 0) {
+			SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 1);
+
 			emul_CR(S); emul_IND(S);
 			if (S->o_IRM)
 				emul_ICH(S, 1 + GET_ATTR(cell.attr, WIDE));
@@ -2376,6 +2384,10 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 	}
 
 	S->cursor_x += 1 + GET_ATTR(cell.attr, WIDE);
+
+	if (S->cursor_x >= WIDTH)
+		SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 0);
+
 	emul_cursor_cleared(S);
 }
 
