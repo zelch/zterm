@@ -169,6 +169,8 @@ gint temu_screen_scroll_offset_max(TemuScreen *screen);
 /* move text around */
 void		temu_screen_move_rect		(TemuScreen *screen, gint x, gint y, gint width, gint height, gint dx, gint dy, const temu_cell_t *cell);
 
+/* beep! */
+void		temu_screen_emit_bell		(TemuScreen *screen);
 G_END_DECLS
 
 #endif

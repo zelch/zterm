@@ -29,6 +29,8 @@
 #define IMPL(id,desc,support)	do{}while(0)
 #endif
 
+#define EMUL_ENQ_REPLY		"temu"
+
 #define VTPARSE_MAX_PARAMS	17	/* We overwrite the last one endlessly */
 #define VTPARSE_MAX_STR		1024
 
@@ -699,10 +701,11 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 {
 	switch (c0) {
 	  case C_ENQ:
-		NOTIMPL("ENQ", "Enquiry", "definitely");
+	  	/* FIXME:? xterm (and a real VT) will let you configure the ENQ reply */
+		emul_add_output(S, EMUL_ENQ_REPLY, 4);
 		break;
 	  case C_BEL:
-		NOTIMPL("BEL", "Audible bell", "definitely");
+		temu_screen_emit_bell(T);
 		break;
 	  case C_BS:
 		emul_BS(S);

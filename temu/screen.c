@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include <X11/Xft/Xft.h>
 
 #include <gdk/gdkpango.h>
@@ -6,6 +8,11 @@
 #include <gtk/gtk.h>
 
 #include <fontconfig/fontconfig.h>
+
+#ifdef HAVE_XKB
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+#endif
 
 #include "screen.h"
 #include "screen-private.h"
@@ -1673,4 +1680,28 @@ gint temu_screen_scroll_offset_max(TemuScreen *screen)
 	if (min_offset > 0) min_offset -= priv->height;
 
 	return -min_offset;
+}
+
+void temu_screen_emit_bell(TemuScreen *screen)
+{
+#ifdef HAVE_XKB /* XkbBell way */
+	GtkWidget *top;
+	static Atom TerminalBellAtom = None;
+	Display *dpy;
+	
+	top = gtk_widget_get_toplevel(GTK_WIDGET(screen));
+	dpy = GDK_WINDOW_XDISPLAY(top->window);
+
+	if (TerminalBellAtom == None)
+		TerminalBellAtom = XInternAtom(dpy, "TerminalBell", False);
+	
+	XkbBell(
+		dpy,
+		GDK_WINDOW_XWINDOW(top->window),
+		100, /* percent */
+		TerminalBellAtom
+	);
+#else /* simple beep */
+	gdk_beep();
+#endif
 }
