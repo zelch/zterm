@@ -1,6 +1,7 @@
 /*
  * Rendering functions (off-screen and on-screen)
  */
+#include <gdk/gdkx.h>
 #include "screen.h"
 #include "screen-private.h"
 
@@ -9,13 +10,18 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	TScreenMove *node, *next;
+	GdkRectangle clip;
 
 	node = priv->moves.next;
 	if (node == &priv->moves)
 		return;
 
+	clip.x = clip.y = 0;
+	clip.width = priv->width * screen->font_width;
+	clip.height = priv->visible_height * screen->font_height;
+
 	for (; node != &priv->moves; node = next) {
-		GdkRectangle final_rect;
+		GdkRectangle final_rect, clipped;
 
 		next = node->next;
 
@@ -23,17 +29,37 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 		final_rect.x += node->dx;
 		final_rect.y += node->dy;
 
-		if (!inv_region ||
-		    gdk_region_rect_in(inv_region, &final_rect) != GDK_OVERLAP_RECTANGLE_IN)
-		{
-			gdk_draw_drawable(
-				widget->window,
-				priv->gc,
-				widget->window,
-				node->rect.x, node->rect.y,
-				final_rect.x, final_rect.y,
-				node->rect.width, node->rect.height
-			);
+		gdk_rectangle_intersect(&clip, &final_rect, &clipped);
+
+		if (priv->double_buffered) {
+			/* If we're double-buffered, we don't have to
+			   redraw the text -- we know it's in our back buffer */
+			if (!inv_region ||
+			    gdk_region_rect_in(inv_region, &clipped) != GDK_OVERLAP_RECTANGLE_IN)
+			{
+				/* Not a completely updated area, move it */
+				gdk_draw_drawable(
+					priv->pixmap,
+					priv->gc,
+					priv->pixmap,
+					clipped.x - node->dx, clipped.y - node->dy,
+					clipped.x, clipped.y,
+					clipped.width, clipped.height
+				);
+
+				/* And copy it to the front buffer */
+				gdk_draw_drawable(
+					widget->window,
+					priv->gc,
+					priv->pixmap,
+					clipped.x, clipped.y,
+					clipped.x, clipped.y,
+					clipped.width, clipped.height
+				);
+			}
+		} else {
+			/* Otherwise, redrawing is about the best we can do */
+			gdk_region_union_with_rect(inv_region, &clipped);
 		}
 
 		node->prev->next = node->next;
@@ -124,7 +150,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 	if (GET_ATTR(cell->attr, UNDERLINE)) {
 		gdk_draw_line(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			x,
 			y + gfi->y_offset + 1,
@@ -134,7 +160,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 		if (GET_ATTR(cell->attr, UNDERLINE) >= 2)
 		gdk_draw_line(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			x,
 			y + gfi->y_offset + 3,
@@ -145,7 +171,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 	if (GET_ATTR(cell->attr, OVERLINE)) {
 		gdk_draw_line(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			x,
 			y + 1,
@@ -156,7 +182,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 	if (GET_ATTR(cell->attr, OVERSTRIKE)) {
 		gdk_draw_line(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			x,
 			y + (screen->font_height / 2),
@@ -167,7 +193,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 	if (GET_ATTR(cell->attr, FRAME) == 1) {
 		gdk_draw_rectangle(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			FALSE,
 			x,
@@ -177,7 +203,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 		);
 	} else if (GET_ATTR(cell->attr, FRAME) == 2) {
 		gdk_draw_arc(
-			widget->window,
+			priv->pixmap,
 			priv->gc,
 			FALSE,
 			x,
@@ -251,44 +277,85 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 
 void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 {
+	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 
-	GdkRectangle clip;
+	GdkRectangle clip, draw;
+	GdkRegion *draw_region;
 
 	gint x1, y1, x2, y2;
 	gint y;
 
-	gdk_region_get_clipbox(region, &clip);
+	clip.x = clip.y = 0;
+	clip.width = priv->width * screen->font_width;
+	clip.height = priv->visible_height * screen->font_height;
 
-	x1 = clip.x / screen->font_width;
-	x2 = (clip.x + clip.width - 1) / screen->font_width;
-	y1 = clip.y / screen->font_height;
-	y2 = (clip.y + clip.height - 1) / screen->font_height;
+	if (priv->update_region) {
+		draw_region = gdk_region_rectangle(&clip);
+		gdk_region_intersect(draw_region, priv->update_region);
 
-	if (x1 < 0) x1 = 0;
-	if (x2 >= priv->width) x2 = priv->width - 1;
-	if (y1 < 0) y1 = 0;
-	if (y2 >= priv->height) y2 = priv->height - 1;
+		gdk_region_destroy(priv->update_region);
+		priv->update_region = NULL;
 
-	clip.x = (x1 - 1)*screen->font_width;
-	clip.width = (x2 - x1 + 2)*screen->font_width;
-	clip.height = screen->font_height;
+		if (!priv->double_buffered)
+			gdk_region_union(draw_region, region);
+	} else if (!priv->double_buffered) {
+		draw_region = gdk_region_rectangle(&clip);
+		gdk_region_intersect(draw_region, region);
+	} else {
+		draw_region = NULL;
+	}
 
-	for (y = y1; y <= y2; y++) {
-		gint mod_y = (y + priv->scroll_offset + priv->view_offset) % priv->height;
-		gint x, w;
+	if (draw_region && gdk_region_empty(draw_region)) {
+		gdk_region_destroy(draw_region);
+		draw_region = NULL;
+	}
 
-		clip.y = y*screen->font_height;
-		if (gdk_region_rect_in(region, &clip) == GDK_OVERLAP_RECTANGLE_OUT)
-			continue;
+	if (draw_region) {
+		gdk_region_get_clipbox(draw_region, &clip);
 
-		x = x1;
-		if (x1 > 0 && GET_ATTR(priv->screen[mod_y][x1-1].attr, WIDE))
-			x--;
+		x1 = clip.x / screen->font_width;
+		x2 = (clip.x + clip.width - 1) / screen->font_width;
+		y1 = clip.y / screen->font_height;
+		y2 = (clip.y + clip.height - 1) / screen->font_height;
 
-		w = x2 - x1 + 1;
+		for (y = y1; y <= y2; y++) {
+			gint mod_y = (y + priv->scroll_offset + priv->view_offset) % priv->height;
+			gint x, w;
 
-		temu_screen_render_line_bg(screen, x*screen->font_width, y*screen->font_height, &priv->screen[mod_y][x], w);
-		temu_screen_render_line_text(screen, x*screen->font_width, y*screen->font_height, &priv->screen[mod_y][x], w);
+			x = x1;
+			if (x1 > 0 && GET_ATTR(priv->screen[mod_y][x1-1].attr, WIDE))
+				x--;
+
+			w = x2 - x1 + 1;
+
+			draw.x = x*screen->font_width;
+			draw.y = y*screen->font_height;
+			draw.width = w*screen->font_width;
+			draw.height = screen->font_height;
+
+			if (gdk_region_rect_in(draw_region, &draw) == GDK_OVERLAP_RECTANGLE_OUT)
+				continue;
+
+			temu_screen_render_line_bg(screen, draw.x, draw.y, &priv->screen[mod_y][x], w);
+			temu_screen_render_line_text(screen, draw.x, draw.y, &priv->screen[mod_y][x], w);
+		}
+
+		gdk_region_destroy(draw_region);
+	}
+
+	if (priv->double_buffered) {
+		gdk_region_get_clipbox(region, &clip);
+
+		gdk_gc_set_clip_region(priv->gc, region);
+		gdk_draw_drawable(
+			widget->window,
+			priv->gc,
+			priv->pixmap,
+			clip.x, clip.y,
+			clip.x, clip.y,
+			clip.width, clip.height
+		);
+		gdk_gc_set_clip_region(priv->gc, NULL);
 	}
 }

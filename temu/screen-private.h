@@ -18,6 +18,9 @@ struct _TScreenMove {
 };
 
 struct _TemuScreenPrivate {
+	GdkDrawable *pixmap;
+	gint double_buffered;
+
 	GdkGC *gc;
 	XftDraw *xftdraw;
 	XftColor color[TEMU_SCREEN_MAX_COLORS];
@@ -32,7 +35,6 @@ struct _TemuScreenPrivate {
 	gint visible_height;
 	temu_cell_t **screen;
 	gint scroll_offset, view_offset;
-	gboolean ignore_allocation;
 
 	temu_cell_t clear_cell, resize_cell;
 
