@@ -190,6 +190,7 @@ static void temu_screen_realize(GtkWidget *widget)
 	GdkWindowAttr attributes;
 	gint attributes_mask;
 	GdkCursor *cursor;
+	GdkRectangle *urect;
 
 	gint i;
 
@@ -286,6 +287,11 @@ static void temu_screen_realize(GtkWidget *widget)
 
 	temu_screen_set_font_description(screen, priv->fontdesc);
 
+	urect = &priv->update_rect;
+	urect->x = urect->y = 0;
+	urect->width = priv->width;
+	urect->height = priv->height;
+	temu_screen_apply_updates(screen);
 	gtk_widget_queue_draw(widget);
 }
 
