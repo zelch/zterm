@@ -41,7 +41,6 @@ void glyph_cache_destroy(TGlyphCache *cache) {
 void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 {
 	PangoFontMap *font_map;
-	PangoFont *font;
 	PangoFontMetrics *metrics;
 
 	if (cache->hash) {
@@ -73,8 +72,7 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 
 	g_object_unref(font_map);
 
-	font = pango_fontset_get_font(cache->font_set, L' ');
-	metrics = pango_font_get_metrics(font, cache->lang);
+	metrics = pango_fontset_get_metrics(cache->font_set);
 
 	cache->ascent = pango_font_metrics_get_ascent(metrics);
 	cache->descent = pango_font_metrics_get_descent(metrics);
@@ -83,7 +81,6 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 	cache->height = cache->ascent + cache->descent;
 
 	pango_font_metrics_unref(metrics);
-	g_object_unref(font);
 }
 
 TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
