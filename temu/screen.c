@@ -1120,6 +1120,19 @@ void temu_screen_set_size(TemuScreen *screen, gint width, gint height, gint scro
 		priv->visible_height = height;
 
 		if (GTK_WIDGET_REALIZED(widget)) {
+#if 1 /* rain - slightly less awful hack */
+			GtkWidget *toplevel;
+			
+			toplevel = gtk_widget_get_toplevel(widget);
+			/*
+			 * need_default_size makes the window use the requisition
+			 * size (versus staring at the wall and ignoring it.)
+			 */
+			if (GTK_IS_WINDOW(toplevel))
+				GTK_WINDOW(toplevel)->need_default_size = TRUE;
+			
+			gtk_widget_queue_resize(widget);
+#else
 			/* gtk SUCKS. */
 			/* If anyone finds a better way to make this resize happen,
 			   PLEASE LET ME KNOW.  This is awful, terrible, and horrible,
@@ -1134,6 +1147,7 @@ void temu_screen_set_size(TemuScreen *screen, gint width, gint height, gint scro
 				gtk_window_reshow_with_initial_size(GTK_WINDOW(toplevel));
 				gtk_widget_queue_resize(widget);
 			}
+#endif
 		}
 	}
 }
@@ -1694,19 +1708,17 @@ gint temu_screen_scroll_offset_max(TemuScreen *screen)
 void temu_screen_emit_bell(TemuScreen *screen)
 {
 #ifdef HAVE_XKB /* XkbBell way */
-	GtkWidget *top;
 	static Atom TerminalBellAtom = None;
 	Display *dpy;
 	
-	top = gtk_widget_get_toplevel(GTK_WIDGET(screen));
-	dpy = GDK_WINDOW_XDISPLAY(top->window);
+	dpy = GDK_WINDOW_XDISPLAY(GTK_WIDGET(screen)->window);
 
 	if (TerminalBellAtom == None)
 		TerminalBellAtom = XInternAtom(dpy, "TerminalBell", False);
 	
 	XkbBell(
 		dpy,
-		GDK_WINDOW_XWINDOW(top->window),
+		GDK_WINDOW_XWINDOW(GTK_WIDGET(screen)->window),
 		100, /* percent */
 		TerminalBellAtom
 	);
