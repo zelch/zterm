@@ -429,8 +429,6 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 	widget->allocation = *allocation;
 
 	if (GTK_WIDGET_REALIZED(widget)) {
-		GdkPixmap *new_pixmap;
-
 		gdk_window_move_resize(
 			widget->window,
 			allocation->x,
@@ -438,31 +436,6 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 			allocation->width,
 			allocation->height
 		);
-
-		if (priv->double_buffered) {
-			new_pixmap = gdk_pixmap_new(
-				widget->window,
-				allocation->width,
-				allocation->height,
-				-1
-			);
-
-			gdk_draw_drawable(
-				new_pixmap,
-				priv->gc,
-				priv->pixmap,
-				0, 0, 0, 0,
-				allocation->width,
-				allocation->height
-			);
-		} else {
-			new_pixmap = g_object_ref(widget->window);
-		}
-
-		g_object_unref(priv->pixmap);
-		priv->pixmap = new_pixmap;
-
-		XftDrawChange(priv->xftdraw, GDK_DRAWABLE_XID(priv->pixmap));
 	}
 }
 
@@ -627,6 +600,7 @@ static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButt
 /* resize */
 static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 {
+	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	gint old_width, old_height;
 	gint min_top;
@@ -673,6 +647,32 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 		min_top -= priv->height;
 	if (min_top > priv->scroll_top)
 		priv->scroll_top = (min_top + priv->height) % priv->height;
+
+	/* Resize the back buffer */
+	if (priv->double_buffered && GTK_WIDGET_REALIZED(widget)) {
+		GdkPixmap *new_pixmap;
+
+		new_pixmap = gdk_pixmap_new(
+			widget->window,
+			priv->width * screen->font_width,
+			priv->visible_height * screen->font_height,
+			-1
+		);
+
+		gdk_draw_drawable(
+			new_pixmap,
+			priv->gc,
+			priv->pixmap,
+			0, 0, 0, 0,
+			priv->width * screen->font_width,
+			priv->visible_height * screen->font_height
+		);
+
+		g_object_unref(priv->pixmap);
+		priv->pixmap = new_pixmap;
+
+		XftDrawChange(priv->xftdraw, GDK_DRAWABLE_XID(priv->pixmap));
+	}
 }
 
 /* updates */
