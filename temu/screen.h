@@ -87,11 +87,14 @@ void		temu_screen_set_size		(TemuScreen *screen,
 						 gint width,
 						 gint height,
 						 gint scrollback);
+gint		temu_screen_get_cols		(TemuScreen *screen);
+gint		temu_screen_get_rows		(TemuScreen *screen);
+
 void		temu_screen_get_base_geometry_hints(TemuScreen *screen,
 						 GdkGeometry *geom,
 						 GdkWindowHints *mask);
-gint		temu_screen_get_cols		(TemuScreen *screen);
-gint		temu_screen_get_rows		(TemuScreen *screen);
+
+void		temu_screen_set_font_description(TemuScreen *screen, PangoFontDescription *desc);
 
 /*
  * Text add/set functions _DO NOT WRAP_ themselves.

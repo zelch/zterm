@@ -123,6 +123,16 @@ static void temu_screen_init(TemuScreen *screen)
 
 	/* options */
 	priv->double_buffered = TRUE;
+
+	priv->fontdesc = pango_font_description_new();
+//	pango_font_description_set_family(priv->fontdesc, "Terminal");
+//	pango_font_description_set_family(priv->fontdesc, "Sans");
+//	pango_font_description_set_family(priv->fontdesc, "Bitstream Vera Sans Mono");
+//	pango_font_description_set_family(priv->fontdesc, "FreeMono");
+	pango_font_description_set_family(priv->fontdesc, "zanz646");
+	pango_font_description_set_size(priv->fontdesc, 12 * PANGO_SCALE);
+	pango_font_description_set_weight(priv->fontdesc, PANGO_WEIGHT_BOLD);
+
 }
 
 static void temu_screen_realize(GtkWidget *widget)
@@ -251,21 +261,7 @@ static void temu_screen_realize(GtkWidget *widget)
 		gdk_rgb_find_color(gtk_widget_get_colormap(widget), &priv->gdk_color[i]);
 	}
 
-	priv->fontdesc = pango_font_description_new();
-//	pango_font_description_set_family(priv->fontdesc, "Terminal");
-//	pango_font_description_set_family(priv->fontdesc, "Sans");
-//	pango_font_description_set_family(priv->fontdesc, "Bitstream Vera Sans Mono");
-//	pango_font_description_set_family(priv->fontdesc, "FreeMono");
-	pango_font_description_set_family(priv->fontdesc, "zanz646");
-
-	pango_font_description_set_size(priv->fontdesc, 12 * PANGO_SCALE);
-	pango_font_description_set_weight(priv->fontdesc, PANGO_WEIGHT_BOLD);
-//	pango_font_description_set_style(priv->fontdesc, PANGO_STYLE_ITALIC);
-
-	priv->gcache = glyph_cache_new(widget, priv->fontdesc);
-	priv->font_ascent = glyph_cache_font_ascent(priv->gcache);
-	screen->font_width = glyph_cache_font_width(priv->gcache);
-	screen->font_height = glyph_cache_font_height(priv->gcache);
+	temu_screen_set_font_description(screen, priv->fontdesc);
 }
 
 static void temu_screen_unrealize(GtkWidget *widget)
@@ -338,6 +334,9 @@ static void temu_screen_finalize(GObject *object)
 	g_free(priv->screen);
 
 	g_mem_chunk_destroy(priv->moves_chunk);
+
+	/* options */
+	pango_font_description_free(priv->fontdesc);
 
 	/* on-screen/realized */
 	temu_screen_unrealize(widget);
@@ -878,9 +877,10 @@ static gboolean temu_screen_expose(GtkWidget *widget, GdkEventExpose *event)
 }
 
 /*
- * Visible functions for updating the screen and such
+ * Stuff for updating/getting options
  */
 
+/* size stuff */
 void temu_screen_set_size(TemuScreen *screen, gint width, gint height, gint scrollback)
 {
 	TemuScreenPrivate *priv = screen->priv;
@@ -947,6 +947,37 @@ void temu_screen_get_base_geometry_hints(TemuScreen *screen, GdkGeometry *geom, 
 	geom->height_inc = screen->font_height;
 	*mask |= GDK_HINT_RESIZE_INC;
 }
+
+/* font stuff */
+void temu_screen_set_font_description(TemuScreen *screen, PangoFontDescription *desc)
+{
+	GtkWidget *widget = GTK_WIDGET(screen);
+	TemuScreenPrivate *priv = screen->priv;
+
+	if (desc != priv->fontdesc /* hack :x */) {
+		pango_font_description_free(priv->fontdesc);
+		priv->fontdesc = desc;
+	}
+
+	if (priv->gcache)
+		glyph_cache_destroy(priv->gcache);
+
+	priv->gcache = glyph_cache_new(widget, desc);
+	priv->font_ascent = glyph_cache_font_ascent(priv->gcache);
+	screen->font_width = glyph_cache_font_width(priv->gcache);
+	screen->font_height = glyph_cache_font_height(priv->gcache);
+}
+
+/* cell to fill resized areas with */
+void temu_screen_set_resize_cell(TemuScreen *screen, const temu_cell_t *cell)
+{
+	TemuScreenPrivate *priv = screen->priv;
+	priv->resize_cell = *cell;
+}
+
+/*
+ * Visible functions for updating the screen and such
+ */
 
 /* text */
 const temu_cell_t *temu_screen_get_cell(TemuScreen *screen, gint x, gint y)
@@ -1076,13 +1107,6 @@ gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunicha
 	temu_screen_apply_updates(screen);
 
 	return cols;
-}
-
-/* cell to fill resized areas with */
-void temu_screen_set_resize_cell(TemuScreen *screen, const temu_cell_t *cell)
-{
-	TemuScreenPrivate *priv = screen->priv;
-	priv->resize_cell = *cell;
 }
 
 /* scrolling/movement */
