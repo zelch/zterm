@@ -147,8 +147,9 @@ struct _TemuEmul {
 
 	/* */
 	gboolean conformance;
+	gboolean o_DECBKM, o_DECKPAM;
 	gboolean o_KAM, o_CRM, o_IRM, o_SRM, o_LNM, o_DECKPM;
-	gboolean o_DECOM, o_DECAWM, o_DECNCSM;
+	gboolean o_DECCKM, o_DECOM, o_DECAWM, o_DECNCSM;
 
 };
 
@@ -326,8 +327,10 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 
 	switch (key->keyval) {
 	  case GDK_BackSpace:
-		if (key->state & GDK_CONTROL_MASK) key->keyval = C_BS;
-		else key->keyval = C_DEL;
+		if (!!(S->o_DECBKM) ^ !!(key->state & GDK_CONTROL_MASK))
+			key->keyval = C_BS;
+		else
+			key->keyval = C_DEL;
 		break;
 	  case GDK_Return:
 		key->keyval = C_CR;
@@ -338,52 +341,6 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 
 	  case GDK_Escape:
 		*p++ = C_ESC;
-		goto done;
-
-	  case GDK_Insert:
-		STRCAT_C1(C_CSI); *p++ = '2'; STRCAT_MODIFIER(""); *p++ = '~';
-		goto done;
-	  case GDK_Delete:
-		STRCAT_C1(C_CSI); *p++ = '3'; STRCAT_MODIFIER(""); *p++ = '~';
-		goto done;
-	  case GDK_Page_Up:
-		STRCAT_C1(C_CSI); *p++ = '5'; STRCAT_MODIFIER(""); *p++ = '~';
-		goto done;
-	  case GDK_Page_Down:
-		STRCAT_C1(C_CSI); *p++ = '6'; STRCAT_MODIFIER(""); *p++ = '~';
-		goto done;
-	  case GDK_End:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'F';
-		goto done;
-	  case GDK_Home:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'H';
-		goto done;
-
-	  case GDK_Up:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'A';
-		goto done;
-	  case GDK_Down:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'B';
-		goto done;
-	  case GDK_Right:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'C';
-		goto done;
-	  case GDK_Left:
-		STRCAT_C1(C_CSI); STRCAT_MODIFIER("1"); *p++ = 'D';
-		goto done;
-
-	  case GDK_F1 ... GDK_F35:	/* ... GDK_F20 */
-		/* There are several breaks... */
-		n = key->keyval - GDK_F1 + 11;
-		if (key->keyval > GDK_F5) n++;
-		if (key->keyval > GDK_F10) n++;
-		if (key->keyval > GDK_F14) n++;
-		if (key->keyval > GDK_F16) n += 2;
-
-		STRCAT_C1(C_CSI);
-		p += g_sprintf(p, "%d", n);
-		STRCAT_MODIFIER("");
-		*p++ += '~';
 		goto done;
 
 	  case GDK_at: case GDK_2: case GDK_space:
@@ -406,6 +363,202 @@ gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], g
 	  case GDK_a ... GDK_asciitilde:
 		if (key->state & GDK_CONTROL_MASK) key->keyval -= GDK_a - 1;
 		break;
+
+	  /* Navigation keys */
+	  case GDK_Insert:
+		STRCAT_C1(C_CSI); *p++ = '2'; STRCAT_MODIFIER(""); *p++ = '~';
+		goto done;
+	  case GDK_Delete:
+		STRCAT_C1(C_CSI); *p++ = '3'; STRCAT_MODIFIER(""); *p++ = '~';
+		goto done;
+	  case GDK_Page_Up:
+		STRCAT_C1(C_CSI); *p++ = '5'; STRCAT_MODIFIER(""); *p++ = '~';
+		goto done;
+	  case GDK_Page_Down:
+		STRCAT_C1(C_CSI); *p++ = '6'; STRCAT_MODIFIER(""); *p++ = '~';
+		goto done;
+	  case GDK_End:
+		if (S->o_DECCKM) {
+			STRCAT_C1(C_SS3);
+			STRCAT_MODIFIER("1");
+			*p++ = 'F';
+		} else {
+			/* FIXME: xterm/aterm say CSI <mod> F */
+			STRCAT_C1(C_CSI);
+			*p++ = '4';
+			STRCAT_MODIFIER("");
+			*p++ = '~';
+		}
+		goto done;
+	  case GDK_Home:
+		if (S->o_DECCKM)	STRCAT_C1(C_SS3);
+		else			STRCAT_C1(C_CSI);
+		STRCAT_MODIFIER("1"); *p++ = 'H';
+		goto done;
+
+	  /* Arrow keys */
+	  case GDK_Up:
+		if (S->o_DECCKM)	STRCAT_C1(C_SS3);
+		else			STRCAT_C1(C_CSI);
+		STRCAT_MODIFIER("1"); *p++ = 'A';
+		goto done;
+	  case GDK_Down:
+		if (S->o_DECCKM)	STRCAT_C1(C_SS3);
+		else			STRCAT_C1(C_CSI);
+		STRCAT_MODIFIER("1"); *p++ = 'B';
+		goto done;
+	  case GDK_Right:
+		if (S->o_DECCKM)	STRCAT_C1(C_SS3);
+		else			STRCAT_C1(C_CSI);
+		STRCAT_MODIFIER("1"); *p++ = 'C';
+		goto done;
+	  case GDK_Left:
+		if (S->o_DECCKM)	STRCAT_C1(C_SS3);
+		else			STRCAT_C1(C_CSI);
+		STRCAT_MODIFIER("1"); *p++ = 'D';
+		goto done;
+
+	  /* Key pad */
+	  case GDK_KP_F1 ... GDK_KP_F4:
+		if (key->state & GDK_MOD1_MASK)
+			*p++ = C_ESC;
+		STRCAT_C1(C_SS3);
+		*p++ = key->keyval - GDK_KP_F1 + 'P';
+		goto done;
+
+	  case GDK_KP_0 ... GDK_KP_9:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = key->keyval - GDK_KP_0 + 'p';
+			goto done;
+		}
+		key->keyval = key->keyval - GDK_KP_0 + '0';
+		break;
+
+#define HANDLE_KP_KEY(kpam,shift,pre,mid,end)			\
+		if (S->o_DECKPAM) {				\
+			if (key->state & GDK_MOD1_MASK)		\
+				*p++ = C_ESC;			\
+								\
+			STRCAT_C1(C_SS3);			\
+			*p++ = (kpam);				\
+			goto done;				\
+		}						\
+		if (key->state & GDK_SHIFT_MASK) {		\
+			key->keyval = (shift);			\
+			break;					\
+		}						\
+		STRCAT_C1(C_CSI);				\
+		p = g_stpcpy(p, (pre));				\
+		STRCAT_MODIFIER(mid);				\
+		p = g_stpcpy(p, (end));				\
+		goto done
+
+	  case GDK_KP_Insert:	HANDLE_KP_KEY('p', '0', "2", "", "~");
+	  case GDK_KP_End:	HANDLE_KP_KEY('q', '1', "4", "", "~");
+	  case GDK_KP_Down:	HANDLE_KP_KEY('r', '2', "", "1", "B");
+	  case GDK_KP_Page_Down:HANDLE_KP_KEY('s', '3', "6", "", "~");
+	  case GDK_KP_Left:	HANDLE_KP_KEY('t', '4', "", "1", "D");
+	  case GDK_KP_Begin:	/* 5... */
+				/* FIXME: DEC says send nothing */
+				/* xterm says send CSI <mod> E */
+				/* aterm says send SS3 u */
+				HANDLE_KP_KEY('u', '5', "", "1", "E");
+	  case GDK_KP_Right:	HANDLE_KP_KEY('v', '6', "", "1", "C");
+	  case GDK_KP_Home:	HANDLE_KP_KEY('w', '7', "", "1", "H");
+	  case GDK_KP_Up:	HANDLE_KP_KEY('x', '8', "", "1", "A");
+	  case GDK_KP_Page_Up:	HANDLE_KP_KEY('y', '9', "5", "", "~");
+
+	  case GDK_KP_Enter:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'M';
+			goto done;
+		}
+
+		key->keyval = '\r';
+		break;
+
+	  case GDK_KP_Multiply:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'j';	/* FIXME: DEC manual does not say what this is. */
+			goto done;
+		}
+		key->keyval = '*';
+		break;
+	  case GDK_KP_Add:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'l';	/* FIXME: xterm/aterm say k.. */
+			goto done;
+		}
+		key->keyval = '+';
+		break;
+	  case GDK_KP_Subtract:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'm';
+			goto done;
+		}
+		key->keyval = '-';
+		break;
+	  case GDK_KP_Decimal:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'n';
+			goto done;
+		}
+		if (key->state & GDK_SHIFT_MASK) {
+			key->keyval = '.';
+			break;
+		}
+		key->keyval = C_DEL;
+		break;
+	  case GDK_KP_Divide:
+		if (S->o_DECKPAM) {
+			if (key->state & GDK_MOD1_MASK)
+				*p++ = C_ESC;
+
+			STRCAT_C1(C_SS3);
+			*p++ = 'o';	/* FIXME: DEC manual does not say what this is. */
+			goto done;
+		}
+		key->keyval = '/';
+		break;
+
+	  /* Fn */
+	  case GDK_F1 ... GDK_F35:	/* ... GDK_F20 */
+		/* There are several breaks... */
+		n = key->keyval - GDK_F1 + 11;
+		if (key->keyval > GDK_F5) n++;
+		if (key->keyval > GDK_F10) n++;
+		if (key->keyval > GDK_F14) n++;
+		if (key->keyval > GDK_F16) n += 2;
+
+		STRCAT_C1(C_CSI);
+		p += g_sprintf(p, "%d", n);
+		STRCAT_MODIFIER("");
+		*p++ += '~';
+		goto done;
 	}
 
 	if (key->keyval >= 0x00 && key->keyval <= 0xff) {
@@ -814,10 +967,12 @@ static void vt52x_esc(TemuEmul *S)
 		}
 		break;
 	  case E(0,0,0,'='):
-		NOTIMPL("DECKPAM", "Keypad Application Modes", "definitely");
+		IMPL("DECKPAM", "Keypad Application Modes", "somewhat; GtkIMContext intercepts; inconsistent docs");
+		S->o_DECKPAM = TRUE;
 		break;
 	  case E(0,0,0,'>'):
-		NOTIMPL("DECKPNM", "Keypad Numeric Modes", "definitely");
+		IMPL("DECKPNM", "Keypad Numeric Modes", "fully");
+		S->o_DECKPAM = FALSE;
 		break;
 	  case E(0,0,')','B'):
 		NOTIMPL("DDD2", "reset DECRLM, ascii -> G1", "probably not");
@@ -1487,7 +1642,8 @@ static void emul_SM_ansi(TemuEmul *S, gboolean set)
 
 	for (i = 0; i <= S->parms; i++) {
 		switch (P(i)) {
-		  case 2:	/* IGNORED (Option?), KAM: Keyboard Action Mode */
+		  case 2:
+			IMPL("DECKAM", "Keyboard Action Mode", "ignored");
 			S->o_KAM = set; break;
 		  case 3:
 			NOTIMPL("CRM", "Show Control Character Mode (set == show)", "probably");
@@ -1499,7 +1655,7 @@ static void emul_SM_ansi(TemuEmul *S, gboolean set)
 		  case 20:	/* LNM: Line Feed/New Line Mode (set == LF == NEL) */
 			S->o_LNM = set; break;
 		  case 81:
-			NOTIMPL("DECKPM", "Key Position Mode (send key position reports)", "probably");
+			NOTIMPL("DECKPM", "Key Position Mode", "definitely");
 			S->o_DECKPM = set; break;
 		  default:
 			NOTIMPL_UNKNOWN("SM: Set Mode(ANSI): %d", P(i));
@@ -1515,7 +1671,8 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 	for (i = 0; i <= S->parms; i++) {
 		switch (P(i)) {
 		  case 1:
-			NOTIMPL("DECCKM", "Cursor Keys Mode", "definitely");
+			IMPL("DECCKM", "Cursor Keys Mode", "no documentation, possibly fully");
+			S->o_DECCKM = set;
 			break;
 		  case 2:
 			NOTIMPL("DECANM", "ANSI Mode (VT52)", "probably");
@@ -1588,7 +1745,8 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 			NOTIMPL("DECNKM", "Numeric Keypad Mode", "definitely");
 			break;
 		  case 67:
-			NOTIMPL("DECBKM", "Backarrow Key Mode", "maybe");
+			IMPL("DECBKM", "Backarrow Key Mode", "fully");
+			S->o_DECBKM = set;
 			break;
 		  case 68:
 			NOTIMPL("DECKBUM", "Typewriter or Data Processing Keys (Set: Data Processing, Reset: Typewriter)", "probably not");
@@ -1713,6 +1871,8 @@ static void emul_reset_soft(TemuEmul *S)
 	S->tabclear = FALSE;
 	S->tabstops = 0;
 
+	S->o_DECBKM	= FALSE;
+
 	S->o_KAM	= FALSE;
 	S->o_CRM	= FALSE;
 	S->o_IRM	= FALSE;
@@ -1720,6 +1880,7 @@ static void emul_reset_soft(TemuEmul *S)
 	S->o_LNM	= FALSE;
 	S->o_DECKPM	= FALSE;
 
+	S->o_DECCKM	= FALSE;
 	S->o_DECOM	= FALSE;
 	S->o_DECAWM	= TRUE;		/* Real VT520/525's default this to OFF. */
 
