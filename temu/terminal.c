@@ -17,6 +17,11 @@ struct _TemuTerminalPrivate {
 	TemuEmul *emul;
 };
 
+enum {
+	PROP_WINDOW_TITLE,
+	PROP_ICON_TITLE
+};
+
 /*
  * object/memory management
  */
@@ -27,6 +32,8 @@ static void temu_terminal_realize(GtkWidget *widget);
 static void temu_terminal_unrealize(GtkWidget *widget);
 
 static void temu_terminal_finalize(GObject *object);
+static void temu_terminal_set_property(GObject *object, guint id, const GValue *value, GParamSpec *pspec);
+static void temu_terminal_get_property(GObject *object, guint id, GValue *value, GParamSpec *pspec);
 
 static void temu_terminal_size_allocate(GtkWidget *widget, GtkAllocation *allocation);
 
@@ -46,6 +53,9 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 	screen_class = TEMU_SCREEN_CLASS(klass);
 
 	gobject_class->finalize = temu_terminal_finalize;
+	gobject_class->set_property = temu_terminal_set_property;
+	gobject_class->get_property = temu_terminal_get_property;
+	
 	widget_class->realize = temu_terminal_realize;
 	widget_class->unrealize = temu_terminal_unrealize;
 	widget_class->size_allocate = temu_terminal_size_allocate;
@@ -148,6 +158,26 @@ static void temu_terminal_finalize(GObject *object)
 	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
 	if (G_OBJECT_CLASS(screen_class)->finalize) {
 		G_OBJECT_CLASS(screen_class)->finalize(object);
+	}
+}
+
+static void temu_terminal_set_property(GObject *object, guint id, const GValue *value, GParamSpec *pspec)
+{
+	switch (id) {
+		case PROP_WINDOW_TITLE:
+			break;
+		case PROP_ICON_TITLE:
+			break;
+	}
+}
+
+static void temu_terminal_get_property(GObject *object, guint id, GValue *value, GParamSpec *pspec)
+{
+	switch (id) {
+		case PROP_WINDOW_TITLE:
+			break;
+		case PROP_ICON_TITLE:
+			break;
 	}
 }
 
