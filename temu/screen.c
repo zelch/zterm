@@ -248,15 +248,6 @@ static void temu_screen_realize(GtkWidget *widget)
 		gdk_gc_set_foreground(priv->gc, &black);
 	}
 
-	gdk_draw_rectangle(
-		priv->pixmap,
-		priv->gc,
-		TRUE,
-		0, 0,
-		widget->allocation.width,
-		widget->allocation.height
-	);
-
 	priv->xftdraw = XftDrawCreate(
 		GDK_DISPLAY_XDISPLAY(gtk_widget_get_display(widget)),
 		GDK_DRAWABLE_XID(priv->pixmap),
@@ -287,6 +278,8 @@ static void temu_screen_realize(GtkWidget *widget)
 	}
 
 	temu_screen_set_font_description(screen, priv->fontdesc);
+
+	gtk_widget_queue_draw(widget);
 }
 
 static void temu_screen_unrealize(GtkWidget *widget)
@@ -1609,7 +1602,6 @@ void temu_screen_fill_rect(TemuScreen *screen, gint x, gint y, gint width, gint 
 /* scrolling back */
 void temu_screen_scroll_offset(TemuScreen *screen, gint offset)
 {
-	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	gint min_offset;
 	gint delta;
