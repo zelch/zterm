@@ -8,6 +8,7 @@
 #include <gdk/gdkkeysyms.h>
 #include <unistd.h>
 
+#include "terminal.h"
 #include "screen.h"
 #include "emul.h"
 
@@ -24,9 +25,13 @@
 #endif
 
 #if SHOW_IMPL
-#define IMPL(id,desc,support)	fprintf(stderr, "Implemented %s: %s (" support ")\n", id, desc)
+#define IMPL(id,desc,support)	g_warning("Implemented %s: %s (" support ")", id, desc)
+#else
+#if WARN_NOTIMPL
+#define IMPL(id,desc,support)	do { if (strcmp(desc, "fully")) g_warning("Implemented %s: %s (" support ")", id, desc); } while (0)
 #else
 #define IMPL(id,desc,support)	do{}while(0)
+#endif
 #endif
 
 #define EMUL_ENQ_REPLY		"temu"
@@ -1591,6 +1596,7 @@ static void vt52x_osc(TemuEmul *S)
 {
 	gint i;
 	gint mode;
+	gchar *data = NULL;
 
 	mode = 0;
 	for (i = 0; i < S->strs; i++) {
@@ -1606,9 +1612,21 @@ static void vt52x_osc(TemuEmul *S)
 		}
 	}
 
+	if (i >= S->strs)
+		goto ignore;
+	else if (S->strs < VTPARSE_MAX_STR) {
+		data = &(S->str[i + 1]);
+		S->str[S->strs] = 0;
+	}
+
 	switch (mode) {
 	  case 0: if (S->fin) goto ignore;
-		NOTIMPL("(xterm)", "Change Icon Name and Window Title", "probably");
+		IMPL("(xterm)", "Change Icon Name and Window Title", "partial");
+		/*
+		 * FIXME: this is still very rough, and right now only sets
+		 * the window title.
+		 */
+		temu_terminal_set_title(TEMU_TERMINAL(T), 0, data);
 		break;
 	  case 1: if (S->fin) goto ignore;
 		NOTIMPL("(xterm)", "Change Icon Name", "probably");

@@ -18,9 +18,17 @@ struct _TemuTerminalPrivate {
 };
 
 enum {
+	PROP_FNORD = 0, /* gtk wants property_id to be > 0 */
 	PROP_WINDOW_TITLE,
 	PROP_ICON_TITLE
 };
+
+enum {
+	SIG_TITLE_CHANGED,
+	SIG_LAST
+};
+
+static guint signals[SIG_LAST] = { 0 };
 
 /*
  * object/memory management
@@ -55,6 +63,43 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 	gobject_class->finalize = temu_terminal_finalize;
 	gobject_class->set_property = temu_terminal_set_property;
 	gobject_class->get_property = temu_terminal_get_property;
+	
+	g_object_class_install_property(
+		gobject_class,
+		PROP_WINDOW_TITLE,
+		g_param_spec_string(
+			"window_title",
+			"Window Title",
+			"The terminal's window title",
+			NULL,
+			G_PARAM_READWRITE
+		)
+	);
+	g_object_class_install_property(
+		gobject_class,
+		PROP_ICON_TITLE,
+		g_param_spec_string(
+			"icon_title",
+			"Icon Title",
+			"The terminal's icon window title",
+			NULL,
+			G_PARAM_READWRITE
+		)
+	);
+	
+	signals[SIG_TITLE_CHANGED] = g_signal_new(
+		"title_changed",
+		G_OBJECT_CLASS_TYPE(gobject_class),
+		G_SIGNAL_RUN_FIRST,
+		G_STRUCT_OFFSET(TemuTerminalClass, title_changed),
+		NULL,
+		NULL,
+		g_cclosure_marshal_VOID__VOID, /* FIXME: need to write a marshaler */
+		G_TYPE_NONE,
+		0/*,
+		G_TYPE_INT, G_TYPE_STRING */
+	);
+		
 	
 	widget_class->realize = temu_terminal_realize;
 	widget_class->unrealize = temu_terminal_unrealize;
@@ -163,20 +208,28 @@ static void temu_terminal_finalize(GObject *object)
 
 static void temu_terminal_set_property(GObject *object, guint id, const GValue *value, GParamSpec *pspec)
 {
+	TemuTerminal *terminal = TEMU_TERMINAL(object);
+
 	switch (id) {
 		case PROP_WINDOW_TITLE:
+			temu_terminal_set_title(terminal, 0, g_value_get_string(value));
 			break;
 		case PROP_ICON_TITLE:
+			temu_terminal_set_title(terminal, 1, g_value_get_string(value));
 			break;
 	}
 }
 
 static void temu_terminal_get_property(GObject *object, guint id, GValue *value, GParamSpec *pspec)
 {
+	TemuTerminal *terminal = TEMU_TERMINAL(object);
+
 	switch (id) {
 		case PROP_WINDOW_TITLE:
+			g_value_set_string(value, terminal->window_title);
 			break;
 		case PROP_ICON_TITLE:
+			g_value_set_string(value, terminal->icon_title);
 			break;
 	}
 }
@@ -356,4 +409,30 @@ void temu_terminal_execve(TemuTerminal *terminal, const char *file, char *const 
 	temu_pty_set_size(priv->pty,
 		temu_screen_get_cols(screen),
 		temu_screen_get_rows(screen));
+}
+
+/* bleah */
+void temu_terminal_set_title(TemuTerminal *terminal, int which, const gchar *title)
+{
+	gchar **tbuf;
+
+	/* enum? */	
+	if (which == 0)
+		tbuf = &terminal->window_title;
+	else if (which == 1)
+		tbuf = &terminal->icon_title;
+	else
+		return;
+	
+	if (*tbuf != NULL)
+		g_free(*tbuf);
+	
+	
+	if (title)
+		*tbuf = g_strdup(title);
+	else
+		*tbuf = NULL;
+
+	/* FIXME: pass title here */
+	g_signal_emit(terminal, signals[SIG_TITLE_CHANGED], 0);
 }

@@ -4,6 +4,8 @@
 
 #include "terminal.h"
 
+static void testgtk_title_changed(TemuTerminal *, gpointer);
+
 int main(int argc, char *argv[], char *envp[])
 {
 	GtkWidget *window, *term;
@@ -18,6 +20,9 @@ int main(int argc, char *argv[], char *envp[])
 	gtk_widget_modify_bg(window, GTK_STATE_NORMAL, &black);
 
 	term = temu_terminal_new();
+
+	g_signal_connect(G_OBJECT(term), "title_changed", G_CALLBACK(testgtk_title_changed), window);
+
 	gtk_container_add(GTK_CONTAINER(window), term);
 	gtk_widget_realize(term);
 	temu_screen_get_base_geometry_hints(TEMU_SCREEN(term), &geom, &hints);
@@ -60,4 +65,14 @@ int main(int argc, char *argv[], char *envp[])
 	gtk_main();
 
 	return 0;
+}
+
+static void testgtk_title_changed(TemuTerminal *terminal, gpointer data)
+{
+	GtkWidget *win = data;
+	GValue value = { 0 };
+
+	g_value_init(&value, G_TYPE_STRING);
+	g_object_get_property(G_OBJECT(terminal), "window_title", &value);
+	gtk_window_set_title(GTK_WINDOW(win), g_value_get_string(&value));
 }
