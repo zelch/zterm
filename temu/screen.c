@@ -772,8 +772,23 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 	TScreenMove *prev = priv->moves.prev;
 	GdkRectangle clear_rect;
 
-	gint sw = widget->allocation.width;
-	gint sh = widget->allocation.height;
+	gint sw = priv->width * screen->font_width;
+	gint sh = priv->height * screen->font_height;
+
+	/* Make sure this rect scrolls the -entire- region */
+	if (dx) {
+		if (prev->rect.x < rect->x)
+			return FALSE;
+		if ((prev->rect.x+prev->rect.width) > (rect->x+rect->width))
+			return FALSE;
+	}
+
+	if (dy) {
+		if (prev->rect.y < rect->y)
+			return FALSE;
+		if ((prev->rect.y+prev->rect.height) > (rect->y+rect->height))
+			return FALSE;
+	}
 
 	/* This junk basically checks to see if either stuff got scrolled
 	   off (and thus, does not matter), or this new region encompases
