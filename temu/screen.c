@@ -1006,7 +1006,7 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 	for (i = y; i < y2; i++) {
 		gint mod_i = i % priv->height;
 
-		if (x2 > priv->lines[mod_i].len) {
+		if (x2 >= priv->lines[mod_i].len) {
 			if (shorten)
 				priv->lines[mod_i].len = x;
 			else
