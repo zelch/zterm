@@ -887,11 +887,11 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 	  case C_LF:	emul_LF(S); break;
 	  case C_CR:	emul_CR(S); break;
 	  case C_SO:
-		IMPL("SO", "Shift-Out", "partially");
+		IMPL("SO", "Shift-Out", "fully");
 		S->charset = CHARSET_GRAPHIC;
 		break;
 	  case C_SI:
-		IMPL("SI", "Shift-In", "partially");
+		IMPL("SI", "Shift-In", "fully");
 		S->charset = CHARSET_UTF8;
 		break;
 	  case C_DC1:
@@ -2662,41 +2662,83 @@ UTF8:
 			break;
 		case CHARSET_GRAPHIC:
 			switch (ch) {
-				case 'q':	// Horizontal line.
+				case 'q':	// ACS_HLINE (Horizontal line).
 					glyph = 0x2500;
 					break;
-				case 'x':	// Verticle line.
+				case 'x':	// ACS_VLINE (Verticle line).
 					glyph = 0x2502;
 					break;
-				case 'l':	// Upper left cornor.
+				case 'l':	// ACS_ULCORNER (Upper left corner).
 					glyph = 0x250C;
 					break;
-				case 'k':	// Upper right cornor.
+				case 'k':	// ACS_URCORNER (Upper right corner).
 					glyph = 0x2510;
 					break;
-				case 'm':	// Lower left corner.
+				case 'm':	// ACS_LLCORNER (Lower left corner).
 					glyph = 0x2514;
 					break;
-				case 'j':	// Lower right corner.
+				case 'j':	// ACS_LRCORNER (Lower right corner).
 					glyph = 0x2518;
 					break;
-				case 'w':	// Tee down.
+				case 'w':	// ACS_TTEE (Tee down).
 					glyph = 0x252C;
 					break;
-				case 'u':	// Tee left.
+				case 'u':	// ACS_RTEE (Tee left).
 					glyph = 0x2524;
 					break;
-				case 't':	// Tee right.
+				case 't':	// ACS_LTEE (Tee right).
 					glyph = 0x251C;
 					break;
-				case 'v':	// Tee up.
+				case 'v':	// ACS_BTEE (Tee up).
 					glyph = 0x2534;
 					break;
-				case 'n':	// Cross.
+				case 'n':	// ACS_PLUS (Cross).
 					glyph = 0x253C;
 					break;
-				case 'a':	// Checker board.
+				case '.':	// ACS_DARROW (Arrow pointing down).
+					glyph = 0x2193;
+					break;
+				case ',':	// ACS_LARROW (Arrow pointing left).
+					glyph = 0x2190;
+					break;
+				case '+':	// ACS_RARROW (Arrow pointing right).
+					glyph = 0x2192;
+					break;
+				case '-':	// ACS_UARROW (Arrow pointing up).
+					glyph = 0x2191;
+					break;
+				case 'h':	// ACS_BOARD (Board of squares).
+					glyph = 0x2591;
+					break;
+				case 'a':	// ACS_CKBOARD (Checker board).
 					glyph = 0x2592;
+					break;
+				case '0':	// ACS_BLOCK (Solid square block).
+					glyph = 0x2593;
+					break;
+				case '~':	// ACS_BULLET (Bullet).
+					glyph = 0x2022;
+					break;
+				case '}':	// ACS_STERLING (UK pound sign).
+					glyph = 0x00A3;
+					break;
+				case '`':	// ACS_DIAMOND (Diamond).
+					glyph = 0x2726;
+					break;
+				case 'f':	// ACS_DEGREE (Degree sign).
+					glyph = 0x00B0;
+					break;
+				case 'z':	// ACS_GEQUAL (Greater-than-or-equal-to sign).
+					glyph = 0x2265;
+					break;
+				case 'y':	// ACS_LEQUAL (Less-than-or-equal-to sign).
+					glyph = 0x2264;
+					break;
+				case '{':	// ACS_PI (Greek pi).
+					glyph = 0x03C0;
+					break;
+				case 'g':	// ACS_PLMINUS (Plus/Minus sign).
+					glyph = 0x00B1;
 					break;
 				default:
 					goto UTF8;
