@@ -308,7 +308,7 @@ static void temu_terminal_im_preedit_changed(GtkIMContext *im, gpointer data)
 	
 	gtk_im_context_get_preedit_string(priv->im_context, &text, NULL, &pos);
 	
-	fprintf(stderr, "FIXME: Pre-edit: ", pos);
+	fprintf(stderr, "FIXME: Pre-edit: (%d) ", pos);
 	for (x = b = 0; x < pos; x++) {
 		next = g_utf8_next_char(&text[b]);
 		for (; b < next - text; b++)
@@ -333,7 +333,7 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
 	TemuScreen *screen = TEMU_SCREEN(terminal);
 	TemuTerminalPrivate *priv = terminal->priv;
-	guchar buf[16];
+	gchar buf[16];
 	gint count;
 
 	temu_screen_hide_pointer (screen);
