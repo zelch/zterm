@@ -757,7 +757,7 @@ static gboolean temu_screen_idle_func(gpointer data)
 		event.expose.count = 0;
 		event.expose.region = gdk_region_new();
 
-		gtk_widget_send_expose(widget, &event);
+		temu_screen_expose (widget, &event.expose);
 
 		gdk_region_destroy(event.expose.region);
 		g_object_unref(widget->window);
