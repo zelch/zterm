@@ -1725,6 +1725,8 @@ void temu_screen_scroll_offset(TemuScreen *screen, gint offset)
 		offset = min_offset;
 
 	delta = priv->view_offset - offset;
+	if (!delta)
+		return;
 
 	/* Move the stuff currently on the screen */
 	rect.x = 0;
