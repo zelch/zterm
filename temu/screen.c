@@ -750,6 +750,10 @@ static gboolean temu_screen_idle_func(gpointer data)
 		return FALSE;
 
 	if (priv->update_region || priv->moves.next != &priv->moves) {
+		/*
+		 * FIXME: We no longer send a signal, and temu_screen_expose does
+		 * not use the event argument..  Kill all this?
+		 */
 		GdkEvent event;
 
 		event.expose.type = GDK_EXPOSE;
