@@ -7,9 +7,9 @@ G_BEGIN_DECLS
 
 #define G_UNICHAR_UNKNOWN_GLYPH	((gunichar)0xfffd)
 
-#define TEMU_SCREEN_MAX_COLORS	17
-#define TEMU_SCREEN_FG_DEFAULT	16
-#define TEMU_SCREEN_BG_DEFAULT	16
+#define TEMU_SCREEN_MAX_COLORS	257
+#define TEMU_SCREEN_FG_DEFAULT	256
+#define TEMU_SCREEN_BG_DEFAULT	256
 
 typedef struct _TemuScreenPrivate	TemuScreenPrivate;
 typedef struct _TemuScreen		TemuScreen;
@@ -44,12 +44,11 @@ typedef guint temu_attr_t;
 #define ATTR1(NAME,MOD)		A_##NAME##_DIV = 1, A_##NAME##_MOD = MOD
 #define ATTR(NAME,MOD,PREV)	A_##NAME##_DIV = (A_##PREV##_DIV * A_##PREV##_MOD), A_##NAME##_MOD = MOD
 enum {
-	/* FG and BG are BASE attributes */
 	ATTR1(FG,		TEMU_SCREEN_MAX_COLORS),
 	ATTR(BG,		TEMU_SCREEN_MAX_COLORS,	FG),
-	ATTR(BASE,		1,			BG),
-
-	ATTR(CURSOR,		2,			BASE),
+};
+enum {
+	ATTR1(CURSOR,		2),
 	ATTR(SELECTED,		2,			CURSOR),
 	ATTR(NEGATIVE,		2,			SELECTED),
 	ATTR(HIDDEN,		2,			NEGATIVE),
@@ -63,7 +62,7 @@ enum {
 	ATTR(ITALIC,		3,			FRAME),
 	ATTR(FONT,		10,			ITALIC),
 
-	ATTR(PRIVATE,		1,			FONT)
+	ATTR(PRIVATE,		1,			ITALIC)
 };
 
 enum {
@@ -89,6 +88,7 @@ enum {
 struct _temu_cell {
 	temu_char_t glyph;
 	temu_attr_t attr;
+	temu_attr_t colors;
 };
 
 struct _TemuScreen {
@@ -128,6 +128,8 @@ void		temu_screen_get_base_geometry_hints(TemuScreen *screen,
 						 GdkGeometry *geom,
 						 GdkWindowHints *mask);
 
+void		temu_screen_set_color (TemuScreen *screen, guint n, GdkColor *color);
+void		temu_screen_set_font (TemuScreen *screen, const char *font);
 void		temu_screen_set_font_description(TemuScreen *screen, PangoFontDescription *desc);
 
 /*
@@ -136,8 +138,8 @@ void		temu_screen_set_font_description(TemuScreen *screen, PangoFontDescription 
  */
 gint		temu_screen_set_cell_text	(TemuScreen *screen, gint x, gint y, const temu_cell_t *cells, gint length, gint *written);
 
-gint		temu_screen_set_utf8_text	(TemuScreen *screen, gint x, gint y, const gchar *text, temu_attr_t attr, gint length, gint *written);
-gint		temu_screen_set_ucs4_text	(TemuScreen *screen, gint x, gint y, const gunichar *text, temu_attr_t attr, gint length, gint *written);
+gint		temu_screen_set_utf8_text	(TemuScreen *screen, gint x, gint y, const gchar *text, temu_attr_t attr, temu_attr_t colors, gint length, gint *written);
+gint		temu_screen_set_ucs4_text	(TemuScreen *screen, gint x, gint y, const gunichar *text, temu_attr_t attr, temu_attr_t colors, gint length, gint *written);
 
 const temu_cell_t *temu_screen_get_cell		(TemuScreen *screen, gint x, gint y);
 void		temu_screen_set_cell		(TemuScreen *screen, gint x, gint y, const temu_cell_t *cell);

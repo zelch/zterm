@@ -61,10 +61,11 @@
 
 #define ECELL		(S->cell)
 #define ATTR		(S->attr)
+#define COLORS		(S->colors)
 #define ATTR_NORMAL()	do { \
 		ATTR = 0; \
-		SET_ATTR(ATTR, FG, TEMU_SCREEN_FG_DEFAULT); \
-		SET_ATTR(ATTR, FG, TEMU_SCREEN_BG_DEFAULT); \
+		SET_ATTR(COLORS, FG, TEMU_SCREEN_FG_DEFAULT); \
+		SET_ATTR(COLORS, BG, TEMU_SCREEN_BG_DEFAULT); \
 	} while(0)
 
 #define E(strt,pre,intr,fin)	(((strt)<<24) | ((pre)<<16) | ((intr)<<8) |((fin)<<0))
@@ -124,10 +125,11 @@ struct _TemuEmul {
 	temu_cset_t charset;
 	temu_cell_t cell;
 	temu_attr_t attr;
+	temu_attr_t colors;
 
 	gboolean scroll_height_full;
 	gint scroll_top, scroll_height;
-	gint saved_cursor_x, saved_cursor_y, saved_attr;
+	gint saved_cursor_x, saved_cursor_y, saved_attr, saved_colors;
 	gint cursor_x, cursor_y;
 	gboolean cursor_redraw, cursor_hide;
 
@@ -316,9 +318,9 @@ gssize temu_emul_get_responses(TemuEmul *S, gchar *buffer, gint len)
 	return len;
 }
 
-gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, guchar buffer[16], gint *count)
+gboolean temu_emul_translate(TemuEmul *S, GdkEventKey *key, gchar buffer[16], gint *count)
 {
-	guchar *p = buffer;
+	gchar *p = buffer;
 	gint n;
 
 #define STRCAT_C1(c1)	(p = emul_stpcpy_c1(S, p, (c1)))
@@ -1414,6 +1416,7 @@ static void vt52x_csi(TemuEmul *S)
 			 || (cell.glyph >= C1_FIRST && cell.glyph < C1_PAST))
 				break;
 			cell.attr = ATTR;
+			cell.colors = COLORS;
 
 			emul_rect_coords(S, 1, &x, &y, &w, &h);
 			temu_screen_fill_rect(T, x, y, w, h, &cell);
@@ -1888,8 +1891,10 @@ static void emul_reset_soft(TemuEmul *S)
 {
 	ECELL.glyph = L' ';
 	ATTR_NORMAL();
-	ECELL.attr = GET_ATTR_BASE(ATTR, BASE);
+	ECELL.colors = COLORS;
+	ECELL.attr = 0;
 	S->saved_attr = ECELL.attr;
+	S->saved_colors = ECELL.colors;
 
 	S->charset = CHARSET_UTF8;
 
@@ -1996,6 +2001,7 @@ static void emul_cursor_save(TemuEmul *S)
 	S->saved_cursor_x = S->cursor_x;
 	S->saved_cursor_y = S->cursor_y;
 	S->saved_attr = ATTR;
+	S->saved_colors = COLORS;
 }
 
 static void emul_cursor_restore(TemuEmul *S)
@@ -2004,6 +2010,7 @@ static void emul_cursor_restore(TemuEmul *S)
 	S->cursor_x = S->saved_cursor_x;
 	S->cursor_y = S->saved_cursor_y;
 	ATTR = S->saved_attr;
+	COLORS = S->saved_colors;
 }
 
 static void emul_tab_realloc(TemuEmul *S, gint col)
@@ -2203,7 +2210,7 @@ static void emul_DECRQSS(TemuEmul *S)
 	S->pre = S->intr = S->fin = 0;
 	for (i = 0; i < S->strs; i++) {
 		/* FIXME: How lenient is the vt52x on this? */
-		switch (S->str[i]) {
+		switch ((unsigned char) S->str[i]) {
 		  case 0x3a: case 0x3c ... 0x3f:
 			if (S->pre && S->pre != S->str[i])
 				return;
@@ -2315,13 +2322,17 @@ static void emul_DECRQSS(TemuEmul *S)
 		if (GET_ATTR(ATTR, HIDDEN)) p = g_stpcpy(p, ";8");
 		if (GET_ATTR(ATTR, OVERSTRIKE)) p = g_stpcpy(p, ";9");
 		if (GET_ATTR(ATTR, FONT)) p += g_sprintf(p, ";%d", GET_ATTR(ATTR, FONT) + 10);
-		switch (GET_ATTR(ATTR, FG)) {
+		switch (GET_ATTR(COLORS, FG)) {
 		  case TEMU_SCREEN_FG_DEFAULT: p = g_stpcpy(p, ";39"); break;
-		  default: p += g_sprintf(p, ";%d", (GET_ATTR(ATTR, FG)%8) + 30); break;
+		  case 0 ... 7: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, FG)%8) + 30); break;
+		  case 8 ... 15: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, FG)%8) + 90); break;
+		  default: p += g_sprintf(p, ";38;5;%d", (GET_ATTR(COLORS, FG))); break;
 		}
-		switch (GET_ATTR(ATTR, BG)) {
+		switch (GET_ATTR(COLORS, BG)) {
 		  case TEMU_SCREEN_BG_DEFAULT: p = g_stpcpy(p, ";49"); break;
-		  default: p += g_sprintf(p, ";%d", (GET_ATTR(ATTR, BG)%8) + 40); break;
+		  case 0 ... 7: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, BG)%8) + 40); break;
+		  case 8 ... 15: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, BG)%8) + 100); break;
+		  default: p += g_sprintf(p, ";48;5;%d", (GET_ATTR(COLORS, BG))); break;
 		}
 		switch (GET_ATTR(ATTR, FRAME)) {
 		  case 1: p = g_stpcpy(p, ";51"); break;
@@ -2576,22 +2587,51 @@ static void emul_SGR(TemuEmul *S)
 		  case 27:	SET_ATTR(ATTR, NEGATIVE, 0); break;
 		  case 28:	SET_ATTR(ATTR, HIDDEN, 0); break;
 		  case 29:	SET_ATTR(ATTR, OVERSTRIKE, 0); break;
-		  case 30 ... 37: SET_ATTR(ATTR, FG, P(i) - 30); break;
-		  case 39:	SET_ATTR(ATTR, FG, TEMU_SCREEN_FG_DEFAULT); break;
-		  case 40 ... 47: SET_ATTR(ATTR, BG, P(i) - 40); break;
-		  case 49:	SET_ATTR(ATTR, BG, TEMU_SCREEN_BG_DEFAULT); break;
+		  case 30 ... 37: SET_ATTR(COLORS, FG, P(i) - 30); break;
+		  case 39:	SET_ATTR(COLORS, FG, TEMU_SCREEN_FG_DEFAULT); break;
+		  case 40 ... 47: SET_ATTR(COLORS, BG, P(i) - 40); break;
+		  case 49:	SET_ATTR(COLORS, BG, TEMU_SCREEN_BG_DEFAULT); break;
 		  case 51:	SET_ATTR(ATTR, FRAME, 1); break;
 		  case 52:	SET_ATTR(ATTR, FRAME, 2); break;
 		  case 53:	SET_ATTR(ATTR, OVERLINE, 1); break;
 		  case 54:	SET_ATTR(ATTR, FRAME, 0); break;
 		  case 55:	SET_ATTR(ATTR, OVERLINE, 0); break;
+		  /* XTerm colors. */
+		  case 90 ... 97: SET_ATTR(COLORS, FG, P(i) - 90 + 8); break;
+		  case 100 ... 107: SET_ATTR(COLORS, FG, P(i) - 100 + 8); break;
+		  case 38:
+			if ((i + 2) <= S->parms) {
+				PARM_DEF(i + 1, 0);
+				PARM_DEF(i + 2, 0);
+				if (P(i + 1) == 5) {
+					SET_ATTR(COLORS, FG, P(i + 2));
+					i += 2;
+					break;
+				}
+			}
+			NOTIMPL_UNKNOWN("SGR: Set Graphics Rendition: %d", P(i));
+			break;
+		  case 48:
+			if ((i + 2) <= S->parms) {
+				PARM_DEF(i + 1, 0);
+				PARM_DEF(i + 2, 0);
+				if (P(i + 1) == 5) {
+					SET_ATTR(COLORS, BG, P(i + 2));
+					i += 2;
+					break;
+				}
+			}
+			NOTIMPL_UNKNOWN("SGR: Set Graphics Rendition: %d", P(i));
+			break;
+
 		  default:
 			NOTIMPL_UNKNOWN("SGR: Set Graphics Rendition: %d", P(i));
 			break;
 		}
 	}
 	
-	ECELL.attr = GET_ATTR_BASE(ATTR, BASE);
+	ECELL.attr = 0;
+	ECELL.colors = COLORS;
 }
 
 static void emul_add_glyph(TemuEmul *S, gunichar glyph)
@@ -2601,6 +2641,7 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 
 	cell.glyph = glyph;
 	cell.attr = ATTR;
+	cell.colors = COLORS;
 	SET_ATTR(cell.attr, WIDE, g_unichar_iswide(cell.glyph));
 
 	if (S->o_IRM) {

@@ -70,24 +70,24 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 	return;
 }
 
-static void temu_screen_fg_bg(TemuScreen *screen, temu_attr_t attr, gint *fg, gint *bg)
+static void temu_screen_fg_bg(TemuScreen *screen, temu_attr_t attr, temu_attr_t colors, gint *fg, gint *bg)
 {
 	TemuScreenPrivate *priv = screen->priv;
 
 	if (GET_ATTR(attr, NEGATIVE) ^ GET_ATTR(priv->screen_attr, SCREEN_NEGATIVE)) {
-		*fg = GET_ATTR(attr, BG);
+		*fg = GET_ATTR(colors, BG);
 		if (*fg == TEMU_SCREEN_BG_DEFAULT) *fg = 0;
-		*bg = GET_ATTR(attr, FG);
+		*bg = GET_ATTR(colors, FG);
 		if (*bg == TEMU_SCREEN_FG_DEFAULT) *bg = 7;
 	} else {
-		*fg = GET_ATTR(attr, FG);
+		*fg = GET_ATTR(colors, FG);
 		if (*fg == TEMU_SCREEN_FG_DEFAULT) *fg = 7;
-		*bg = GET_ATTR(attr, BG);
+		*bg = GET_ATTR(colors, BG);
 		if (*bg == TEMU_SCREEN_BG_DEFAULT) *bg = 0;
 	}
 
-	if (GET_ATTR(attr, BOLD)) *fg |= 0x8;
-	if (GET_ATTR(attr, BLINK)) *bg |= 0x8;
+	if (GET_ATTR(attr, BOLD) && *fg < 8) *fg |= 0x8;
+	if (GET_ATTR(attr, BLINK) && *bg < 8) *bg |= 0x8;
 
 	if (GET_ATTR(attr, SELECTED)) {
 		if (GET_ATTR(attr, CURSOR)) {
@@ -111,7 +111,7 @@ static void temu_screen_render_line_bg(TemuScreen *screen, gint x, gint y, const
 	gint fg, bg;
 	gint last_bg;
 
-	temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
+	temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
 	for (;;) {
 		w = 0;
 		last_bg = bg;
@@ -120,7 +120,7 @@ static void temu_screen_render_line_bg(TemuScreen *screen, gint x, gint y, const
 			if (!--count)
 				break;
 
-			temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
+			temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
 
 			if (bg != last_bg)
 				break;
@@ -143,7 +143,6 @@ static void temu_screen_render_line_bg(TemuScreen *screen, gint x, gint y, const
 
 static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, const temu_cell_t *cell, gint fg, const TGlyphInfo *gfi)
 {
-	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 
 	gdk_gc_set_foreground(priv->gc, &priv->gdk_color[fg]);
@@ -230,7 +229,7 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 	gint fg, bg;
 	gint last_fg;
 
-	temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
+	temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
 	for (;;) {
 		w = 0;
 		last_fg = fg;
@@ -259,7 +258,7 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 			if (!--count)
 				break;
 
-			temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
+			temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
 
 			if (fg != last_fg)
 				break;
