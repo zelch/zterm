@@ -116,8 +116,8 @@ static void temu_screen_init(TemuScreen *screen)
 
 	/* default attributes */
 	priv->resize_cell.glyph = L' ';
-	SET_ATTR(priv->resize_cell.attr, FG, 7);
-	SET_ATTR(priv->resize_cell.attr, BG, 0);
+	SET_ATTR(priv->resize_cell.colors, FG, 7);
+	SET_ATTR(priv->resize_cell.colors, BG, 0);
 
 	/* updates */
 	priv->moves.next = priv->moves.prev = &priv->moves;
@@ -172,6 +172,8 @@ static void temu_screen_realize(GtkWidget *widget)
 		{ 255, 85, 255 },
 		{ 85, 255, 255 },
 		{ 255, 255, 255 },
+
+#include "256colors.h"
 
 		{ 255, 255, 255 },
 	};
@@ -1398,7 +1400,7 @@ gint temu_screen_set_cell_text(TemuScreen *screen, gint x, gint y, const temu_ce
 	return cols;
 }
 
-gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *text, temu_attr_t attr, gint length, gint *written)
+gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *text, temu_attr_t attr, temu_attr_t colors, gint length, gint *written)
 {
 	TemuScreenPrivate *priv = screen->priv;
 	gint i, cols;
@@ -1413,6 +1415,7 @@ gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *
 	cols = 0;
 
 	cell.attr = attr;
+	cell.colors = colors;
 
 	for (i = 0; i < length; ) {
 		cell.glyph = g_utf8_get_char_validated(&text[i], length - i);
@@ -1445,7 +1448,7 @@ gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *
 	return cols;
 }
 
-gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunichar *text, temu_attr_t attr, gint length, gint *written)
+gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunichar *text, temu_attr_t attr, temu_attr_t colors, gint length, gint *written)
 {
 	TemuScreenPrivate *priv = screen->priv;
 	gint i, cols;
@@ -1460,6 +1463,7 @@ gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunicha
 	cols = 0;
 
 	cell.attr = attr;
+	cell.colors = colors;
 
 	for (i = 0; i < length; i++) {
 		cell.glyph = text[i];
