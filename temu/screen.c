@@ -149,15 +149,7 @@ static void temu_screen_init(TemuScreen *screen)
 	/* options */
 	priv->double_buffered = TRUE;
 
-	priv->fontdesc = pango_font_description_new();
-//	pango_font_description_set_family(priv->fontdesc, "Terminal");
-//	pango_font_description_set_family(priv->fontdesc, "Sans");
-//	pango_font_description_set_family(priv->fontdesc, "Bitstream Vera Sans Mono");
-//	pango_font_description_set_family(priv->fontdesc, "FreeMono");
-	pango_font_description_set_family(priv->fontdesc, "zanz646");
-	pango_font_description_set_size(priv->fontdesc, 12 * PANGO_SCALE);
-	pango_font_description_set_weight(priv->fontdesc, PANGO_WEIGHT_BOLD);
-
+	priv->fontdesc = pango_font_description_from_string("FreeMono 16");
 }
 
 static void temu_screen_realize(GtkWidget *widget)
@@ -1803,4 +1795,48 @@ void temu_screen_emit_bell(TemuScreen *screen)
 #else /* simple beep */
 	gdk_beep();
 #endif
+}
+
+void temu_screen_set_color (TemuScreen *screen, guint n, GdkColor *color)
+{
+	XRenderColor rcolor;
+	TemuScreenPrivate *priv = screen->priv;
+	GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(screen));
+	GdkVisual *visual = gtk_widget_get_visual(GTK_WIDGET(screen));
+	GdkColormap *colormap = gtk_widget_get_colormap(GTK_WIDGET(screen));
+
+	if (n >= TEMU_SCREEN_MAX_COLORS)
+		return; // FIXME: Return an error of some kind?
+
+	priv->gdk_color[n] = *color;
+
+	rcolor.red		= priv->gdk_color[n].red;
+	rcolor.green	= priv->gdk_color[n].green;
+	rcolor.blue		= priv->gdk_color[n].blue;
+	rcolor.alpha	= 0xffff;
+
+	XftColorFree (
+			GDK_DISPLAY_XDISPLAY (display),
+			GDK_VISUAL_XVISUAL (visual),
+			GDK_COLORMAP_XCOLORMAP (colormap),
+			&priv->color[n]
+			);
+
+	XftColorAllocValue(
+			GDK_DISPLAY_XDISPLAY(display),
+			GDK_VISUAL_XVISUAL(visual),
+			GDK_COLORMAP_XCOLORMAP(colormap),
+			&rcolor,
+			&priv->color[n]
+			);
+
+	gdk_rgb_find_color(colormap, &priv->gdk_color[n]);
+}
+
+void temu_screen_set_font (TemuScreen *screen, const char *font)
+{
+	PangoFontDescription *fontdesc;
+
+	fontdesc = pango_font_description_from_string(font);
+	temu_screen_set_font_description(screen, fontdesc);
 }
