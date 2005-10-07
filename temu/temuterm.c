@@ -115,8 +115,6 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		label = gtk_label_new(str);
 		gtk_notebook_set_current_page(terms->notebook, gtk_notebook_append_page (terms->notebook, term, label));
 		gtk_widget_realize(term);
-		temu_screen_get_base_geometry_hints(TEMU_SCREEN(term), &geom, &hints);
-		gtk_window_set_geometry_hints (GTK_WINDOW(terms->window), GTK_WIDGET(term), &geom, hints);
 		gtk_widget_show(label);
 
 		if (terms->colors) {
@@ -127,6 +125,9 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		}
 		if (terms->font)
 			temu_screen_set_font (TEMU_SCREEN (term), terms->font);
+
+		temu_screen_get_base_geometry_hints(TEMU_SCREEN(term), &geom, &hints);
+		gtk_window_set_geometry_hints (GTK_WINDOW(terms->window), GTK_WIDGET(term), &geom, hints);
 
 		setenv("TERM", "temu", 1);
 		setenv("COLORTERM", "temu", 1);
@@ -282,8 +283,6 @@ temu_parse_config (terms_t *terms)
 
 		if (!j)
 			fprintf (stderr, "Unable to parse line in config: '%s'\n", t1);
-		else
-			fprintf (stderr, "Parsed line in config: '%s'\n", t1);
 
 		t1 = t2;
 	}
