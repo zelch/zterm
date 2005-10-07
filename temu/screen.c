@@ -843,6 +843,27 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 	gint sw = priv->width * screen->font_width;
 	gint sh = priv->height * screen->font_height;
 
+	if (
+			(prev->base.x == rect->x) &&
+			(prev->base.y == rect->y) &&
+			(prev->base.width == rect->width) &&
+			(prev->base.height == rect->height)
+	   ) {
+		/* Yay, we can batch it! */
+		if (dy < 0)
+			prev->rect.x -= dx;
+		prev->rect.width -= abs(dx);
+		if (dy < 0)
+			prev->rect.y -= dy;
+		prev->rect.height -= abs(dy);
+
+		prev->dx += dx;
+		prev->dy += dy;
+
+		return TRUE;
+	}
+
+
 	/* Make sure this rect scrolls the -entire- region */
 	if (dx) {
 		if (prev->rect.x < rect->x)
@@ -974,6 +995,7 @@ static void temu_screen_apply_move(TemuScreen *screen, GdkRectangle *rect, gint 
 		move->dx = dx;
 		move->dy = dy;
 		move->rect = csg_rect;
+		move->base = csg_rect;
 		move->prev = priv->moves.prev;
 		move->prev->next = move;
 		move->next = &priv->moves;
@@ -1226,8 +1248,8 @@ void temu_screen_get_base_geometry_hints(TemuScreen *screen, GdkGeometry *geom, 
 	geom->min_height = screen->font_height; 
 	*mask |= GDK_HINT_MIN_SIZE;
 
-	geom->base_width = 0;
-	geom->base_height = 0;
+	geom->base_width = screen->font_width;
+	geom->base_height = screen->font_height;
 	*mask |= GDK_HINT_BASE_SIZE;
 
 	geom->width_inc = screen->font_width;

@@ -16,6 +16,7 @@ struct _TScreenMove {
 	TScreenMove *next, *prev;
 	gint dx, dy;
 	GdkRectangle rect;
+	GdkRectangle base;
 };
 
 struct _TScreenLine {
@@ -46,7 +47,7 @@ struct _TemuScreenPrivate {
 
 	gint select_x, select_y;
 	gboolean selected;
-	
+
 	guint screen_attr;
 	TScreenLine *lines;
 
