@@ -27,7 +27,6 @@ typedef struct terms_s {
 	GtkWidget **active;
 	GtkWidget *window;
 	gint n_active, alive;
-	gulong died_id, destroyed_id;
 	char **envp;
 
 	/* Configuration options. */
@@ -73,6 +72,8 @@ term_died (TemuTerminal *term, gpointer user_data)
 	gtk_notebook_prev_page (terms->notebook);
 	gtk_widget_hide (GTK_WIDGET(term));
 	gtk_container_remove (GTK_CONTAINER(terms->notebook), GTK_WIDGET(term));
+	terms->active[tracker->n] = NULL;
+	gtk_widget_destroy (GTK_WIDGET(term));
 
 	return TRUE;
 }
@@ -83,6 +84,8 @@ term_destroyed (TemuTerminal *term, gpointer user_data)
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
 
+
+	g_object_unref (G_OBJECT(term));
 
 	terms->active[tracker->n] = NULL;
 	terms->alive--;
@@ -109,6 +112,8 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		tracker_t *tracker;
 
 		term = temu_terminal_new();
+		g_object_ref (G_OBJECT(term));
+		gtk_object_sink (GTK_OBJECT(term));
 		gtk_widget_show(term);
 
 		snprintf(str, sizeof(str), "Terminal %d", n);
@@ -135,8 +140,8 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		tracker = calloc(1, sizeof (tracker_t));
 		tracker->terms = terms;
 		tracker->n = n;
-		g_signal_connect (GTK_OBJECT (term), "child_died", G_CALLBACK (term_died), tracker);
-		g_signal_connect (GTK_OBJECT (term), "destroy", G_CALLBACK (term_destroyed), tracker);
+		g_signal_connect_after (GTK_OBJECT (term), "child_died", G_CALLBACK (term_died), tracker);
+		g_signal_connect_after (GTK_OBJECT (term), "destroy", G_CALLBACK (term_destroyed), tracker);
 		g_signal_connect (G_OBJECT(term), "title_changed", G_CALLBACK(temu_title_changed), tracker);
 
 		if (cmd) {
@@ -249,7 +254,7 @@ temu_parse_config (terms_t *terms)
 	fseek(f, 0, SEEK_END);
 	f_len = ftell(f);
 	fseek(f, 0, SEEK_SET);
-	file = calloc (1, f_len);
+	file = calloc (1, f_len + 1);
 	fread (file, f_len, 1, f);
 	fclose(f);
 
