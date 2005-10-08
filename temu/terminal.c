@@ -111,7 +111,7 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 
 	g_signal_new ("child_died",
 			G_TYPE_FROM_CLASS (gobject_class),
-			G_SIGNAL_RUN_LAST,
+			G_SIGNAL_RUN_FIRST,
 			G_STRUCT_OFFSET (TemuTerminalClass, child_died),
 			NULL,
 			NULL,
@@ -418,11 +418,13 @@ static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond
 {
 	TemuTerminal *terminal = data;
 	TemuTerminalPrivate *priv = terminal->priv;
-	const gchar text[] = "\033[0;41;37;1mError.";
-	temu_emul_emulate(priv->emul, text, sizeof(text)-1);
-	g_object_ref (G_OBJECT(terminal));
+
+	if (priv->pty) {
+		temu_pty_destroy(priv->pty);
+		priv->pty = NULL;
+	}
+
 	g_signal_emit_by_name (terminal, "child_died", 0);
-	gtk_widget_destroy (GTK_WIDGET(terminal));
 	return TRUE;
 }
 
