@@ -240,9 +240,9 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 			if (!g_unichar_isprint(glyph))
 				glyph = 0xFFFD;
 
-			gfi = glyph_cache_get_info(priv->gcache, glyph);
-
 			if (!GET_ATTR(cell->attr, HIDDEN)) {
+				gfi = glyph_cache_get_info(priv->gcache, glyph);
+
 				glyphs[w].font = gfi->font;
 				glyphs[w].ucs4 = glyph;
 				glyphs[w].x = gfi->x_offset + x;
