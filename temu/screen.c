@@ -320,7 +320,8 @@ static void temu_screen_unrealize(GtkWidget *widget)
 	}
 
 	if (widget->window) {
-		g_object_unref(widget->window);
+		gdk_window_hide(widget->window);
+		gdk_window_destroy(widget->window);
 		widget->window = NULL;
 	}
 
@@ -744,10 +745,6 @@ static gboolean temu_screen_idle_func(gpointer data)
 		return FALSE;
 
 	if (priv->update_region || priv->moves.next != &priv->moves) {
-		/*
-		 * FIXME: We no longer send a signal, and temu_screen_expose does
-		 * not use the event argument..  Kill all this?
-		 */
 		GdkEvent event;
 
 		event.expose.type = GDK_EXPOSE;
