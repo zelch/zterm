@@ -17,10 +17,13 @@ TGlyphCache *glyph_cache_new(GtkWidget *widget,
 	memset(cache, 0, sizeof(*cache));
 
 	cache->context = gtk_widget_get_pango_context(widget);
+	g_object_ref (cache->context);
 	cache->lang = pango_context_get_language(cache->context);
 
 	cache->display = gtk_widget_get_display(widget);
+	g_object_ref (cache->display);
 	cache->screen = gtk_widget_get_screen(widget);
+	g_object_ref (cache->screen);
 
 	if (font_desc)
 		glyph_cache_set_font(cache, font_desc);
@@ -34,6 +37,12 @@ void glyph_cache_destroy(TGlyphCache *cache) {
 		g_mem_chunk_destroy(cache->chunk);
 		/* font_set can't be unref'd apparently */
 	}
+	if (cache->context)
+		g_object_unref (cache->context);
+	if (cache->display)
+		g_object_unref (cache->display);
+	if (cache->screen)
+		g_object_unref (cache->screen);
 	/* Neither can context or lang */
 	g_free(cache);
 }
@@ -62,6 +71,7 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 		GDK_DISPLAY_XDISPLAY(cache->display),
 		GDK_SCREEN_XNUMBER(cache->screen)
 	);
+	g_object_ref (font_map);
 
 	cache->font_set = pango_font_map_load_fontset(
 		font_map,
@@ -69,10 +79,13 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 		font_desc,
 		cache->lang
 	);
+	g_object_ref (cache->font_set);
 
 	g_object_unref(font_map);
+	font_map = NULL;
 
 	metrics = pango_fontset_get_metrics(cache->font_set);
+	pango_font_metrics_ref(metrics);
 
 	cache->ascent = pango_font_metrics_get_ascent(metrics);
 	cache->descent = pango_font_metrics_get_descent(metrics);
@@ -103,11 +116,22 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 		return gfi;
 
 	font = pango_fontset_get_font(cache->font_set, glyph);
+	g_object_ref (font);
 
-	pglyph = pango_xft_font_get_glyph(font, glyph);
+	pglyph = pango_fc_font_get_glyph(PANGO_FC_FONT(font), glyph);
+	if (!pglyph) {
+		fprintf (stderr, "Error: Unable to find glyph %d.\n", glyph);
+		if (!pglyph)
+			pglyph = pango_fc_font_get_glyph(PANGO_FC_FONT(font), glyph);
+		if (!pglyph)
+			pglyph = pango_fc_font_get_unknown_glyph(PANGO_FC_FONT(font), glyph);
+		if (!pglyph)
+			return NULL;
+	}
 	pango_font_get_glyph_extents(font, pglyph, &ink, &logical);
 
 	metrics = pango_font_get_metrics(font, cache->lang);
+	pango_font_metrics_ref(metrics);
 	ascent = pango_font_metrics_get_ascent(metrics);
 	descent = pango_font_metrics_get_descent(metrics);
 	pango_font_metrics_unref(metrics);
