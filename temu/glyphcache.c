@@ -16,8 +16,7 @@ TGlyphCache *glyph_cache_new(GtkWidget *widget,
 	cache = g_new(TGlyphCache, 1);
 	memset(cache, 0, sizeof(*cache));
 
-	cache->context = gtk_widget_get_pango_context(widget);
-	g_object_ref (cache->context);
+	cache->context = gtk_widget_create_pango_context(widget);
 	cache->lang = pango_context_get_language(cache->context);
 
 	cache->display = gtk_widget_get_display(widget);
@@ -43,6 +42,8 @@ void glyph_cache_destroy(TGlyphCache *cache) {
 		g_object_unref (cache->display);
 	if (cache->screen)
 		g_object_unref (cache->screen);
+	if (cache->font_set)
+		g_object_unref(cache->font_set);
 	/* Neither can context or lang */
 	g_free(cache);
 }
@@ -79,7 +80,6 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 		font_desc,
 		cache->lang
 	);
-	g_object_ref (cache->font_set);
 
 	g_object_unref(font_map);
 	font_map = NULL;
@@ -116,7 +116,6 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 		return gfi;
 
 	font = pango_fontset_get_font(cache->font_set, glyph);
-	g_object_ref (font);
 
 	pglyph = pango_fc_font_get_glyph(PANGO_FC_FONT(font), glyph);
 	if (!pglyph) {
@@ -131,7 +130,6 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 	pango_font_get_glyph_extents(font, pglyph, &ink, &logical);
 
 	metrics = pango_font_get_metrics(font, cache->lang);
-	pango_font_metrics_ref(metrics);
 	ascent = pango_font_metrics_get_ascent(metrics);
 	descent = pango_font_metrics_get_descent(metrics);
 	pango_font_metrics_unref(metrics);
