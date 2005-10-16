@@ -841,7 +841,7 @@ static gboolean temu_screen_batch_move(TemuScreen *screen, GdkRectangle *rect, g
 			(prev->base.height == rect->height)
 	   ) {
 		/* Yay, we can batch it! */
-		if (dy < 0)
+		if (dx < 0)
 			prev->rect.x -= dx;
 		prev->rect.width -= abs(dx);
 		if (dy < 0)
