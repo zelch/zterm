@@ -879,6 +879,7 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 		temu_screen_emit_bell(T);
 		break;
 	  case C_BS:
+		IMPL("BS", "Backspace", "fully");
 		emul_BS(S);
 		break;
 	  case C_HT:	/* HT: Horizontal Tab */
@@ -1069,10 +1070,12 @@ static void vt52x_csi(TemuEmul *S)
 		break;
 	  case E(C_CSI,0,0,'C'):	/* CUF: Cursor Forward */
 	  case E(C_CSI,0,0,'a'):	/* HPA: Horizontal Position Relative */
+		IMPL("CUF", "Cursor Forward", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, S->cursor_x + P(0), S->cursor_y);
 		break;
 	  case E(C_CSI,0,0,'D'):	/* CUB: Cursor Backward */
+		IMPL("CUB", "Cursor Backward", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, S->cursor_x - P(0), S->cursor_y);
 		break;
@@ -1086,11 +1089,13 @@ static void vt52x_csi(TemuEmul *S)
 		break;
 	  case E(C_CSI,0,0,'G'):	/* CHA: Cursor Horizontal Absolute */
 	  case E(C_CSI,0,0,'`'):	/* HPA: Horizontal Position Absolute */
+		IMPL("CHA", "Cursor Horizontal Absolute", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, CURSOR_X_TRANS(P(0) - 1), S->cursor_y);
 		break;
 	  case E(C_CSI,0,0,'H'):	/* CUP: Cursor Position */
 	  case E(C_CSI,0,0,'f'):	/* HVP: Horizontal and Vertical Position */
+		IMPL("CUP", "Cursor Position", "fully");
 		PARM_DEF(0, 1); PARM_DEF(1, 1);
 		emul_move_cursor(S, CURSOR_X_TRANS(P(1) - 1), CURSOR_Y_TRANS(P(0) - 1));
 		break;
@@ -1196,10 +1201,12 @@ static void vt52x_csi(TemuEmul *S)
 		}
 		break;
 	  case E(C_CSI,0,0,'d'):	/* VPA: Vertical Line Position Absolute */
+		IMPL("VPA", "Vertical Line Position Absolute", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, S->cursor_x, CURSOR_Y_TRANS(P(0) - 1));
 		break;
 	  case E(C_CSI,0,0,'e'):	/* VPR: Vertical Position Relative */
+		IMPL("VPR", "Vertical Line Position Relative", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, 0, S->cursor_y + P(0));
 		break;
