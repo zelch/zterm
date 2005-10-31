@@ -2605,7 +2605,7 @@ static void emul_SGR(TemuEmul *S)
 		  case 55:	SET_ATTR(ATTR, OVERLINE, 0); break;
 		  /* XTerm colors. */
 		  case 90 ... 97: SET_ATTR(COLORS, FG, P(i) - 90 + 8); break;
-		  case 100 ... 107: SET_ATTR(COLORS, FG, P(i) - 100 + 8); break;
+		  case 100 ... 107: SET_ATTR(COLORS, BG, P(i) - 100 + 8); break;
 		  case 38:
 			if ((i + 2) <= S->parms) {
 				PARM_DEF(i + 1, 0);
