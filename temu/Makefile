@@ -1,6 +1,6 @@
 CC=gcc
-CFLAGS=-g -Wall -O2 `pkg-config gtk+-2.0 --cflags`
-LDFLAGS=`pkg-config gtk+-2.0 --libs` -lutil -g
+CFLAGS=-g -Wall -O2 `pkg-config gtk+-2.0 pangoxft --cflags`
+LDFLAGS=`pkg-config gtk+-2.0 pangoxft --libs` -lutil -g
 
 TEMU_OBJECTS=vt52x.o glyphcache.o screen.o screen-xft.o pty.o terminal.o
 

@@ -48,6 +48,9 @@ struct _TemuScreenPrivate {
 	gint select_x, select_y;
 	gboolean selected;
 
+	gint clicks;
+	GTimeVal last_click;
+
 	guint screen_attr;
 	TScreenLine *lines;
 

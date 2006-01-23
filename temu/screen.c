@@ -485,7 +485,21 @@ void temu_screen_select_clear(TemuScreen *screen)
 	temu_screen_apply_updates(screen);
 }
 
-void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) {
+gboolean temu_screen_isbreak (TemuScreen *screen, temu_cell_t c0, temu_cell_t c1)
+{
+	if (GET_ATTR (c0.attr, WIDE))
+		return FALSE;
+
+	if (g_unichar_type (c0.glyph) == g_unichar_type (c1.glyph))
+		return FALSE;
+
+	if (g_unichar_isalnum (c0.glyph) && g_unichar_isalnum(c1.glyph))
+		return FALSE;
+
+	return TRUE;
+}
+
+void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, gint clicks) {
 	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
 	gint i, count;
@@ -498,58 +512,111 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty) 
 
 	temu_screen_select_clear(screen);
 
-	count = (ty*priv->width+tx) - (fy*priv->width+fx);
-	if (count < 0) {
+	fy = (fy + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
+	ty = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
+
+	if (ty < fy) {
 		gint tmp;
 		tmp = fx; fx = tx; tx = tmp;
 		tmp = fy; fy = ty; ty = tmp;
-		count = -count;
-	}
-	count++;
-
-	/* Slurp up whole double-width char at start */
-	y = (fy + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
-	if (fx > 0 && GET_ATTR(priv->lines[y].c[fx-1].attr, WIDE)) {
-		fx--; count++;
 	}
 
-	/* Slurp up the -whole- last line if we're past its end */
-	y = (ty + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
-	if (tx >= priv->lines[y].len) {
-		count += priv->width - tx - 1;
-	}
-
-	/* Slurp up whole double-width char at end */
-	if (tx < (priv->width-1) && GET_ATTR(priv->lines[y].c[tx].attr, WIDE))
+	clicks %= 3;
+	if (clicks < 2) {
+		count = (ty*priv->width+tx) - (fy*priv->width+fx);
+		if (count < 0) {
+			gint tmp;
+			tmp = fx; fx = tx; tx = tmp;
+			tmp = fy; fy = ty; ty = tmp;
+			count = -count;
+		}
 		count++;
 
-
-	p = buffer = g_alloca(
-		count*6		/* utf-8 chars, overkill alloc :x */
-		+(fy - ty + 1)	/* newlines for non-wrapped lines */
-		+1		/* NUL */
-	);
-
-	x = fx;
-	y = (fy + priv->scroll_offset + priv->view_offset + priv->height) % priv->height;
-	SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
-	for (i = 0; i < count; i++) {
-		if (x < priv->lines[y].len
-		 && (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
-			p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+		/* Slurp up whole double-width char at start */
+		if (fx > 0 && GET_ATTR(priv->lines[fy].c[fx-1].attr, WIDE)) {
+			fx--; count++;
 		}
 
-		SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
-		temu_screen_invalidate_cell(screen, x, y);
-		x++;
-		if (x >= priv->width) {
-			if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
-				*p++ = '\n';
+		if (clicks == 1 && fx > 0) {
+			while (fx > 0 && !temu_screen_isbreak (screen, priv->lines[fy].c[fx], priv->lines[fy].c[fx - 1])) {
+				fx--; count++;
+			}
+		}
 
-			x = 0;
-			y = (y + 1) % priv->height;
-			if (count - i)
-				SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+		/* Slurp up the -whole- last line if we're past its end */
+		if (tx >= priv->lines[ty].len) {
+			count += priv->width - tx - 1;
+		}
+
+		/* Slurp up whole double-width char at end */
+		if (tx < (priv->width-1) && GET_ATTR(priv->lines[ty].c[tx].attr, WIDE))
+			count++;
+
+		if (clicks == 1 && tx < (priv->width-1)) {
+			while (tx < (priv->width-1) &&
+					!temu_screen_isbreak (screen, priv->lines[ty].c[tx], priv->lines[ty].c[tx + 1])) {
+				tx++; count++;
+			}
+		}
+
+
+		p = buffer = g_alloca(
+				count*6		/* utf-8 chars, overkill alloc :x */
+				+(fy - ty + 1)	/* newlines for non-wrapped lines */
+				+1		/* NUL */
+				);
+
+		x = fx;
+		y = fy;
+		SET_ATTR(priv->lines[fy].attr, LINE_SELECTED, 1);
+		for (i = 0; i < count; i++) {
+			if (x < priv->lines[y].len
+					&& (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
+				p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+			}
+
+			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
+			temu_screen_invalidate_cell(screen, x, y);
+			x++;
+			if (x >= priv->width) {
+				if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
+					*p++ = '\r';
+
+				x = 0;
+				y = (y + 1) % priv->height;
+				if (count - i)
+					SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+			}
+		}
+	} else {
+		count = 1;
+		for (i = fy; i <= ty; i++) {
+			count += priv->lines[i].len * 6; /* utf-8 chars, overkill alloc. */
+			count += 1; /* Newlines. */
+		}
+		p = buffer = g_alloca(
+				count
+				);
+
+		x = 0;
+		y = fy;
+		while (y <= ty) {
+			SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+			if (x < priv->lines[y].len
+					&& (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
+				p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+			}
+
+			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
+			temu_screen_invalidate_cell(screen, x, y);
+			x++;
+			if (x >= priv->width) {
+				if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
+					*p++ = '\r';
+
+				x = 0;
+				y = (y + 1) % priv->height;
+			}
 		}
 	}
 
@@ -591,15 +658,49 @@ static gboolean temu_screen_button_press_event(GtkWidget *widget, GdkEventButton
 {
 	TemuScreen *screen = TEMU_SCREEN(widget);
 	TemuScreenPrivate *priv = screen->priv;
+	GTimeVal time;
 
 	temu_screen_show_pointer (screen);
 
-	if (event->button != 1)
+	if ((event->button != 1 && event->button != 3)
+			|| event->type != GDK_BUTTON_PRESS)
 		return FALSE;
 
+	g_get_current_time (&time);
+	// XXX: Assumes that time never goes backwards.
+	time.tv_sec -= priv->last_click.tv_sec;
+	time.tv_usec -= priv->last_click.tv_usec;
+	if (time.tv_usec < 0) {
+		time.tv_sec--;
+		time.tv_usec += 1000000;
+	}
+	g_get_current_time (&priv->last_click);
+
+	if (time.tv_sec || time.tv_usec >= 250000)
+		priv->clicks = 0;
+	else
+		priv->clicks++;
+
 	temu_screen_select_clear(screen);
-	priv->select_x = event->x / screen->font_width;
-	priv->select_y = event->y / screen->font_height;
+	if (event->button == 1) {
+		priv->select_x = event->x / screen->font_width;
+		priv->select_y = event->y / screen->font_height;
+//		temu_screen_select(screen, priv->select_x, priv->select_y, priv->select_x, priv->select_y, priv->clicks);
+	} else {
+		gint tx, ty;
+
+		if (priv->select_x == -1)
+			return FALSE;
+		tx = event->x / screen->font_width;
+		if (tx < 0) tx = 0;
+		else if (tx >= priv->width) tx = priv->width-1;
+
+		ty = event->y / screen->font_height;
+		if (ty < 0) ty = 0;
+		else if (ty >= priv->visible_height) ty = priv->visible_height-1;
+
+		temu_screen_select(screen, priv->select_x, priv->select_y, tx, ty, priv->clicks);
+	}
 
 	return TRUE;
 }
@@ -628,7 +729,7 @@ static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotio
 	temu_screen_select(
 		screen,
 		priv->select_x, priv->select_y,
-		tx, ty
+		tx, ty, priv->clicks
 	);
 
 	return TRUE;
@@ -637,7 +738,7 @@ static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotio
 static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButton *event)
 {
 	TemuScreenPrivate *priv = TEMU_SCREEN(widget)->priv;
-	priv->select_x = priv->select_y = -1;
+//	priv->select_x = priv->select_y = -1;
 	temu_screen_show_pointer (TEMU_SCREEN(widget));
 	return TRUE;
 }
