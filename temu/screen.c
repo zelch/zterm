@@ -681,11 +681,14 @@ static gboolean temu_screen_button_press_event(GtkWidget *widget, GdkEventButton
 	else
 		priv->clicks++;
 
+	priv->clicks %= 3;
+
 	temu_screen_select_clear(screen);
 	if (event->button == 1) {
 		priv->select_x = event->x / screen->font_width;
 		priv->select_y = event->y / screen->font_height;
-//		temu_screen_select(screen, priv->select_x, priv->select_y, priv->select_x, priv->select_y, priv->clicks);
+		if (priv->clicks)
+		    temu_screen_select(screen, priv->select_x, priv->select_y, priv->select_x, priv->select_y, priv->clicks);
 	} else {
 		gint tx, ty;
 
