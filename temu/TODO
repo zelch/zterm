@@ -8,6 +8,7 @@ Things to do (critical, no order):
   but definitely don't clear if the selection area isn't modified.
 - autotools or other automagical make system
 - Implement lots of unimplemented escapes
+- Find some way to let the glyphcache be shared among like-fonted temu widgets
 
 Things to do (non-critical, no order):
 - Support more of the attributes that are already set in the code in screen-xft
