@@ -115,9 +115,9 @@ static void temu_screen_init(TemuScreen *screen)
 	priv = screen->priv = g_malloc0(sizeof(*screen->priv));
 
 	/* default attributes */
-	priv->resize_cell.glyph = L' ';
-	SET_ATTR(priv->resize_cell.colors, FG, 7);
-	SET_ATTR(priv->resize_cell.colors, BG, 0);
+	priv->resize_cell.ch.glyph = L' ';
+	priv->resize_cell.attr.fg = TEMU_SCREEN_FG_DEFAULT;
+	priv->resize_cell.attr.bg = TEMU_SCREEN_BG_DEFAULT;
 
 	/* updates */
 	priv->moves.next = priv->moves.prev = &priv->moves;
@@ -125,7 +125,7 @@ static void temu_screen_init(TemuScreen *screen)
 	priv->moves_free = NULL;
 
 	/* cell screen */
-	priv->screen_attr = 0;
+	/*memset(&priv->screen_attr, 0, sizeof(temu_scr_attr_t));*/
 
 	priv->scroll_top = 0;
 	priv->scroll_offset = 0;
@@ -135,7 +135,7 @@ static void temu_screen_init(TemuScreen *screen)
 	priv->height = 0;
 	priv->lines = NULL;
 
-	priv->visible_height = 25;
+	priv->visible_height = 24;
 	temu_screen_resize(screen, 80, 100);
 
 	/* on-screen */
@@ -149,7 +149,7 @@ static void temu_screen_init(TemuScreen *screen)
 	/* options */
 	priv->double_buffered = TRUE;
 
-	priv->fontdesc = pango_font_description_from_string("FreeMono 16");
+	priv->fontdesc = pango_font_description_from_string("Fixed 14");
 }
 
 static void temu_screen_realize(GtkWidget *widget)
@@ -470,12 +470,12 @@ void temu_screen_select_clear(TemuScreen *screen)
 		return;
 
 	for (y = 0; y < priv->height; y++) {
-		if (!GET_ATTR(priv->lines[y].attr, LINE_SELECTED))
+		if (!priv->lines[y].attr.selected)
 			continue;
 
-		SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 0);
+		priv->lines[y].attr.selected = 0;
 		for (x = 0; x < priv->width; x++) {
-			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 0);
+			priv->lines[y].c[x].attr.selected = 0;
 			temu_screen_invalidate_cell(screen, x, y);
 		}
 	}
@@ -487,13 +487,13 @@ void temu_screen_select_clear(TemuScreen *screen)
 
 gboolean temu_screen_isbreak (TemuScreen *screen, temu_cell_t c0, temu_cell_t c1)
 {
-	if (GET_ATTR (c0.attr, WIDE))
+	if (c0.attr.wide)
 		return FALSE;
 
-	if (g_unichar_type (c0.glyph) == g_unichar_type (c1.glyph))
+	if (g_unichar_type (c0.ch.glyph) == g_unichar_type (c1.ch.glyph))
 		return FALSE;
 
-	if (g_unichar_isalnum (c0.glyph) && g_unichar_isalnum(c1.glyph))
+	if (g_unichar_isalnum (c0.ch.glyph) && g_unichar_isalnum(c1.ch.glyph))
 		return FALSE;
 
 	return TRUE;
@@ -533,7 +533,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		count++;
 
 		/* Slurp up whole double-width char at start */
-		if (fx > 0 && GET_ATTR(priv->lines[fy].c[fx-1].attr, WIDE)) {
+		if (fx > 0 && priv->lines[fy].c[fx-1].attr.wide) {
 			fx--; count++;
 		}
 
@@ -549,7 +549,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		}
 
 		/* Slurp up whole double-width char at end */
-		if (tx < (priv->width-1) && GET_ATTR(priv->lines[ty].c[tx].attr, WIDE))
+		if (tx < (priv->width-1) && priv->lines[ty].c[tx].attr.wide)
 			count++;
 
 		if (clicks == 1 && tx < (priv->width-1)) {
@@ -568,24 +568,24 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 
 		x = fx;
 		y = fy;
-		SET_ATTR(priv->lines[fy].attr, LINE_SELECTED, 1);
+		priv->lines[fy].attr.selected = 1;
 		for (i = 0; i < count; i++) {
 			if (x < priv->lines[y].len
-					&& (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
-				p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)) {
+				p += g_unichar_to_utf8(priv->lines[y].c[x].ch.glyph, p);
 			}
 
-			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
+			priv->lines[y].c[x].attr.selected = 1;
 			temu_screen_invalidate_cell(screen, x, y);
 			x++;
 			if (x >= priv->width) {
-				if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
+				if (!priv->lines[y].attr.wrapped)
 					*p++ = '\r';
 
 				x = 0;
 				y = (y + 1) % priv->height;
 				if (count - i)
-					SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+					priv->lines[y].attr.selected = 1;
 			}
 		}
 	} else {
@@ -601,17 +601,17 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		x = 0;
 		y = fy;
 		while (y <= ty) {
-			SET_ATTR(priv->lines[y].attr, LINE_SELECTED, 1);
+			priv->lines[y].attr.selected = 1;
 			if (x < priv->lines[y].len
-					&& (x <= 0 || !GET_ATTR(priv->lines[y].c[x-1].attr, WIDE))) {
-				p += g_unichar_to_utf8(priv->lines[y].c[x].glyph, p);
+					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)) {
+				p += g_unichar_to_utf8(priv->lines[y].c[x].ch.glyph, p);
 			}
 
-			SET_ATTR(priv->lines[y].c[x].attr, SELECTED, 1);
+			priv->lines[y].c[x].attr.selected = 1;
 			temu_screen_invalidate_cell(screen, x, y);
 			x++;
 			if (x >= priv->width) {
-				if (!GET_ATTR(priv->lines[y].attr, LINE_WRAPPED))
+				if (!priv->lines[y].attr.wrapped)
 					*p++ = '\r';
 
 				x = 0;
@@ -779,7 +779,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 		priv->lines = g_realloc(priv->lines, height * sizeof(*priv->lines));
 
 		for (i = old_height; i < height; i++) {
-			priv->lines[i].attr = 0;
+			memset(&priv->lines[i].attr, 0, sizeof(temu_line_attr_t));
 			priv->lines[i].len = 0;
 			priv->lines[i].c = g_malloc(priv->width*sizeof(*priv->lines[i].c));
 		}
@@ -1135,11 +1135,11 @@ static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_
 {
 	TemuScreenPrivate *priv = screen->priv;
 
-	if (x > 0 && GET_ATTR(priv->lines[y].c[x-1].attr, WIDE)) {
+	if (x > 0 && priv->lines[y].c[x-1].attr.wide) {
 		temu_cell_t tmp_cell = priv->lines[y].c[x-1];
 
-		tmp_cell.glyph = L' ';
-		SET_ATTR(tmp_cell.attr, WIDE, 0);
+		tmp_cell.ch.glyph = L' ';
+		tmp_cell.attr.wide = 0;
 		priv->lines[y].c[x-1] = tmp_cell;
 		temu_screen_invalidate_cell(screen, x-1, y);
 	}
@@ -1147,11 +1147,11 @@ static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_
 	priv->lines[y].c[x] = *cell;
 	temu_screen_invalidate_cell(screen, x, y);
 
-	if (GET_ATTR(cell->attr, WIDE) && x < (priv->width-1)) {
+	if (cell->attr.wide && x < (priv->width-1)) {
 		temu_cell_t tmp_cell = *cell;
 
-		tmp_cell.glyph = L' ';
-		SET_ATTR(tmp_cell.attr, WIDE, 0);
+		tmp_cell.ch.glyph = L' ';
+		tmp_cell.attr.wide = 0;
 
 		priv->lines[y].c[x+1] = tmp_cell;
 		temu_screen_invalidate_cell(screen, x+1, y);
@@ -1162,13 +1162,13 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 {
 	TemuScreenPrivate *priv = screen->priv;
 
-	gint step = GET_ATTR(cell->attr, WIDE)?2:1;
+	gint step = cell->attr.wide?2:1;
 	gint x2 = x + width, y2 = y + height;
 	gint i, j;
 
 	gboolean shorten;
 
-	shorten = (cell->glyph == L' ');
+	shorten = (cell->ch.glyph == L' ');
 
 	for (i = y; i < y2; i++) {
 		gint mod_i = i % priv->height;
@@ -1378,12 +1378,11 @@ void temu_screen_set_resize_cell(TemuScreen *screen, const temu_cell_t *cell)
 }
 
 /* global attr, line attr */
-void temu_screen_set_screen_attr(TemuScreen *screen, guint attr)
+void temu_screen_set_screen_attr(TemuScreen *screen, temu_scr_attr_t *attr)
 {
 	TemuScreenPrivate *priv = screen->priv;
 
-	if (GET_ATTR_BASE(priv->screen_attr,SCREEN_UPDATE)
-	 != GET_ATTR_BASE(attr,SCREEN_UPDATE)) {
+	if (attr->negative != priv->screen_attr.negative) {
 		GdkRectangle *urect = &priv->update_rect;
 
 		urect->x = urect->y = 0;
@@ -1393,16 +1392,16 @@ void temu_screen_set_screen_attr(TemuScreen *screen, guint attr)
 		temu_screen_apply_updates(screen);
 	}
 
-	priv->screen_attr = attr;
+	priv->screen_attr = *attr;
 }
 
-guint temu_screen_get_screen_attr(TemuScreen *screen)
+temu_scr_attr_t *temu_screen_get_screen_attr(TemuScreen *screen)
 {
 	TemuScreenPrivate *priv = screen->priv;
-	return priv->screen_attr;
+	return &priv->screen_attr;
 }
 
-void temu_screen_set_line_attr(TemuScreen *screen, gint line, guint attr)
+void temu_screen_set_line_attr(TemuScreen *screen, gint line, temu_line_attr_t *attr)
 {
 	TemuScreenPrivate *priv = screen->priv;
 
@@ -1410,9 +1409,11 @@ void temu_screen_set_line_attr(TemuScreen *screen, gint line, guint attr)
 
 	line = (line + priv->scroll_offset) % priv->height;
 
-	if (GET_ATTR_BASE(priv->lines[line].attr,LINE_UPDATE)
-	 != GET_ATTR_BASE(attr,LINE_UPDATE)) {
+	if (priv->lines[line].attr.wide != attr->wide
+	 || priv->lines[line].attr.dhl != attr->dhl) {
 		GdkRectangle *urect = &priv->update_rect;
+
+		/* FIXME: Updates too often. */
 
 		if (urect->width)
 			temu_screen_apply_updates(screen);
@@ -1425,14 +1426,14 @@ void temu_screen_set_line_attr(TemuScreen *screen, gint line, guint attr)
 		temu_screen_apply_updates(screen);
 	}
 
-	priv->lines[line].attr = attr;
+	priv->lines[line].attr = *attr;
 }
 
-guint temu_screen_get_line_attr(TemuScreen *screen, gint line)
+temu_line_attr_t *temu_screen_get_line_attr(TemuScreen *screen, gint line)
 {
 	TemuScreenPrivate *priv = screen->priv;
 	g_return_val_if_fail(line >= 0 && line < priv->visible_height, 0);
-	return priv->lines[line].attr;
+	return &priv->lines[line].attr;
 }
 
 /*
@@ -1481,11 +1482,11 @@ gint temu_screen_set_cell_text(TemuScreen *screen, gint x, gint y, const temu_ce
 	cols = 0;
 
 	for (i = 0; i < length; i++) {
-		if ((x+cols+GET_ATTR(cells[i].attr, WIDE)) >= priv->width)
+		if ((x+cols+cells[i].attr.wide) >= priv->width)
 			break;
 
 		temu_screen_cell_set(screen, x+cols, y, &cells[i]);
-		cols += GET_ATTR(cells[i].attr, WIDE)?2:1;
+		cols += cells[i].attr.wide?2:1;
 	}
 
 	if ((x+cols) > priv->lines[y].len)
@@ -1514,26 +1515,25 @@ gint temu_screen_set_utf8_text(TemuScreen *screen, gint x, gint y, const gchar *
 	cols = 0;
 
 	cell.attr = attr;
-	cell.colors = colors;
 
 	for (i = 0; i < length; ) {
-		cell.glyph = g_utf8_get_char_validated(&text[i], length - i);
-		if (cell.glyph == (gunichar)-1) {
-			cell.glyph = G_UNICHAR_UNKNOWN_GLYPH;
+		cell.ch.glyph = g_utf8_get_char_validated(&text[i], length - i);
+		if (cell.ch.glyph == (gunichar)-1) {
+			cell.ch.glyph = G_UNICHAR_UNKNOWN_GLYPH;
 			i++;
-		} else if (cell.glyph == (gunichar)-2) {
+		} else if (cell.ch.glyph == (gunichar)-2) {
 			break;
 		} else {
 			i = g_utf8_next_char(&text[i]) - text;
 		}
 
-		SET_ATTR(cell.attr, WIDE, g_unichar_iswide(cell.glyph));
+		cell.attr.wide = !!(g_unichar_iswide(cell.ch.glyph));
 
-		if ((x+cols+GET_ATTR(cell.attr, WIDE)) >= priv->width)
+		if ((x+cols+cell.attr.wide) >= priv->width)
 			break;
 
 		temu_screen_cell_set(screen, x+cols, y, &cell);
-		cols += GET_ATTR(cell.attr, WIDE)?2:1;
+		cols += cell.attr.wide?2:1;
 	}
 
 	if ((x+cols) > priv->lines[y].len)
@@ -1562,17 +1562,16 @@ gint temu_screen_set_ucs4_text(TemuScreen *screen, gint x, gint y, const gunicha
 	cols = 0;
 
 	cell.attr = attr;
-	cell.colors = colors;
 
 	for (i = 0; i < length; i++) {
-		cell.glyph = text[i];
-		SET_ATTR(cell.attr, WIDE, g_unichar_iswide(cell.glyph));
+		cell.ch.glyph = text[i];
+		cell.attr.wide = !!(g_unichar_iswide(cell.ch.glyph));
 
-		if ((x+cols+GET_ATTR(cell.attr, WIDE)) >= priv->width)
+		if ((x+cols+cell.attr.wide) >= priv->width)
 			break;
 
 		temu_screen_cell_set(screen, x+cols, y, &cell);
-		cols += GET_ATTR(cell.attr, WIDE)?2:1;
+		cols += cell.attr.wide?2:1;
 	}
 
 	if ((x+cols) > priv->lines[y].len)
@@ -1913,10 +1912,10 @@ void temu_screen_set_color (TemuScreen *screen, guint n, GdkColor *color)
 
 	priv->gdk_color[n] = *color;
 
-	rcolor.red		= priv->gdk_color[n].red;
-	rcolor.green	= priv->gdk_color[n].green;
-	rcolor.blue		= priv->gdk_color[n].blue;
-	rcolor.alpha	= 0xffff;
+	rcolor.red      = priv->gdk_color[n].red;
+	rcolor.green    = priv->gdk_color[n].green;
+	rcolor.blue     = priv->gdk_color[n].blue;
+	rcolor.alpha    = 0xffff;
 
 	XftColorFree (
 			GDK_DISPLAY_XDISPLAY (display),

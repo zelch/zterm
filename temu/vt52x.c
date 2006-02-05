@@ -61,11 +61,11 @@
 
 #define ECELL		(S->cell)
 #define ATTR		(S->attr)
-#define COLORS		(S->colors)
+#define ATTR_CLEAR(attr)	memset(attr, 0, sizeof(temu_attr_t))
 #define ATTR_NORMAL()	do { \
-		ATTR = 0; \
-		SET_ATTR(COLORS, FG, TEMU_SCREEN_FG_DEFAULT); \
-		SET_ATTR(COLORS, BG, TEMU_SCREEN_BG_DEFAULT); \
+		ATTR_CLEAR(&ATTR); \
+		ATTR.fg = TEMU_SCREEN_FG_DEFAULT; \
+		ATTR.bg = TEMU_SCREEN_BG_DEFAULT; \
 	} while(0)
 
 #define E(strt,pre,intr,fin)	(((strt)<<24) | ((pre)<<16) | ((intr)<<8) |((fin)<<0))
@@ -125,11 +125,11 @@ struct _TemuEmul {
 	temu_cset_t charset;
 	temu_cell_t cell;
 	temu_attr_t attr;
-	temu_attr_t colors;
 
 	gboolean scroll_height_full;
 	gint scroll_top, scroll_height;
-	gint saved_cursor_x, saved_cursor_y, saved_attr, saved_colors;
+	gint saved_cursor_x, saved_cursor_y;
+	temu_attr_t saved_attr;
 	gint cursor_x, cursor_y;
 	gboolean cursor_redraw, cursor_hide;
 
@@ -983,7 +983,7 @@ static void vt52x_esc(TemuEmul *S)
 			emul_move_cursor(S, 0, 0);
 
 			cell = ECELL;
-			cell.glyph = L'E';
+			cell.ch.glyph = L'E';
 			temu_screen_fill_rect(T, 0, 0, WIDTH, HEIGHT, &cell);
 		}
 		break;
@@ -1142,11 +1142,14 @@ static void vt52x_csi(TemuEmul *S)
 	  case E(C_CSI,0,' ','R'):
 		NOTIMPL("PPB", "Page Position Backwards", "maybe");
 		break;
-	  case E(C_CSI,0,0,'S'):	/* SU: Pan Down */
+	  case E(C_CSI,0,0,'S'):
+		/* FIXME: Did I get up/down mixed up? :x */
+		IMPL("SD", "Pan Down", "fully");
 		PARM_DEF(0, 1);
 		emul_scroll(S, P(0));
 		break;
-	  case E(C_CSI,0,0,'T'):	/* SD: Pan Up */
+	  case E(C_CSI,0,0,'T'):
+		IMPL("SU", "Pan Up", "fully");
 		PARM_DEF(0, 1);
 		emul_scroll(S, -P(0));
 		break;
@@ -1158,17 +1161,20 @@ static void vt52x_csi(TemuEmul *S)
 		break;
 	  case E(C_CSI,'?',0,'W'):
 		switch (P(0)) {
-		  case 5:	/* DECST8C: Set Tab at Every 8 Columns */
+		  case 5:
+			IMPL("DECST8C", "Set Tab at Every 8 Columns", "fully");
 			emul_tab_reset(S, FALSE);
 			break;
 		}
 		break;
-	  case E(C_CSI,0,0,'X'):	/* ECH: Erase Character */
+	  case E(C_CSI,0,0,'X'):
+		IMPL("ECH", "Erase Character", "fully");
 		PARM_DEF(0, 1);
 		temu_screen_fill_rect(T, S->cursor_x, S->cursor_y, P(0), 1, &ECELL);
 		emul_cursor_cleared(S);
 		break;
-	  case E(C_CSI,0,0,'Z'):	/* CBT: Cursor Backward Tabulation */
+	  case E(C_CSI,0,0,'Z'):
+		IMPL("CBT", "Cursor Backward Tabulation", "fully");
 		PARM_DEF(0, 1);
 		while (P(0)--) emul_tab_prev(S);
 		break;
@@ -1178,7 +1184,8 @@ static void vt52x_csi(TemuEmul *S)
 	  case E(C_CSI,0,0,'c'):
 		PARM_DEF(0, 0);
 		switch (P(0)) {
-		  case 0:	/* DA1: Primary Device Attributes */
+		  case 0:
+			IMPL("DA1", "Primary Device Attributes", "partially");
 			emul_DA1(S);
 			break;
 		  default:
@@ -1200,12 +1207,12 @@ static void vt52x_csi(TemuEmul *S)
 		  default: NOTIMPL_UNKNOWN("%08x %d", E(S->strt,S->pre,S->intr,S->fin), P(0)); break;
 		}
 		break;
-	  case E(C_CSI,0,0,'d'):	/* VPA: Vertical Line Position Absolute */
+	  case E(C_CSI,0,0,'d'):
 		IMPL("VPA", "Vertical Line Position Absolute", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, S->cursor_x, CURSOR_Y_TRANS(P(0) - 1));
 		break;
-	  case E(C_CSI,0,0,'e'):	/* VPR: Vertical Position Relative */
+	  case E(C_CSI,0,0,'e'):
 		IMPL("VPR", "Vertical Line Position Relative", "fully");
 		PARM_DEF(0, 1);
 		emul_move_cursor(S, 0, S->cursor_y + P(0));
@@ -1418,12 +1425,11 @@ static void vt52x_csi(TemuEmul *S)
 		{
 			gint x, y, w, h;
 			temu_cell_t cell;
-			cell.glyph = P(0);
-			if ((cell.glyph >= C0_FIRST && cell.glyph < C0_PAST)
-			 || (cell.glyph >= C1_FIRST && cell.glyph < C1_PAST))
+			cell.ch.glyph = P(0);
+			if ((cell.ch.glyph >= C0_FIRST && cell.ch.glyph < C0_PAST)
+			 || (cell.ch.glyph >= C1_FIRST && cell.ch.glyph < C1_PAST))
 				break;
 			cell.attr = ATTR;
-			cell.colors = COLORS;
 
 			emul_rect_coords(S, 1, &x, &y, &w, &h);
 			temu_screen_fill_rect(T, x, y, w, h, &cell);
@@ -1733,8 +1739,11 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 			NOTIMPL("DECSCLM", "Scrolling Mode", "probably not");
 			break;
 		  case 5: {
+			temu_scr_attr_t attr;
 			IMPL("DECSCNM", "Screen Mode: Light or Dark Screen", "fully");
-			SET_SCREEN_ATTR(T, SCREEN_NEGATIVE, set);
+			attr = *temu_screen_get_screen_attr(T);
+			attr.negative = set;
+			temu_screen_set_screen_attr(T, &attr);
 			break;
 		  }
 		  case 6:	/* DECOM: Origin Mode */
@@ -1896,12 +1905,10 @@ static void emul_init(TemuEmul *S)
 
 static void emul_reset_soft(TemuEmul *S)
 {
-	ECELL.glyph = L' ';
+	ECELL.ch.glyph = L' ';
 	ATTR_NORMAL();
-	ECELL.colors = COLORS;
-	ECELL.attr = 0;
+	ATTR_CLEAR(&ECELL.attr);
 	S->saved_attr = ECELL.attr;
-	S->saved_colors = ECELL.colors;
 
 	S->charset = CHARSET_UTF8;
 
@@ -1981,7 +1988,7 @@ static void emul_cursor_clear(TemuEmul *S)
 		x = S->cursor_x;
 
 	cell = *(temu_screen_get_cell(T, x, S->cursor_y));
-	SET_ATTR(cell.attr, CURSOR, 0);
+	cell.attr.cursor = 0;
 	temu_screen_set_cell(T, x, S->cursor_y, &cell);
 }
 
@@ -1999,7 +2006,7 @@ static void emul_cursor_draw(TemuEmul *S)
 		x = S->cursor_x;
 
 	cell = *(temu_screen_get_cell(T, x, S->cursor_y));
-	SET_ATTR(cell.attr, CURSOR, 1);
+	cell.attr.cursor = 1;
 	temu_screen_set_cell(T, x, S->cursor_y, &cell);
 }
 
@@ -2008,7 +2015,6 @@ static void emul_cursor_save(TemuEmul *S)
 	S->saved_cursor_x = S->cursor_x;
 	S->saved_cursor_y = S->cursor_y;
 	S->saved_attr = ATTR;
-	S->saved_colors = COLORS;
 }
 
 static void emul_cursor_restore(TemuEmul *S)
@@ -2017,7 +2023,6 @@ static void emul_cursor_restore(TemuEmul *S)
 	S->cursor_x = S->saved_cursor_x;
 	S->cursor_y = S->saved_cursor_y;
 	ATTR = S->saved_attr;
-	COLORS = S->saved_colors;
 }
 
 static void emul_tab_realloc(TemuEmul *S, gint col)
@@ -2309,43 +2314,43 @@ static void emul_DECRQSS(TemuEmul *S)
 		break;
 	  case E(C_CSI,0,0,'m'):	/* DECSGR request */
 		*p++ = '0';
-		switch (GET_ATTR(ATTR, BOLD)) {
+		switch (ATTR.bold) {
 		  case 1: p = g_stpcpy(p, ";1"); break;
 		  case 2: p = g_stpcpy(p, ";2"); break;
 		}
-		switch (GET_ATTR(ATTR, ITALIC)) {
+		switch (ATTR.italic) {
 		  case 1: p = g_stpcpy(p, ";3"); break;
 		  case 2: p = g_stpcpy(p, ";20"); break;
 		}
-		switch (GET_ATTR(ATTR, UNDERLINE)) {
+		switch (ATTR.underline) {
 		  case 1: p = g_stpcpy(p, ";4"); break;
 		  case 2: p = g_stpcpy(p, ";21"); break;
 		}
-		switch (GET_ATTR(ATTR, BLINK)) {
+		switch (ATTR.blink) {
 		  case 1: p = g_stpcpy(p, ";5"); break;
 		  case 2: p = g_stpcpy(p, ";6"); break;
 		}
-		if (GET_ATTR(ATTR, NEGATIVE)) p = g_stpcpy(p, ";7");
-		if (GET_ATTR(ATTR, HIDDEN)) p = g_stpcpy(p, ";8");
-		if (GET_ATTR(ATTR, OVERSTRIKE)) p = g_stpcpy(p, ";9");
-		if (GET_ATTR(ATTR, FONT)) p += g_sprintf(p, ";%d", GET_ATTR(ATTR, FONT) + 10);
-		switch (GET_ATTR(COLORS, FG)) {
+		if (ATTR.negative) p = g_stpcpy(p, ";7");
+		if (ATTR.hidden) p = g_stpcpy(p, ";8");
+		if (ATTR.overstrike) p = g_stpcpy(p, ";9");
+		if (ATTR.font) p += g_sprintf(p, ";%d", ATTR.font + 10);
+		switch (ATTR.fg) {
 		  case TEMU_SCREEN_FG_DEFAULT: p = g_stpcpy(p, ";39"); break;
-		  case 0 ... 7: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, FG)%8) + 30); break;
-		  case 8 ... 15: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, FG)%8) + 90); break;
-		  default: p += g_sprintf(p, ";38;5;%d", (GET_ATTR(COLORS, FG))); break;
+		  case 0 ... 7: p += g_sprintf(p, ";%d", (ATTR.fg%8) + 30); break;
+		  case 8 ... 15: p += g_sprintf(p, ";%d", (ATTR.fg%8) + 90); break;
+		  default: p += g_sprintf(p, ";38;5;%d", (ATTR.fg)); break;
 		}
-		switch (GET_ATTR(COLORS, BG)) {
+		switch (ATTR.bg) {
 		  case TEMU_SCREEN_BG_DEFAULT: p = g_stpcpy(p, ";49"); break;
-		  case 0 ... 7: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, BG)%8) + 40); break;
-		  case 8 ... 15: p += g_sprintf(p, ";%d", (GET_ATTR(COLORS, BG)%8) + 100); break;
-		  default: p += g_sprintf(p, ";48;5;%d", (GET_ATTR(COLORS, BG))); break;
+		  case 0 ... 7: p += g_sprintf(p, ";%d", (ATTR.bg%8) + 40); break;
+		  case 8 ... 15: p += g_sprintf(p, ";%d", (ATTR.bg%8) + 100); break;
+		  default: p += g_sprintf(p, ";48;5;%d", (ATTR.bg)); break;
 		}
-		switch (GET_ATTR(ATTR, FRAME)) {
+		switch (ATTR.frame) {
 		  case 1: p = g_stpcpy(p, ";51"); break;
 		  case 2: p = g_stpcpy(p, ";52"); break;
 		}
-		if (GET_ATTR(ATTR, OVERLINE)) p = g_stpcpy(p, ";53");
+		if (ATTR.overline) p = g_stpcpy(p, ";53");
 		*p++ = 'm';
 		break;
 	  case E(C_CSI,0,' ','r'):
@@ -2575,43 +2580,43 @@ static void emul_SGR(TemuEmul *S)
 		PARM_DEF(i, 0);
 		switch (P(i)) {
 		  case 0:	ATTR_NORMAL(); break;
-		  case 1:	SET_ATTR(ATTR, BOLD, 1); break;
-		  case 2:	SET_ATTR(ATTR, BOLD, 2); break;
-		  case 3:	SET_ATTR(ATTR, ITALIC, 1); break;
-		  case 4:	SET_ATTR(ATTR, UNDERLINE, 1); break;
-		  case 5:	SET_ATTR(ATTR, BLINK, 1); break;
-		  case 6:	SET_ATTR(ATTR, BLINK, 2); break;
-		  case 7:	SET_ATTR(ATTR, NEGATIVE, 1); break;
-		  case 8:	SET_ATTR(ATTR, HIDDEN, 1); break;
-		  case 9:	SET_ATTR(ATTR, OVERSTRIKE, 1); break;
-		  case 10 ... 19: SET_ATTR(ATTR, FONT, P(i) - 10); break;
-		  case 20:	SET_ATTR(ATTR, ITALIC, 2); break;
-		  case 21:	SET_ATTR(ATTR, UNDERLINE, 2); break;
-		  case 22:	SET_ATTR(ATTR, BOLD, 0); break;
-		  case 23:	SET_ATTR(ATTR, ITALIC, 0); break;
-		  case 24:	SET_ATTR(ATTR, UNDERLINE, 0); break;
-		  case 25:	SET_ATTR(ATTR, BLINK, 0); break;
-		  case 27:	SET_ATTR(ATTR, NEGATIVE, 0); break;
-		  case 28:	SET_ATTR(ATTR, HIDDEN, 0); break;
-		  case 29:	SET_ATTR(ATTR, OVERSTRIKE, 0); break;
-		  case 30 ... 37: SET_ATTR(COLORS, FG, P(i) - 30); break;
-		  case 39:	SET_ATTR(COLORS, FG, TEMU_SCREEN_FG_DEFAULT); break;
-		  case 40 ... 47: SET_ATTR(COLORS, BG, P(i) - 40); break;
-		  case 49:	SET_ATTR(COLORS, BG, TEMU_SCREEN_BG_DEFAULT); break;
-		  case 51:	SET_ATTR(ATTR, FRAME, 1); break;
-		  case 52:	SET_ATTR(ATTR, FRAME, 2); break;
-		  case 53:	SET_ATTR(ATTR, OVERLINE, 1); break;
-		  case 54:	SET_ATTR(ATTR, FRAME, 0); break;
-		  case 55:	SET_ATTR(ATTR, OVERLINE, 0); break;
+		  case 1:	ATTR.bold = 1; break;
+		  case 2:	ATTR.bold = 2; break;
+		  case 3:	ATTR.italic = 1; break;
+		  case 4:	ATTR.underline = 1; break;
+		  case 5:	ATTR.blink = 1; break;
+		  case 6:	ATTR.blink = 2; break;
+		  case 7:	ATTR.negative = 1; break;
+		  case 8:	ATTR.hidden = 1; break;
+		  case 9:	ATTR.overstrike = 1; break;
+		  case 10 ... 19: ATTR.font = P(i) - 10; break;
+		  case 20:	ATTR.italic = 2; break;
+		  case 21:	ATTR.underline = 2; break;
+		  case 22:	ATTR.bold = 0; break;
+		  case 23:	ATTR.italic = 0; break;
+		  case 24:	ATTR.underline = 0; break;
+		  case 25:	ATTR.blink = 0; break;
+		  case 27:	ATTR.negative = 0; break;
+		  case 28:	ATTR.hidden = 0; break;
+		  case 29:	ATTR.overstrike = 0; break;
+		  case 30 ... 37: ATTR.fg = P(i) - 30; break;
+		  case 39:	ATTR.fg = TEMU_SCREEN_FG_DEFAULT; break;
+		  case 40 ... 47: ATTR.bg = P(i) - 40; break;
+		  case 49:	ATTR.bg = TEMU_SCREEN_BG_DEFAULT; break;
+		  case 51:	ATTR.frame = 1; break;
+		  case 52:	ATTR.frame = 2; break;
+		  case 53:	ATTR.overline = 1; break;
+		  case 54:	ATTR.frame = 0; break;
+		  case 55:	ATTR.overline = 0; break;
 		  /* XTerm colors. */
-		  case 90 ... 97: SET_ATTR(COLORS, FG, P(i) - 90 + 8); break;
-		  case 100 ... 107: SET_ATTR(COLORS, BG, P(i) - 100 + 8); break;
+		  case 90 ... 97: ATTR.fg = P(i) - 90 + 8; break;
+		  case 100 ... 107: ATTR.bg = P(i) - 100 + 8; break;
 		  case 38:
 			if ((i + 2) <= S->parms) {
 				PARM_DEF(i + 1, 0);
 				PARM_DEF(i + 2, 0);
 				if (P(i + 1) == 5) {
-					SET_ATTR(COLORS, FG, P(i + 2));
+					ATTR.fg = P(i + 2);
 					i += 2;
 					break;
 				}
@@ -2623,7 +2628,7 @@ static void emul_SGR(TemuEmul *S)
 				PARM_DEF(i + 1, 0);
 				PARM_DEF(i + 2, 0);
 				if (P(i + 1) == 5) {
-					SET_ATTR(COLORS, BG, P(i + 2));
+					ATTR.bg = P(i + 2);
 					i += 2;
 					break;
 				}
@@ -2637,33 +2642,36 @@ static void emul_SGR(TemuEmul *S)
 		}
 	}
 	
-	ECELL.attr = 0;
-	ECELL.colors = COLORS;
+	ATTR_CLEAR(&ECELL.attr);
 }
 
 static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 {
+	temu_line_attr_t lattr;
 	temu_cell_t cell;
 	gint written;
 
-	cell.glyph = glyph;
+	cell.ch.glyph = glyph;
 	cell.attr = ATTR;
-	cell.colors = COLORS;
-	SET_ATTR(cell.attr, WIDE, g_unichar_iswide(cell.glyph));
+	cell.attr.wide = g_unichar_iswide(cell.ch.glyph);
 
 	if (S->o_IRM) {
-		emul_ICH(S, 1 + GET_ATTR(cell.attr, WIDE));
-		SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 0);
+		emul_ICH(S, 1 + cell.attr.wide);
+		lattr = *temu_screen_get_line_attr(T, S->cursor_y);
+		lattr.wrapped = 0;
+		temu_screen_set_line_attr(T, S->cursor_y, &lattr);
 	}
 
 	if (S->o_DECAWM) {
 		temu_screen_set_cell_text(T, S->cursor_x, S->cursor_y, &cell, 1, &written);
 		if (written <= 0) {
-			SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 1);
+			lattr = *temu_screen_get_line_attr(T, S->cursor_y);
+			lattr.wrapped = 1;
+			temu_screen_set_line_attr(T, S->cursor_y, &lattr);
 
 			emul_CR(S); emul_IND(S);
 			if (S->o_IRM)
-				emul_ICH(S, 1 + GET_ATTR(cell.attr, WIDE));
+				emul_ICH(S, 1 + cell.attr.wide);
 			temu_screen_set_cell_text(T, S->cursor_x, S->cursor_y, &cell, 1, NULL);
 		}
 	} else {
@@ -2671,10 +2679,13 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 		temu_screen_set_cell_text(T, S->cursor_x, S->cursor_y, &cell, 1, NULL);
 	}
 
-	S->cursor_x += 1 + GET_ATTR(cell.attr, WIDE);
+	S->cursor_x += 1 + cell.attr.wide;
 
-	if (S->cursor_x >= WIDTH)
-		SET_LINE_ATTR(T, S->cursor_y, LINE_WRAPPED, 0);
+	if (S->cursor_x >= WIDTH) {
+		lattr = *temu_screen_get_line_attr(T, S->cursor_y);
+		lattr.wrapped = 0;
+		temu_screen_set_line_attr(T, S->cursor_y, &lattr);
+	}
 
 	emul_cursor_cleared(S);
 }

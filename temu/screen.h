@@ -8,6 +8,7 @@ G_BEGIN_DECLS
 #define G_UNICHAR_UNKNOWN_GLYPH	((gunichar)0xfffd)
 
 #define TEMU_SCREEN_MAX_COLORS	257
+#define TEMU_SCREEN_COLOR_BITS	9
 #define TEMU_SCREEN_FG_DEFAULT	256
 #define TEMU_SCREEN_BG_DEFAULT	256
 
@@ -16,79 +17,51 @@ typedef struct _TemuScreen		TemuScreen;
 
 typedef struct _temu_cell temu_cell_t;
 typedef gunichar temu_char_t;
-typedef guint temu_attr_t;
+typedef struct temu_attr temu_attr_t;
+typedef struct temu_line_attr temu_line_attr_t;
+typedef struct temu_scr_attr temu_scr_attr_t;
 
-/* Attribute compression, since there are so many tri-state attributes */
-#define GET_ATTR(attr,PREFIX) (((attr) / A_##PREFIX##_DIV) % A_##PREFIX##_MOD)
-#define GET_ATTR_BASE(attr,base)	((attr) % A_##base##_DIV)
-#define SET_ATTR(attr,PREFIX,val) ((attr) = (attr) \
-			- ((attr) % (A_##PREFIX##_DIV * A_##PREFIX##_MOD)) \
-			+ ((attr) % (A_##PREFIX##_DIV)) + ((val) * A_##PREFIX##_DIV))
+struct temu_attr {
+	guint fg:TEMU_SCREEN_COLOR_BITS;
+	guint bg:TEMU_SCREEN_COLOR_BITS;
 
-#define GET_LINE_ATTR(screen,line,PREFIX) \
-		GET_ATTR(temu_screen_get_line_attr(screen, line), PREFIX)
-#define SET_LINE_ATTR(screen,line,PREFIX,val) do {			\
-		guint _attr = temu_screen_get_line_attr(screen, line);	\
-		SET_ATTR(_attr, PREFIX, (val));				\
-		temu_screen_set_line_attr(screen, line, _attr);		\
-	} while(0)
+	guint cursor:1;
+	guint selected:1;
 
-#define GET_SCREEN_ATTR(screen,PREFIX) \
-		GET_ATTR(temu_screen_get_screen_attr(screen), PREFIX)
-#define SET_SCREEN_ATTR(screen,PREFIX,val) do {				\
-		guint _attr = temu_screen_get_screen_attr(screen);	\
-		SET_ATTR(_attr, PREFIX, (val));				\
-		temu_screen_set_screen_attr(screen, _attr);		\
-	} while(0)
+	guint negative:1;
+	guint hidden:1;
+	guint overstrike:1;
+	guint overline:1;
 
-#define ATTR1(NAME,MOD)		A_##NAME##_DIV = 1, A_##NAME##_MOD = MOD
-#define ATTR(NAME,MOD,PREV)	A_##NAME##_DIV = (A_##PREV##_DIV * A_##PREV##_MOD), A_##NAME##_MOD = MOD
-enum {
-	ATTR1(FG,		TEMU_SCREEN_MAX_COLORS),
-	ATTR(BG,		TEMU_SCREEN_MAX_COLORS,	FG),
-};
-enum {
-	ATTR1(CURSOR,		2),
-	ATTR(SELECTED,		2,			CURSOR),
-	ATTR(NEGATIVE,		2,			SELECTED),
-	ATTR(HIDDEN,		2,			NEGATIVE),
-	ATTR(OVERSTRIKE,	2,			HIDDEN),
-	ATTR(OVERLINE,		2,			OVERSTRIKE),
-	ATTR(WIDE,		4,			OVERLINE),
-	ATTR(BOLD,		3,			WIDE),
-	ATTR(UNDERLINE,		3,			BOLD),
-	ATTR(BLINK,		3,			UNDERLINE),
-	ATTR(FRAME,		3,			BLINK),
-	ATTR(ITALIC,		3,			FRAME),
-	ATTR(FONT,		10,			ITALIC),
+	guint wide:1;
+	guint extended:1;	/* use offset to UCS-4 string */
 
-	ATTR(PRIVATE,		1,			ITALIC)
+	guint bold:2;		/* 0: normal, 1: bold, 2: dim */
+	guint underline:2;	/* 0: none, 1: underline, 2: double underline */
+
+	guint blink:2;		/* 0: static, 1: slow blink, 2: fast blink */
+	guint frame:2;		/* 0: none, 1: box, 2: circle */
+	guint italic:2;		/* 0: normal, 1: italic, 2: gothic */
+	guint font:4;		/* 0-9: font number to use */
 };
 
-enum {
-	ATTR1(LINE_WIDE,	2),
-	ATTR(LINE_DHL,		3,			LINE_WIDE),
-	ATTR(LINE_UPDATE,	1,			LINE_DHL),
-
-	ATTR(LINE_WRAPPED,	2,			LINE_UPDATE),
-	ATTR(LINE_SELECTED,	2,			LINE_WRAPPED),
-
-	ATTR(LINE_PRIVATE,	1,			LINE_SELECTED)
+struct temu_line_attr {
+	guint selected:1;	/* there are selected characters in the line */
+	guint wide:1;
+	guint dhl:2;		/* 0: not double-height, 1: top half, 2: bottom half */
+	guint wrapped:1;	/* line wrapped at the end */
 };
 
-enum {
-	ATTR1(SCREEN_NEGATIVE,		2),
-	ATTR(SCREEN_UPDATE,	1,			SCREEN_NEGATIVE),
-
-	ATTR(SCREEN_PRIVATE,	1,			SCREEN_UPDATE)
+struct temu_scr_attr {
+	guint negative:1;
 };
-#undef ATTR
-#undef ATTR1
 
 struct _temu_cell {
-	temu_char_t glyph;
+	struct {
+		temu_char_t glyph;
+		guint32 offset;
+	} ch;
 	temu_attr_t attr;
-	temu_attr_t colors;
 };
 
 struct _TemuScreen {
@@ -145,11 +118,11 @@ const temu_cell_t *temu_screen_get_cell		(TemuScreen *screen, gint x, gint y);
 void		temu_screen_set_cell		(TemuScreen *screen, gint x, gint y, const temu_cell_t *cell);
 
 /* global/line attributes */
-void		temu_screen_set_screen_attr	(TemuScreen *screen, guint attr);
-guint		temu_screen_get_screen_attr	(TemuScreen *screen);
+void		temu_screen_set_screen_attr	(TemuScreen *screen, temu_scr_attr_t *attr);
+temu_scr_attr_t	*temu_screen_get_screen_attr	(TemuScreen *screen);
 
-void		temu_screen_set_line_attr	(TemuScreen *screen, gint line, guint attr);
-guint		temu_screen_get_line_attr	(TemuScreen *screen, gint line);
+void		temu_screen_set_line_attr	(TemuScreen *screen, gint line, temu_line_attr_t *attr);
+temu_line_attr_t	*temu_screen_get_line_attr	(TemuScreen *screen, gint line);
 
 /* cell to fill resizes with */
 void		temu_screen_set_resize_cell	(TemuScreen *screen, const temu_cell_t *cell);

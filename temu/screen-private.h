@@ -20,8 +20,8 @@ struct _TScreenMove {
 };
 
 struct _TScreenLine {
-	guint attr;
-	gint len;
+	temu_line_attr_t attr;
+	gint len;	/* before newline */
 	temu_cell_t *c;
 };
 
@@ -38,7 +38,6 @@ struct _TemuScreenPrivate {
 	TGlyphCache *gcache;
 	gint font_ascent;
 
-
 	gint width, height;
 	gint visible_height;
 
@@ -51,7 +50,7 @@ struct _TemuScreenPrivate {
 	gint clicks;
 	GTimeVal last_click;
 
-	guint screen_attr;
+	temu_scr_attr_t screen_attr;
 	TScreenLine *lines;
 
 	temu_cell_t clear_cell, resize_cell;

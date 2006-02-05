@@ -70,34 +70,34 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 	return;
 }
 
-static void temu_screen_fg_bg(TemuScreen *screen, temu_attr_t attr, temu_attr_t colors, gint *fg, gint *bg)
+static void temu_screen_fg_bg(TemuScreen *screen, temu_attr_t attr, gint *fg, gint *bg)
 {
 	TemuScreenPrivate *priv = screen->priv;
 
-	if (GET_ATTR(attr, NEGATIVE) ^ GET_ATTR(priv->screen_attr, SCREEN_NEGATIVE)) {
-		*fg = GET_ATTR(colors, BG);
+	if (attr.negative ^ priv->screen_attr.negative) {
+		*fg = attr.bg;
 		if (*fg == TEMU_SCREEN_BG_DEFAULT) *fg = 0;
-		*bg = GET_ATTR(colors, FG);
+		*bg = attr.fg;
 		if (*bg == TEMU_SCREEN_FG_DEFAULT) *bg = 7;
 	} else {
-		*fg = GET_ATTR(colors, FG);
+		*fg = attr.fg;
 		if (*fg == TEMU_SCREEN_FG_DEFAULT) *fg = 7;
-		*bg = GET_ATTR(colors, BG);
+		*bg = attr.bg;
 		if (*bg == TEMU_SCREEN_BG_DEFAULT) *bg = 0;
 	}
 
-	if (GET_ATTR(attr, BOLD) && *fg < 8) *fg |= 0x8;
-	if (GET_ATTR(attr, BLINK) && *bg < 8) *bg |= 0x8;
+	if (attr.bold && *fg < 8) *fg |= 0x8;
+	if (attr.blink && *bg < 8) *bg |= 0x8;
 
-	if (GET_ATTR(attr, SELECTED)) {
-		if (GET_ATTR(attr, CURSOR)) {
+	if (attr.selected) {
+		if (attr.cursor) {
 			if (*bg != 15)	{ *fg = 0; *bg = 15; }
 			else		{ *fg = 15; *bg = 7; }
 		} else {
 			if (*bg != 7)	{ *fg = 0; *bg = 7; }
 			else		{ *fg = 7; *bg = 8; }
 		}
-	} else if (GET_ATTR(attr, CURSOR)) {
+	} else if (attr.cursor) {
 		if (*bg != 7)	{ *fg = 0; *bg = 7; }
 		else		{ *fg = 0; *bg = 15; }
 	}
@@ -111,7 +111,7 @@ static void temu_screen_render_line_bg(TemuScreen *screen, gint x, gint y, const
 	gint fg, bg;
 	gint last_bg;
 
-	temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
+	temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
 	for (;;) {
 		w = 0;
 		last_bg = bg;
@@ -120,7 +120,7 @@ static void temu_screen_render_line_bg(TemuScreen *screen, gint x, gint y, const
 			if (!--count)
 				break;
 
-			temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
+			temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
 
 			if (bg != last_bg)
 				break;
@@ -149,7 +149,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 
 	/* TODO: Italics! */
 
-	if (GET_ATTR(cell->attr, UNDERLINE)) {
+	if (cell->attr.underline) {
 		gdk_draw_line(
 			priv->pixmap,
 			priv->gc,
@@ -159,7 +159,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 			y + gfi->y_offset + 1
 		);
 
-		if (GET_ATTR(cell->attr, UNDERLINE) >= 2)
+		if (cell->attr.underline >= 2)
 		gdk_draw_line(
 			priv->pixmap,
 			priv->gc,
@@ -170,7 +170,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 		);
 	}
 
-	if (GET_ATTR(cell->attr, OVERLINE)) {
+	if (cell->attr.overline) {
 		gdk_draw_line(
 			priv->pixmap,
 			priv->gc,
@@ -181,7 +181,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 		);
 	}
 
-	if (GET_ATTR(cell->attr, OVERSTRIKE)) {
+	if (cell->attr.overstrike) {
 		gdk_draw_line(
 			priv->pixmap,
 			priv->gc,
@@ -192,7 +192,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 		);
 	}
 
-	if (GET_ATTR(cell->attr, FRAME) == 1) {
+	if (cell->attr.frame == 1) {
 		gdk_draw_rectangle(
 			priv->pixmap,
 			priv->gc,
@@ -202,7 +202,7 @@ static void temu_screen_render_char_effects(TemuScreen *screen, gint x, gint y, 
 			screen->font_width - 1,
 			screen->font_height - 1
 		);
-	} else if (GET_ATTR(cell->attr, FRAME) == 2) {
+	} else if (cell->attr.frame == 2) {
 		gdk_draw_arc(
 			priv->pixmap,
 			priv->gc,
@@ -229,18 +229,18 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 	gint fg, bg;
 	gint last_fg;
 
-	temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
+	temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
 	for (;;) {
 		w = 0;
 		last_fg = fg;
 		for (;;) {
 			gunichar glyph;
 
-			glyph = cell->glyph;
+			glyph = cell->ch.glyph;
 			if (!g_unichar_isprint(glyph))
-				glyph = 0xFFFD;
+				glyph = G_UNICHAR_UNKNOWN_GLYPH;
 
-			if (!GET_ATTR(cell->attr, HIDDEN)) {
+			if (!cell->attr.hidden) {
 				gfi = glyph_cache_get_info(priv->gcache, glyph);
 
 				glyphs[w].font = gfi->font;
@@ -258,7 +258,7 @@ static void temu_screen_render_line_text(TemuScreen *screen, gint x, gint y, con
 			if (!--count)
 				break;
 
-			temu_screen_fg_bg(screen, cell->attr, cell->colors, &fg, &bg);
+			temu_screen_fg_bg(screen, cell->attr, &fg, &bg);
 
 			if (fg != last_fg)
 				break;
@@ -325,7 +325,7 @@ void temu_screen_render_text_xft(TemuScreen *screen, GdkRegion *region)
 			gint x, w;
 
 			x = x1;
-			if (x1 > 0 && GET_ATTR(priv->lines[mod_y].c[x1-1].attr, WIDE))
+			if (x1 > 0 && priv->lines[mod_y].c[x1-1].attr.wide)
 				x--;
 
 			w = x2 - x1 + 1;
