@@ -740,8 +740,6 @@ static gboolean temu_screen_button_motion_event(GtkWidget *widget, GdkEventMotio
 
 static gboolean temu_screen_button_release_event(GtkWidget *widget, GdkEventButton *event)
 {
-	TemuScreenPrivate *priv = TEMU_SCREEN(widget)->priv;
-//	priv->select_x = priv->select_y = -1;
 	temu_screen_show_pointer (TEMU_SCREEN(widget));
 	return TRUE;
 }

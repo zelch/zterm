@@ -851,7 +851,7 @@ void add_epsilon_edge(struct nfa_node* source, struct nfa_node* dest) {
    finite automaton) which the matching algorithm uses. */
 /* TODO: Make sure there are no epsilon-cycles */
 struct nfa regexp_to_nfa(struct Expression* expr) {
-    struct nfa result;
+    struct nfa result = { 0 };
     if (expr->typecode != LITERAL_STRING_EXPRESSION_TYPE) {
 	result.start_node  = new_nfa_node();
 	result.accept_node = new_nfa_node();
