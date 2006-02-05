@@ -18,13 +18,15 @@ struct _TemuTerminalPrivate {
 };
 
 enum {
-	PROP_FNORD = 0, /* gtk wants property_id to be > 0 */
+	PROP_0, /* gtk wants property_id to be > 0 */
 	PROP_WINDOW_TITLE,
 	PROP_ICON_TITLE
 };
 
 enum {
-	SIG_TITLE_CHANGED,
+	SIG_WINDOW_TITLE_CHANGED,
+	SIG_ICON_TITLE_CHANGED,
+	SIG_CHILD_DIED,
 	SIG_LAST
 };
 
@@ -89,35 +91,45 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 		)
 	);
 	
-	signals[SIG_TITLE_CHANGED] = g_signal_new(
-		"title_changed",
+	signals[SIG_WINDOW_TITLE_CHANGED] = g_signal_new(
+		"window_title_changed",
 		G_OBJECT_CLASS_TYPE(gobject_class),
 		G_SIGNAL_RUN_FIRST,
-		G_STRUCT_OFFSET(TemuTerminalClass, title_changed),
+		G_STRUCT_OFFSET(TemuTerminalClass, window_title_changed),
 		NULL,
 		NULL,
-		g_cclosure_marshal_VOID__VOID, /* FIXME: need to write a marshaler */
+		g_cclosure_marshal_VOID__VOID,
 		G_TYPE_NONE,
-		0/*,
-		G_TYPE_INT, G_TYPE_STRING */
+		0
 	);
-		
-	
+	signals[SIG_ICON_TITLE_CHANGED] = g_signal_new(
+		"icon_title_changed",
+		G_OBJECT_CLASS_TYPE(gobject_class),
+		G_SIGNAL_RUN_FIRST,
+		G_STRUCT_OFFSET(TemuTerminalClass, icon_title_changed),
+		NULL,
+		NULL,
+		g_cclosure_marshal_VOID__VOID,
+		G_TYPE_NONE,
+		0
+	);
+	signals[SIG_CHILD_DIED] = g_signal_new (
+		"child_died",
+		G_TYPE_FROM_CLASS(gobject_class),
+		G_SIGNAL_RUN_FIRST,
+		G_STRUCT_OFFSET(TemuTerminalClass, child_died),
+		NULL,
+		NULL,
+		g_cclosure_marshal_VOID__VOID,
+		G_TYPE_NONE,
+		0
+	);
+
 	widget_class->realize = temu_terminal_realize;
 	widget_class->unrealize = temu_terminal_unrealize;
 	widget_class->size_allocate = temu_terminal_size_allocate;
 	widget_class->key_press_event = temu_terminal_key_press_event;
 	widget_class->button_press_event = temu_terminal_button_press_event;
-
-	g_signal_new ("child_died",
-			G_TYPE_FROM_CLASS (gobject_class),
-			G_SIGNAL_RUN_FIRST,
-			G_STRUCT_OFFSET (TemuTerminalClass, child_died),
-			NULL,
-			NULL,
-			g_cclosure_marshal_VOID__VOID,
-			G_TYPE_NONE,
-			0);
 }
 
 GType temu_terminal_get_type(void)
@@ -244,10 +256,10 @@ static void temu_terminal_set_property(GObject *object, guint id, const GValue *
 
 	switch (id) {
 		case PROP_WINDOW_TITLE:
-			temu_terminal_set_title(terminal, 0, g_value_get_string(value));
+			temu_terminal_set_window_title(terminal, g_value_get_string(value));
 			break;
 		case PROP_ICON_TITLE:
-			temu_terminal_set_title(terminal, 1, g_value_get_string(value));
+			temu_terminal_set_icon_title(terminal, g_value_get_string(value));
 			break;
 	}
 }
@@ -424,7 +436,7 @@ static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond
 		priv->pty = NULL;
 	}
 
-	g_signal_emit_by_name (terminal, "child_died", 0);
+	g_signal_emit(terminal, signals[SIG_CHILD_DIED], 0);
 	return TRUE;
 }
 
@@ -483,28 +495,24 @@ void temu_terminal_execve(TemuTerminal *terminal, const char *file, char *const 
 		temu_screen_get_rows(screen));
 }
 
-/* bleah */
-void temu_terminal_set_title(TemuTerminal *terminal, int which, const gchar *title)
+void temu_terminal_set_window_title(TemuTerminal *terminal, const gchar *title)
 {
-	gchar **tbuf;
+	if (terminal->window_title != NULL) {
+		g_free(terminal->window_title);
+	}
 
-	/* enum? */	
-	if (which == 0)
-		tbuf = &terminal->window_title;
-	else if (which == 1)
-		tbuf = &terminal->icon_title;
-	else
-		return;
-	
-	if (*tbuf != NULL)
-		g_free(*tbuf);
-	
-	
-	if (title)
-		*tbuf = g_strdup(title);
-	else
-		*tbuf = NULL;
+	terminal->window_title = title ? g_strdup(title) : NULL;
 
-	/* FIXME: pass title here */
-	g_signal_emit(terminal, signals[SIG_TITLE_CHANGED], 0);
+	g_signal_emit(terminal, signals[SIG_WINDOW_TITLE_CHANGED], 0);
+}
+
+void temu_terminal_set_icon_title(TemuTerminal *terminal, const gchar *title)
+{
+	if (terminal->icon_title != NULL) {
+		g_free(terminal->icon_title);
+	}
+
+	terminal->icon_title = title ? g_strdup(title) : NULL;
+
+	g_signal_emit(terminal, signals[SIG_ICON_TITLE_CHANGED], 0);
 }

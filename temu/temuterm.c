@@ -52,7 +52,7 @@ temu_reorder (terms_t *terms)
 
 
 static void
-temu_title_changed(TemuTerminal *terminal, gpointer data)
+temu_window_title_changed(TemuTerminal *terminal, gpointer data)
 {
 	tracker_t *tracker = (tracker_t *) data;
 	terms_t *terms = tracker->terms;
@@ -142,7 +142,7 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		tracker->n = n;
 		g_signal_connect_after (GTK_OBJECT (term), "child_died", G_CALLBACK (term_died), tracker);
 		g_signal_connect_after (GTK_OBJECT (term), "destroy", G_CALLBACK (term_destroyed), tracker);
-		g_signal_connect (G_OBJECT(term), "title_changed", G_CALLBACK(temu_title_changed), tracker);
+		g_signal_connect (G_OBJECT(term), "window_title_changed", G_CALLBACK(temu_window_title_changed), tracker);
 
 		if (cmd) {
 			char *argv[] = {

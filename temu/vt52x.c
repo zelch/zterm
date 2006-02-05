@@ -1640,23 +1640,23 @@ static void vt52x_osc(TemuEmul *S)
 
 	switch (mode) {
 	  case 0: if (S->fin) goto ignore;
-		IMPL("(xterm)", "Change Icon Name and Window Title", "partial");
-		/*
-		 * FIXME: this is still very rough, and right now only sets
-		 * the window title.
-		 */
-		temu_terminal_set_title(TEMU_TERMINAL(T), 0, data);
+		IMPL("(xterm)", "Change Icon Name and Window Title", "fully");
+		temu_terminal_set_window_title(TEMU_TERMINAL(T), data);
+		temu_terminal_set_icon_title(TEMU_TERMINAL(T), data);
 		break;
 	  case 1: if (S->fin) goto ignore;
-		NOTIMPL("(xterm)", "Change Icon Name", "probably");
+		IMPL("(xterm)", "Change Icon Name", "fully");
+		temu_terminal_set_icon_title(TEMU_TERMINAL(T), data);
 		break;
 	  case 2:
 		switch (S->fin) {
 		  case 0:
-			NOTIMPL("(xterm)", "Change Window Title", "probably");
+			IMPL("(xterm)", "Change Window Title", "fully");
+			temu_terminal_set_window_title(TEMU_TERMINAL(T), data);
 			break;
 		  case 'L':
-			NOTIMPL("DECSIN", "Set Icon Name", "maybe");
+			IMPL("DECSIN", "Set Icon Name", "fully");
+			temu_terminal_set_icon_title(TEMU_TERMINAL(T), data);
 			break;
 		  default:
 			goto ignore;
@@ -1672,7 +1672,8 @@ static void vt52x_osc(TemuEmul *S)
 		NOTIMPL("(xterm)", "Dynamic colors", "???");
 		break;
 	  case 21:
-		NOTIMPL("DECSWT", "Set Window Title", "maybe");
+		IMPL("DECSWT", "Set Window Title", "fully");
+		temu_terminal_set_window_title(TEMU_TERMINAL(T), data);
 		break;
 	  case 46:
 		NOTIMPL("(xterm)", "Log file", "probably not");

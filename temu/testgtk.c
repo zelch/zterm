@@ -6,6 +6,7 @@
 
 static void testgtk_title_changed(TemuTerminal *, gpointer);
 static gboolean testgtk_destroyed(TemuTerminal *, gpointer);
+static void testgtk_child_died(TemuTerminal *, gpointer);
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -22,8 +23,9 @@ int main(int argc, char *argv[], char *envp[])
 
 	term = temu_terminal_new();
 
-	g_signal_connect(G_OBJECT(term), "title_changed", G_CALLBACK(testgtk_title_changed), window);
+	g_signal_connect(G_OBJECT(term), "window_title_changed", G_CALLBACK(testgtk_title_changed), window);
 	g_signal_connect(G_OBJECT(term), "destroy", G_CALLBACK(testgtk_destroyed), window);
+	g_signal_connect(G_OBJECT(term), "child_died", G_CALLBACK(testgtk_child_died), window);
 
 	gtk_container_add(GTK_CONTAINER(window), term);
 	gtk_widget_realize(term);
@@ -84,4 +86,9 @@ static gboolean testgtk_destroyed (TemuTerminal *term, gpointer data)
 	gtk_main_quit();
 
 	return TRUE;
+}
+
+static void testgtk_child_died(TemuTerminal *term, gpointer data)
+{
+	gtk_main_quit();
 }

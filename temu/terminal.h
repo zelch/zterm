@@ -24,7 +24,8 @@ struct _TemuTerminalClass {
 	TemuScreenClass parent_class;
 
 	/* signal handlers */
-	void (*title_changed)		(TemuTerminal *); /* , int, const gchar *); */
+	void (*window_title_changed)	(TemuTerminal *);
+	void (*icon_title_changed)	(TemuTerminal *);
 	void (*child_died)		(TemuTerminal *);
 };
 
@@ -46,8 +47,9 @@ void		temu_terminal_execve		(TemuTerminal *terminal,
 						 char *const argv[],
 						 char *const envp[]);
 
-void temu_terminal_set_title			(TemuTerminal *terminal,
-						 int which,
+void temu_terminal_set_window_title		(TemuTerminal *terminal,
+						 const gchar *title);
+void temu_terminal_set_icon_title		(TemuTerminal *terminal,
 						 const gchar *title);
 
 G_END_DECLS
