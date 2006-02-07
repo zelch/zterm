@@ -233,7 +233,6 @@ temu_parse_font (terms_t *terms, char **subs)
 void
 temu_parse_config (terms_t *terms)
 {
-	struct regexp *line = regexp_new("(.*?)\n", 0);
 	struct regexp *bind = regexp_new("^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", 0);
 	struct regexp *color = regexp_new("^color:[ \t]+([0-9]+)[ \t]+(.*?)$", 0);
 	struct regexp *font = regexp_new("^font:[ \t]+(.*?)$", 0);
@@ -245,7 +244,7 @@ temu_parse_config (terms_t *terms)
 	int j;
 	char *t1, *t2;
 
-	if (!bind || !line || !color || !font)
+	if (!bind || !color || !font)
 		return;
 
 	f = fopen("/home/warp/.temuterm/config", "r");
