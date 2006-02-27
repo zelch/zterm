@@ -530,18 +530,28 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 			tmp = fy; fy = ty; ty = tmp;
 			count = -count;
 		}
-		count++;
 
 		/* Slurp up whole double-width char at start */
 		if (fx > 0 && priv->lines[fy].c[fx-1].attr.wide) {
-			fx--; count++;
+			fx--;
 		}
 
 		if (clicks == 1 && fx > 0) {
-			while (fx > 0 && !temu_screen_isbreak (screen, priv->lines[fy].c[fx], priv->lines[fy].c[fx - 1])) {
-				fx--; count++;
-			}
+			if (fx < priv->lines[fy].len)
+				while (fx > 0 && !temu_screen_isbreak (screen, priv->lines[fy].c[fx], priv->lines[fy].c[fx - 1]))
+					fx--;
+			else
+				fx = priv->lines[fy].len;
 		}
+
+		if (clicks == 1 && tx < (priv->width-1)) {
+			while (tx < (MIN(priv->width-1, priv->lines[ty].len)) &&
+					!temu_screen_isbreak (screen, priv->lines[ty].c[tx], priv->lines[ty].c[tx + 1]))
+				tx++;
+		}
+
+		count = (ty*priv->width+tx) - (fy*priv->width+fx);
+		count++;
 
 		/* Slurp up the -whole- last line if we're past its end */
 		if (tx >= priv->lines[ty].len) {
@@ -552,12 +562,6 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		if (tx < (priv->width-1) && priv->lines[ty].c[tx].attr.wide)
 			count++;
 
-		if (clicks == 1 && tx < (priv->width-1)) {
-			while (tx < (priv->width-1) &&
-					!temu_screen_isbreak (screen, priv->lines[ty].c[tx], priv->lines[ty].c[tx + 1])) {
-				tx++; count++;
-			}
-		}
 
 
 		p = buffer = g_alloca(
@@ -580,7 +584,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 			x++;
 			if (x >= priv->width) {
 				if (!priv->lines[y].attr.wrapped)
-					*p++ = '\r';
+					*p++ = '\n';
 
 				x = 0;
 				y = (y + 1) % priv->height;
@@ -612,7 +616,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 			x++;
 			if (x >= priv->width) {
 				if (!priv->lines[y].attr.wrapped)
-					*p++ = '\r';
+					*p++ = '\n';
 
 				x = 0;
 				y = (y + 1) % priv->height;

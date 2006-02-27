@@ -394,7 +394,7 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 	TemuTerminalPrivate *priv = terminal->priv;
 	TemuScreenClass *screen_class;
 	GtkClipboard *clipboard;
-	gchar *text;
+	gchar *text, *c;
 
 	temu_screen_show_pointer (TEMU_SCREEN(terminal));
 
@@ -415,6 +415,8 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 
 	text = gtk_clipboard_wait_for_text(clipboard);
 	if (text) {
+		while ((c = g_utf8_strchr(text, -1, '\n')))
+			*c = '\r';
 		g_io_channel_write_chars(
 			priv->pty->master,
 			text, strlen(text),
