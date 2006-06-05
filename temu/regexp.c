@@ -1116,7 +1116,6 @@ struct regexp *regexp_new (char *regex, int flags) {
 
 /* Frees storage associated with regexp object */
 void regexp_free(struct regexp* regexp) {
-    /* destroy_nfa(regexp->nfa); TODO: implement destroy_nfa */
     free(regexp);
 }
 

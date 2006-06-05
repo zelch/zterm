@@ -340,6 +340,16 @@ static void temu_screen_unrealize(GtkWidget *widget)
 		priv->xftdraw = NULL;
 	}
 
+	if (priv->cursor_bar) {
+		gdk_cursor_unref (priv->cursor_bar);
+		priv->cursor_bar = NULL;
+	}
+
+	if (priv->cursor_dot) {
+		gdk_cursor_unref (priv->cursor_dot);
+		priv->cursor_dot = NULL;
+	}
+
 	if (priv->pixmap) {
 		g_object_unref(priv->pixmap);
 		priv->pixmap = NULL;
@@ -381,6 +391,8 @@ static void temu_screen_destroy(GtkObject *object)
 	g_free(priv->lines);
 
 	g_mem_chunk_destroy(priv->moves_chunk);
+	if (priv->update_region)
+	    gdk_region_destroy(priv->update_region);
 
 	/* options */
 	pango_font_description_free(priv->fontdesc);

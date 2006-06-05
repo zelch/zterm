@@ -221,6 +221,7 @@ void temu_pty_destroy(TemuPty *pty)
 	g_source_remove(pty->data_watch);
 	g_source_remove(pty->err_watch);
 	g_io_channel_shutdown(pty->master, TRUE, NULL);
+	g_io_channel_unref(pty->master);
 	g_free(pty);
 }
 

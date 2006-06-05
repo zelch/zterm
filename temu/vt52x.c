@@ -266,6 +266,9 @@ TemuEmul *temu_emul_new(TemuScreen *screen)
 
 void temu_emul_destroy(TemuEmul *emul)
 {
+	if (emul->out)
+		g_free (emul->out);
+
 	g_free(emul);
 }
 
