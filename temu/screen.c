@@ -514,9 +514,9 @@ gboolean temu_screen_isbreak (TemuScreen *screen, temu_cell_t c0, temu_cell_t c1
 void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, gint clicks) {
 	GtkWidget *widget = GTK_WIDGET(screen);
 	TemuScreenPrivate *priv = screen->priv;
-	gint i, count;
+	gint i, count, buf_len;
 	gint x, y;
-	gchar *buffer, *p;
+	gchar *buffer = NULL, *p, *old_p = NULL;
 	GtkClipboard *clipboard;
 
 	g_return_if_fail(fx >= 0 && fx < priv->width && fy >= 0 && fy < priv->visible_height);
@@ -576,19 +576,34 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 
 
 
-		p = buffer = g_alloca(
-				count*6		/* utf-8 chars, overkill alloc :x */
-				+(fy - ty + 1)	/* newlines for non-wrapped lines */
-				+1		/* NUL */
-				);
+		buf_len = count*6		/* utf-8 chars, overkill alloc :x */
+				+(ty - fy + 1)	/* newlines for non-wrapped lines */
+				+1;		/* NUL */
+		p = buffer = calloc(1, buf_len);
 
 		x = fx;
 		y = fy;
 		priv->lines[fy].attr.selected = 1;
 		for (i = 0; i < count; i++) {
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
+			}
+
+			old_p = p;
+
 			if (x < priv->lines[y].len
-					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)) {
+					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)
+					&& g_unichar_validate(priv->lines[y].c[x].ch.glyph)) {
 				p += g_unichar_to_utf8(priv->lines[y].c[x].ch.glyph, p);
+			}
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
 			}
 
 			priv->lines[y].c[x].attr.selected = 1;
@@ -603,24 +618,42 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 				if (count - i)
 					priv->lines[y].attr.selected = 1;
 			}
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
+			}
 		}
 	} else {
-		count = 1;
+		buf_len = 7;
 		for (i = fy; i <= ty; i++) {
-			count += priv->lines[i].len * 6; /* utf-8 chars, overkill alloc. */
-			count += 1; /* Newlines. */
+			buf_len += priv->lines[i].len * 6; /* utf-8 chars, overkill alloc. */
+			buf_len += 1; /* Newlines. */
 		}
-		p = buffer = g_alloca(
-				count
-				);
+		p = buffer = calloc(1, buf_len);
 
 		x = 0;
 		y = fy;
 		while (y <= ty) {
 			priv->lines[y].attr.selected = 1;
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
+			}
+			old_p = p;
 			if (x < priv->lines[y].len
-					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)) {
+					&& (x <= 0 || !priv->lines[y].c[x-1].attr.wide)
+					&& g_unichar_validate(priv->lines[y].c[x].ch.glyph)) {
 				p += g_unichar_to_utf8(priv->lines[y].c[x].ch.glyph, p);
+			}
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
 			}
 
 			priv->lines[y].c[x].attr.selected = 1;
@@ -633,6 +666,12 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 				x = 0;
 				y = (y + 1) % priv->height;
 			}
+			if (p + 6 >= buffer + buf_len) {
+				fprintf(stderr, "Overflow: p: %p, buffer: %p, p - buffer: %ld, buf_len: %d\n", p, buffer, p - buffer, buf_len);
+				fprintf(stderr, "old_p: %p, buffer: %p, old_p - buffer: %ld, buf_len: %d\n", old_p, buffer, old_p - buffer, buf_len);
+				fprintf(stderr, "LINE: %d\n", __LINE__);
+				break;	/* FIXME: Should be impossible, overflow. */
+			}
 		}
 	}
 
@@ -644,6 +683,9 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY); /* wing it */
 	}
 	gtk_clipboard_set_text(clipboard, buffer, p - buffer);
+
+	if (buffer)
+	    free(buffer);
 
 	priv->selected = TRUE;
 
