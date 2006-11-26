@@ -1,4 +1,4 @@
-
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -7,6 +7,7 @@
 #include <termios.h>
 
 #include <glib.h>
+#include <glib/gslist.h>
 
 #include "pty.h"
 
@@ -179,6 +180,8 @@ init_term_with_defaults(struct termios* term)
     return term;
 }
 
+static GSList	*pty_fds;
+
 TemuPty *temu_pty_new_execve(
 	GIOFunc data_func, GIOFunc err_func, gpointer data,
 	const char *path, char *const argv[], char *const envp[]
@@ -189,6 +192,7 @@ TemuPty *temu_pty_new_execve(
 	int master;
 	GIOFlags flags;
 	struct termios ti;
+	GSList *fds;
 
 	init_term_with_defaults(&ti);
 
@@ -197,11 +201,16 @@ TemuPty *temu_pty_new_execve(
 		return NULL;
 
 	if (!pid) {
+		for (fds = pty_fds; fds; fds = g_slist_next(fds))
+			close(GPOINTER_TO_INT(fds->data));
+
 		execve(path, argv, envp);
 		exit(127);
 	}
 
 	pty = g_new(TemuPty, 1);
+
+	pty_fds = g_slist_prepend(pty_fds, GINT_TO_POINTER(master));
 
 	/* Whoever decided to screw with the data by _DEFAULT_ loses. */
 	pty->master = g_io_channel_unix_new(master);
@@ -218,6 +227,7 @@ TemuPty *temu_pty_new_execve(
 
 void temu_pty_destroy(TemuPty *pty)
 {
+	pty_fds = g_slist_remove(pty_fds, GINT_TO_POINTER(g_io_channel_unix_get_fd(pty->master)));
 	g_source_remove(pty->data_watch);
 	g_source_remove(pty->err_watch);
 	g_io_channel_shutdown(pty->master, TRUE, NULL);
