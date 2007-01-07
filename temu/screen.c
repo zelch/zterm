@@ -529,6 +529,9 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		gint tmp;
 		tmp = fx; fx = tx; tx = tmp;
 		tmp = fy; fy = ty; ty = tmp;
+	} else if (ty == fy && tx < fx) {
+		gint tmp;
+		tmp = fx; fx = tx; tx = tmp;
 	}
 
 	lines = ty - fy + 1;
