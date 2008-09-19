@@ -17,6 +17,8 @@ struct _TemuTerminal {
 	gchar *icon_title;
 
 	TemuTerminalPrivate *priv;
+
+	void *client_data;
 };
 
 typedef struct _TemuTerminalClass	TemuTerminalClass;

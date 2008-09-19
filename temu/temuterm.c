@@ -1,3 +1,8 @@
+#define _GNU_SOURCE
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,15 +57,22 @@ temu_reorder (terms_t *terms)
 
 
 static void
+temu_window_title_change (TemuTerminal *terminal, GtkWidget *window, int n)
+{
+	gchar *new_str;
+
+	asprintf(&new_str, "%s (%d)", terminal->window_title, n);
+	gtk_window_set_title(GTK_WINDOW(window), new_str);
+	free (new_str);
+}
+
+static void
 temu_window_title_changed(TemuTerminal *terminal, gpointer data)
 {
 	tracker_t *tracker = (tracker_t *) data;
 	terms_t *terms = tracker->terms;
-	GValue value = { 0 };
 
-	g_value_init(&value, G_TYPE_STRING);
-	g_object_get_property(G_OBJECT(terminal), "window_title", &value);
-	gtk_window_set_title(GTK_WINDOW(terms->window), g_value_get_string(&value));
+	temu_window_title_change (terminal, terms->window, tracker->n);
 }
 
 static gboolean
@@ -68,12 +80,23 @@ term_died (TemuTerminal *term, gpointer user_data)
 {
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
+	int status, n;
+
+	errno = 0;
+
+	waitpid (-1, &status, WNOHANG);
 
 	gtk_notebook_prev_page (terms->notebook);
 	gtk_widget_hide (GTK_WIDGET(term));
 	gtk_container_remove (GTK_CONTAINER(terms->notebook), GTK_WIDGET(term));
 	terms->active[tracker->n] = NULL;
 	gtk_widget_destroy (GTK_WIDGET(term));
+
+	n = gtk_notebook_get_current_page (terms->notebook);
+	if (n >= 0) {
+		term = TEMU_TERMINAL(gtk_notebook_get_nth_page (terms->notebook, n));
+		temu_window_title_changed (term, term->client_data);
+	}
 
 	return TRUE;
 }
@@ -83,7 +106,6 @@ term_destroyed (TemuTerminal *term, gpointer user_data)
 {
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
-
 
 	g_object_unref (G_OBJECT(term));
 
@@ -108,6 +130,7 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		GtkWidget *term, *label;
 		GdkGeometry geom = { 0 };
 		GdkWindowHints hints = 0;
+		TemuTerminal *terminal;
 		char str[32];
 		tracker_t *tracker;
 
@@ -115,6 +138,10 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		g_object_ref (G_OBJECT(term));
 		gtk_object_sink (GTK_OBJECT(term));
 		gtk_widget_show(term);
+
+		terminal = TEMU_TERMINAL(term);
+		if (!terminal->window_title)
+			terminal->window_title = g_strdup("temuterm");
 
 		snprintf(str, sizeof(str), "Terminal %d", n);
 		label = gtk_label_new(str);
@@ -134,12 +161,15 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		temu_screen_get_base_geometry_hints(TEMU_SCREEN(term), &geom, &hints);
 		gtk_window_set_geometry_hints (GTK_WINDOW(terms->window), GTK_WIDGET(term), &geom, hints);
 
+		unsetenv ("TERM");
+		unsetenv ("COLORTERM");
 		setenv("TERM", "temu", 1);
 		setenv("COLORTERM", "temu", 1);
 
 		tracker = calloc(1, sizeof (tracker_t));
 		tracker->terms = terms;
 		tracker->n = n;
+		terminal->client_data = tracker;
 		g_signal_connect_after (GTK_OBJECT (term), "child_died", G_CALLBACK (term_died), tracker);
 		g_signal_connect_after (GTK_OBJECT (term), "destroy", G_CALLBACK (term_destroyed), tracker);
 		g_signal_connect (G_OBJECT(term), "window_title_changed", G_CALLBACK(temu_window_title_changed), tracker);
@@ -151,14 +181,14 @@ term_switch (terms_t *terms, gint n, char *cmd)
 				cmd,
 				NULL
 			};
-			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, terms->envp);
+			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, environ);
 		} else {
 			char *argv[] = {
 				getenv("SHELL"), // one good temp. hack deserves another
 				"--login",
 				NULL
 			};
-			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, terms->envp);
+			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, environ);
 		}
 
 		terms->active[n] = term;
@@ -168,6 +198,7 @@ term_switch (terms_t *terms, gint n, char *cmd)
 	}
 
 	gtk_notebook_set_current_page (terms->notebook, gtk_notebook_page_num (terms->notebook, terms->active[n]));
+	temu_window_title_change (TEMU_TERMINAL(terms->active[n]), terms->window, n);
 }
 
 static gboolean
@@ -180,9 +211,11 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 	state &= 0xED;
 
 	for (cur = terms->keys; cur; cur = cur->next) {
-		if ((state == cur->state) && (event->keyval >= cur->key_min) && (event->keyval <= cur->key_max)) {
-			term_switch (terms, cur->base + (event->keyval - cur->key_min), cur->cmd);
-			return TRUE;
+		if ((event->keyval >= cur->key_min) && (event->keyval <= cur->key_max)) {
+			if (state == cur->state) {
+				term_switch (terms, cur->base + (event->keyval - cur->key_min), cur->cmd);
+				return TRUE;
+			}
 		}
 	}
 
