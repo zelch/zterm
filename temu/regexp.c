@@ -963,11 +963,23 @@ struct nfa regexp_to_nfa(struct Expression* expr) {
 
 	if (str[0] == 0) {
 	    /* Must have separate start and end state */
+	    if (result.start_node) {
+		free (result.start_node);
+		result.start_node = NULL;
+	    }
 	    result.start_node = new_nfa_node();
+	    if (result.accept_node) {
+		free (result.accept_node);
+		result.accept_node = NULL;
+	    }
 	    result.accept_node = new_nfa_node();
 	    result.start_node->epsilon_next1 = result.accept_node;
 	} else {
 	    struct nfa_node* current_node = new_nfa_node();
+	    if (result.start_node) {
+		free (result.start_node);
+		result.start_node = NULL;
+	    };
 	    result.start_node = current_node;
 	    for(i=0; str[i] != 0; i++) {
 		struct nfa_node* next_node = new_nfa_node();
@@ -1116,6 +1128,14 @@ struct regexp *regexp_new (char *regex, int flags) {
 
 /* Frees storage associated with regexp object */
 void regexp_free(struct regexp* regexp) {
+    if (regexp->nfa.start_node) {
+	free (regexp->nfa.start_node);
+	regexp->nfa.start_node = NULL;
+    }
+    if (regexp->nfa.accept_node) {
+	free (regexp->nfa.accept_node);
+	regexp->nfa.accept_node = NULL;
+    }
     free(regexp);
 }
 
