@@ -190,6 +190,7 @@ static void emul_tab_clear(TemuEmul *S, gint col);
 static void emul_tab_next(TemuEmul *S);
 static void emul_tab_prev(TemuEmul *S);
 
+static void emul_check_cursor_y(TemuEmul *S);
 static void emul_move_cursor(TemuEmul *S, gint x, gint y);
 static void emul_scroll(TemuEmul *S, gint rows);
 
