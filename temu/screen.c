@@ -75,7 +75,7 @@ GType temu_screen_get_type(void)
 
 		(GBaseInitFunc)NULL,
 		(GBaseFinalizeFunc)NULL,
-		
+
 		(GClassInitFunc)temu_screen_class_init,
 		(GClassFinalizeFunc)NULL,
 		(gconstpointer)NULL,
@@ -554,7 +554,7 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 	if (fx > priv->lines[fy].len) {
 		fx = priv->lines[fy].len;
 	}
-	
+
 	/* Slurp up whole double-width char at start */
 	if (fx > 0 && priv->lines[fy].c[fx-1].attr.wide) {
 		fx--;
@@ -606,8 +606,20 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 
 		x++;
 		if (x >= priv->width) {
-			if (!priv->lines[y].attr.wrapped)
-				*p++ = '\n';
+			/*
+			 * Behold, great evil.
+			 *
+			 * Don't copy trailing spaces of a line, at least not if we copy
+			 * the newline.
+			 *
+			 * This really should happen above in the whole end of line check
+			 * stuff, but I can't be bothered right now, maybe later.
+			 */
+			if (!priv->lines[y].attr.wrapped) {
+				while (*--p == ' ');
+				*++p = '\n';
+				p++;
+			}
 
 			if (y == ty)
 				break;
