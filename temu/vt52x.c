@@ -2148,8 +2148,6 @@ static void emul_tab_prev(TemuEmul *S)
 
 static void emul_check_cursor_y(TemuEmul *S)
 {
-	emul_cursor_clear(S);
-
 	if (!S->o_DECOM) {
 		if (S->cursor_y < 0) S->cursor_y = 0;
 		else if (S->cursor_y >= HEIGHT) S->cursor_y = HEIGHT - 1;
