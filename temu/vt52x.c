@@ -1984,6 +1984,8 @@ static void emul_cursor_clear(TemuEmul *S)
 	if (S->cursor_redraw)
 		return;
 
+	emul_check_cursor_y (S);
+
 	S->cursor_redraw = TRUE;
 
 	if (S->cursor_x >= WIDTH)
@@ -2003,6 +2005,8 @@ static void emul_cursor_draw(TemuEmul *S)
 
 	if (S->cursor_hide)
 		return;
+
+	emul_check_cursor_y (S);
 
 	if (S->cursor_x >= WIDTH)
 		x = WIDTH - 1;
@@ -2138,6 +2142,22 @@ static void emul_tab_prev(TemuEmul *S)
 
 		substop--;
 		if (substop < 0) { stop--; substop += 8; }
+	}
+}
+
+static void emul_check_cursor_y(TemuEmul *S)
+{
+	emul_cursor_clear(S);
+
+	if (!S->o_DECOM) {
+		if (S->cursor_y < 0) S->cursor_y = 0;
+		else if (S->cursor_y >= HEIGHT) S->cursor_y = HEIGHT - 1;
+	} else {
+		if (S->cursor_y < S->scroll_top) {
+			S->cursor_y = S->scroll_top;
+		} else if (S->cursor_y >= (S->scroll_top + S->scroll_height)) {
+			S->cursor_y = (S->scroll_top + S->scroll_height) - 1;
+		}
 	}
 }
 
@@ -2654,6 +2674,8 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 	temu_line_attr_t lattr;
 	temu_cell_t cell;
 	gint written;
+
+	emul_check_cursor_y (S);
 
 	cell.ch.glyph = glyph;
 	cell.attr = ATTR;
