@@ -2,7 +2,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,7 +60,7 @@ temu_window_title_change (TemuTerminal *terminal, GtkWidget *window, int n)
 {
 	gchar *new_str;
 
-	asprintf(&new_str, "%s (%d)", terminal->window_title, n);
+	asprintf(&new_str, "%s [%d]", terminal->window_title, n);
 	gtk_window_set_title(GTK_WINDOW(window), new_str);
 	free (new_str);
 }
@@ -81,8 +80,6 @@ term_died (TemuTerminal *term, gpointer user_data)
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
 	int status, n;
-
-	errno = 0;
 
 	waitpid (-1, &status, WNOHANG);
 
