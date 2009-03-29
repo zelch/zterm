@@ -588,10 +588,6 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 
 	for (y = fy, x = fx; y != ty || x <= tx; ) {
 		if (!( (p - buffer + 6 + 1) < (buf_len) )) {
-			fprintf(stderr, "%d %d\n",
-				(int)(p - buffer + 6 + 1),
-				(int)(buf_len)
-			);
 			g_assert((p - buffer + 6 + 1) < (buf_len));
 		}
 
@@ -1184,6 +1180,8 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 		gint mod_i = i % priv->height;
 
 		if (x2 >= priv->lines[mod_i].len) {
+			priv->lines[mod_i].attr.wrapped = 0;
+
 			if (shorten)
 				priv->lines[mod_i].len = x;
 			else
