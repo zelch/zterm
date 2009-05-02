@@ -102,7 +102,6 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 	PangoFont *font;
 	PangoGlyph pglyph;
 	PangoRectangle ink, logical;
-	PangoFontMetrics *metrics;
 	gint ascent, descent;
 	gint x_offset;
 	gint nominal_width;
@@ -129,10 +128,8 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 	}
 	pango_font_get_glyph_extents(font, pglyph, &ink, &logical);
 
-	metrics = pango_font_get_metrics(font, cache->lang);
-	ascent = pango_font_metrics_get_ascent(metrics);
-	descent = pango_font_metrics_get_descent(metrics);
-	pango_font_metrics_unref(metrics);
+	ascent = PANGO_ASCENT(logical);
+	descent = PANGO_DESCENT(logical);
 
 	xftfont = pango_xft_font_get_font(font);
 
@@ -173,8 +170,6 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 
 	if (scale_x < 1.0 || scale_y != 1.0) {
 		FcBool scalable;
-		FcPattern *pattern;
-		FcMatrix mat;
 
 		FcPatternGetBool(xftfont->pattern, FC_SCALABLE, 0, &scalable);
 		if (!scalable) {
@@ -182,11 +177,16 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 			if (scale_x < 1.0) scale_x = 1.0;
 			scale_y = 1.0;
 		} else if (scale_x < 1.0 || scale_y != 1.0) {
+			FcPattern *pattern;
+			FcMatrix mat;
+
 			pattern = FcPatternDuplicate(xftfont->pattern);
 
-			mat.xx = scale_x; mat.xy = 0.0;
-			mat.yx = 0.0; mat.yy = scale_y;
+			FcMatrixInit (&mat);
 
+			FcMatrixScale(&mat, scale_x, scale_y);
+
+			FcPatternDel (pattern, FC_MATRIX);
 			FcPatternAddMatrix(pattern, FC_MATRIX, &mat);
 
 			xftfont = XftFontOpenPattern(
