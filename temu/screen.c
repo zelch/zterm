@@ -785,9 +785,10 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 		priv->lines = g_realloc(priv->lines, height * sizeof(*priv->lines));
 
 		for (i = old_height; i < height; i++) {
-			memset(&priv->lines[i].attr, 0, sizeof(temu_line_attr_t));
+			memset (&priv->lines[i], 0, sizeof (priv->lines[i]));
+			memset (&priv->lines[i].attr, 0, sizeof(temu_line_attr_t));
 			priv->lines[i].len = 0;
-			priv->lines[i].c = g_malloc(priv->width*sizeof(*priv->lines[i].c));
+			priv->lines[i].c = g_malloc0(priv->width*sizeof(*priv->lines[i].c));
 		}
 
 		temu_screen_fill_rect_internal(
@@ -1167,7 +1168,6 @@ static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_
 static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, gint width, gint height, const temu_cell_t *cell)
 {
 	TemuScreenPrivate *priv = screen->priv;
-
 	gint step = cell->attr.wide?2:1;
 	gint x2 = x + width, y2 = y + height;
 	gint i, j;
