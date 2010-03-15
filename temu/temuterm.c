@@ -12,12 +12,22 @@
 #include "terminal.h"
 #include "regexp.h"
 
+int start_width = 1024;
+int start_height = 768;
+
+typedef enum bind_actions {
+	BIND_ACT_SWITCH	= 0,
+	BIND_ACT_CUT,
+	BIND_ACT_PASTE,
+} bind_actions_t;
+
 typedef struct bind_s {
 	guint state;
 	guint key_min, key_max;
 	guint base;
 	struct bind_s *next;
 	char *cmd;
+	bind_actions_t action;
 } bind_t;
 
 typedef struct color_s {
@@ -60,7 +70,10 @@ temu_window_title_change (TemuTerminal *terminal, GtkWidget *window, int n)
 {
 	gchar *new_str;
 
-	asprintf(&new_str, "%s [%d]", terminal->window_title, n);
+	if (asprintf(&new_str, "%s [%d]", terminal->window_title, n) < 0) {
+		return; // Memory allocation issue.
+	}
+
 	gtk_window_set_title(GTK_WINDOW(window), new_str);
 	free (new_str);
 }
@@ -81,6 +94,8 @@ term_died (TemuTerminal *term, gpointer user_data)
 	terms_t *terms = tracker->terms;
 	int status, n;
 
+//	fprintf (stderr, "%s: %d\n", __func__, tracker->n);
+
 	waitpid (-1, &status, WNOHANG);
 
 	gtk_notebook_prev_page (terms->notebook);
@@ -89,11 +104,12 @@ term_died (TemuTerminal *term, gpointer user_data)
 	terms->active[tracker->n] = NULL;
 	gtk_widget_destroy (GTK_WIDGET(term));
 
-	n = gtk_notebook_get_current_page (terms->notebook);
-	if (n >= 0) {
-		term = TEMU_TERMINAL(gtk_notebook_get_nth_page (terms->notebook, n));
-		temu_window_title_changed (term, term->client_data);
-	}
+//	n = gtk_notebook_get_current_page (terms->notebook);
+//	if (n >= 0) {
+//		term = TEMU_TERMINAL(gtk_notebook_get_nth_page (terms->notebook, n));
+//		gtk_widget_grab_focus (GTK_WIDGET(term));
+//		temu_window_title_changed (term, term->client_data);
+//	}
 
 	return TRUE;
 }
@@ -103,6 +119,8 @@ term_destroyed (TemuTerminal *term, gpointer user_data)
 {
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
+
+//	fprintf (stderr, "%s: %d\n", __func__, tracker->n);
 
 	g_object_unref (G_OBJECT(term));
 
@@ -136,15 +154,13 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		gtk_object_sink (GTK_OBJECT(term));
 		gtk_widget_show(term);
 
+//		fprintf (stderr, "New window: %d, %p\n", n, term);
 		terminal = TEMU_TERMINAL(term);
 		if (!terminal->window_title)
 			terminal->window_title = g_strdup("temuterm");
 
 		snprintf(str, sizeof(str), "Terminal %d", n);
 		label = gtk_label_new(str);
-		gtk_notebook_set_current_page(terms->notebook, gtk_notebook_append_page (terms->notebook, term, label));
-		gtk_widget_realize(term);
-		gtk_widget_show(label);
 
 		if (terms->colors) {
 			color_t *color;
@@ -188,6 +204,10 @@ term_switch (terms_t *terms, gint n, char *cmd)
 			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, environ);
 		}
 
+		gtk_notebook_set_current_page(terms->notebook, gtk_notebook_append_page (terms->notebook, term, label));
+		gtk_widget_realize(term);
+		gtk_widget_show(label);
+
 		terms->active[n] = term;
 		terms->alive++;
 
@@ -195,7 +215,21 @@ term_switch (terms_t *terms, gint n, char *cmd)
 	}
 
 	gtk_notebook_set_current_page (terms->notebook, gtk_notebook_page_num (terms->notebook, terms->active[n]));
-	temu_window_title_change (TEMU_TERMINAL(terms->active[n]), terms->window, n);
+//	temu_window_title_change (TEMU_TERMINAL(terms->active[n]), terms->window, n);
+}
+
+static void
+term_switch_page (GtkNotebook *notebook, GtkNotebookPage *page, gint page_num, gpointer user_data)
+{
+	TemuTerminal *term;
+
+	term = TEMU_TERMINAL(gtk_notebook_get_nth_page (notebook, page_num));
+	/*
+	fprintf (stderr, "page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p\n",
+			page_num, gtk_notebook_get_current_page (notebook), page, term, notebook, user_data);
+			*/
+	gtk_widget_grab_focus (GTK_WIDGET(term));
+	temu_window_title_changed (term, term->client_data);
 }
 
 static gboolean
@@ -206,11 +240,16 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 	guint state = event->state;
 
 	state &= 0xED;
+//	fprintf (stderr, "%s: keyval: %d, state: 0x%x\n", __func__, event->keyval, state);
 
 	for (cur = terms->keys; cur; cur = cur->next) {
 		if ((event->keyval >= cur->key_min) && (event->keyval <= cur->key_max)) {
 			if (state == cur->state) {
-				term_switch (terms, cur->base + (event->keyval - cur->key_min), cur->cmd);
+				switch (cur->action) {
+					case BIND_ACT_SWITCH:
+					default:
+						term_switch (terms, cur->base + (event->keyval - cur->key_min), cur->cmd);
+				}
 				return TRUE;
 			}
 		}
@@ -220,12 +259,13 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 }
 
 static void
-temu_parse_bind (terms_t *terms, char **subs)
+temu_parse_bind (terms_t *terms, char **subs, bind_actions_t action)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
 	bind->next = terms->keys;
 	terms->keys = bind;
 
+	bind->action = action;
 	bind->base = strtol(subs[0], NULL, 0);
 	bind->state = strtol(subs[1], NULL, 0);
 	bind->key_min = gdk_keyval_from_name (subs[2]);
@@ -260,12 +300,20 @@ temu_parse_font (terms_t *terms, char **subs)
 	terms->font = strdup (subs[0]);
 }
 
+static void
+temu_parse_size (terms_t *terms, char **subs)
+{
+	start_width = strtol(subs[0], NULL, 10);
+	start_height = strtol(subs[1], NULL, 10);
+}
+
 void
 temu_parse_config (terms_t *terms)
 {
 	struct regexp *bind = regexp_new("^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", 0);
 	struct regexp *color = regexp_new("^color:[ \t]+([0-9]+)[ \t]+(.*?)$", 0);
 	struct regexp *font = regexp_new("^font:[ \t]+(.*?)$", 0);
+	struct regexp *size = regexp_new("^size:[ \t]+([0-9]+)x([0-9]+)$", 0);
 	struct regexp_iterator *iterator = NULL;
 	char **subs = NULL;
 	FILE *f;
@@ -297,7 +345,7 @@ temu_parse_config (terms_t *terms)
 		if (!j) {
 			j = regexp_find_first_str (t1, &subs, bind, &iterator);
 			if (j)
-				temu_parse_bind (terms, subs);
+				temu_parse_bind (terms, subs, BIND_ACT_SWITCH);
 			regexp_find_free (&subs, bind, &iterator);
 		}
 
@@ -313,6 +361,13 @@ temu_parse_config (terms_t *terms)
 			if (j)
 				temu_parse_font (terms, subs);
 			regexp_find_free (&subs, font, &iterator);
+		}
+
+		if (!j) {
+			j = regexp_find_first_str (t1, &subs, size, &iterator);
+			if (j)
+				temu_parse_size (terms, subs);
+			regexp_find_free (&subs, size, &iterator);
 		}
 
 		if (!j)
@@ -338,7 +393,7 @@ int main(int argc, char *argv[], char *envp[])
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_container_set_border_width(GTK_CONTAINER(window), 0);
-	gtk_window_set_default_size (GTK_WINDOW(window), 1024, 768);
+	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 //	gtk_window_set_default_size (GTK_WINDOW(window), 800, 600);
 	gtk_widget_modify_bg(window, GTK_STATE_NORMAL, &black);
 
@@ -365,6 +420,8 @@ int main(int argc, char *argv[], char *envp[])
 	term_switch (terms, 0, NULL);
 
 	gtk_widget_show(window);
+
+	gtk_signal_connect (GTK_OBJECT (notebook), "switch_page", GTK_SIGNAL_FUNC (term_switch_page), GTK_NOTEBOOK(notebook));
 
 	g_signal_connect (GTK_OBJECT (window),
 			"key-press-event",

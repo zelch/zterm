@@ -348,6 +348,7 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 	gchar buf[16];
 	gint count;
 
+//	fprintf (stderr, "%s: keyval: %d, state: 0x%x\n", __func__, event->keyval, event->state);
 	temu_screen_hide_pointer (screen);
 
 	switch (event->keyval) {
@@ -369,8 +370,9 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 
 	/* rain - temporary hack to make the xim input-method work properly */
 	if (!(event->state & GDK_MOD1_MASK)) {
-		if (gtk_im_context_filter_keypress(priv->im_context, event))
+		if (gtk_im_context_filter_keypress(priv->im_context, event)) {
 			return TRUE;
+		}
 	}
 
 	if (temu_emul_translate(priv->emul, event, buf, &count)) {
@@ -382,7 +384,7 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 
 		return TRUE;
 	} else {
-//		fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
+		fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
 	}
 
 	return FALSE;
@@ -396,6 +398,7 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 	GtkClipboard *clipboard;
 	gchar *text, *c;
 
+//	fprintf (stderr, "%s: button: %d, type: %d\n", __func__, event->button, event->type);
 	temu_screen_show_pointer (TEMU_SCREEN(terminal));
 
 	screen_class = g_type_class_peek(TEMU_TYPE_SCREEN);
@@ -432,6 +435,8 @@ static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond
 {
 	TemuTerminal *terminal = data;
 	TemuTerminalPrivate *priv = terminal->priv;
+
+//	fprintf (stderr, "%s: priv->pty: %p\n", __func__, priv->pty);
 
 	if (priv->pty) {
 		temu_pty_destroy(priv->pty);
