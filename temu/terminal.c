@@ -384,7 +384,7 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 
 		return TRUE;
 	} else {
-		fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
+		//fprintf(stderr, "Ignored keypress: %04x\n", event->keyval);
 	}
 
 	return FALSE;

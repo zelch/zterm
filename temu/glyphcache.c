@@ -90,8 +90,12 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 	cache->ascent = pango_font_metrics_get_ascent(metrics);
 	cache->descent = pango_font_metrics_get_descent(metrics);
 
-	cache->width = pango_font_metrics_get_approximate_char_width(metrics);
+	cache->width = pango_font_metrics_get_approximate_digit_width(metrics);
 	cache->height = cache->ascent + cache->descent;
+	if (cache->width <= 0) {
+		fprintf (stderr, "Warning: cache->width = %d\n", cache->width);
+		cache->width = cache->height / 2;
+	}
 
 	pango_font_metrics_unref(metrics);
 }

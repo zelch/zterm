@@ -2001,6 +2001,7 @@ static void emul_cursor_clear(TemuEmul *S)
 
 static void emul_cursor_draw(TemuEmul *S)
 {
+	temu_cell_t *tmp_cell;
 	temu_cell_t cell;
 	gint x;
 
@@ -2014,7 +2015,12 @@ static void emul_cursor_draw(TemuEmul *S)
 	else
 		x = S->cursor_x;
 
-	cell = *(temu_screen_get_cell(T, x, S->cursor_y));
+	tmp_cell = temu_screen_get_cell(T, x, S->cursor_y);
+	if (!tmp_cell) {
+		return;
+	}
+
+	cell = *tmp_cell;
 	cell.attr.cursor = 1;
 	temu_screen_set_cell(T, x, S->cursor_y, &cell);
 }
@@ -2689,7 +2695,7 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 
 	if (S->o_DECAWM) {
 		temu_screen_set_cell_text(T, S->cursor_x, S->cursor_y, &cell, 1, &written);
-		if (written <= 0) {
+		if (written <= 0 && temu_screen_get_line_attr(T, S->cursor_y)) {
 			lattr = *temu_screen_get_line_attr(T, S->cursor_y);
 			lattr.wrapped = 1;
 			temu_screen_set_line_attr(T, S->cursor_y, &lattr);
@@ -2706,7 +2712,7 @@ static void emul_add_glyph(TemuEmul *S, gunichar glyph)
 
 	S->cursor_x += 1 + cell.attr.wide;
 
-	if (S->cursor_x >= WIDTH) {
+	if (S->cursor_x >= WIDTH && temu_screen_get_line_attr(T, S->cursor_y)) {
 		lattr = *temu_screen_get_line_attr(T, S->cursor_y);
 		lattr.wrapped = 0;
 		temu_screen_set_line_attr(T, S->cursor_y, &lattr);
