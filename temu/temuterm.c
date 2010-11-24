@@ -321,11 +321,13 @@ temu_parse_config (terms_t *terms)
 	long f_len;
 	int j;
 	char *t1, *t2;
+	char conffile[512] = { 0 };
 
 	if (!bind || !color || !font)
 		return;
 
-	f = fopen("/home/warp/.temuterm/config", "r");
+	snprintf(conffile, sizeof(conffile) - 1, "%s/.temuterm/config", getenv("HOME"));
+	f = fopen(conffile, "r");
 	if (!f)
 		return;
 	fseek(f, 0, SEEK_END);
@@ -417,7 +419,19 @@ int main(int argc, char *argv[], char *envp[])
 	}
 	terms->active = calloc(terms->n_active, sizeof(*terms->active));
 
-	term_switch (terms, 0, NULL);
+	{
+		bind_t *cur;
+		char *cmd = NULL;
+
+		for (cur = terms->keys; cur; cur = cur->next) {
+			if (cur->base == 0) {
+				cmd = cur->cmd;
+				break;
+			}
+		}
+
+		term_switch (terms, 0, cmd);
+	}
 
 	gtk_widget_show(window);
 
