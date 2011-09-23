@@ -874,9 +874,11 @@ static void vt52x_C0(TemuEmul *S, guchar c0)
 {
 	switch (c0) {
 	  case C_ENQ:
-	  	IMPL("ENQ", "Enquiry", "partially");
+	  	//IMPL("ENQ", "Enquiry", "partially");
+	  	IMPL("ENQ", "Enquiry", "maybe");
 	  	/* FIXME:? xterm (and a real VT) will let you configure the ENQ reply */
-		emul_add_output(S, EMUL_ENQ_REPLY, 4);
+		/* OTOH, usually this just fracks stuff up. */
+		//emul_add_output(S, EMUL_ENQ_REPLY, 4);
 		break;
 	  case C_BEL:
 	  	IMPL("BEL", "Audible bell", "fully");
