@@ -6,6 +6,7 @@
 #include <gdk/gdkx.h>
 
 #include <gtk/gtk.h>
+#include <glib/gmacros.h>
 
 #include <fontconfig/fontconfig.h>
 
@@ -634,6 +635,9 @@ void temu_screen_select(TemuScreen *screen, gint fx, gint fy, gint tx, gint ty, 
 		clipboard = gtk_clipboard_get(GDK_SELECTION_PRIMARY); /* wing it */
 	}
 	gtk_clipboard_set_text(clipboard, buffer, p - buffer);
+
+	strncpy(priv->cur_selection, buffer, MIN(p - buffer, sizeof(priv->cur_selection) - 1));
+	priv->cur_selection[sizeof(priv->cur_selection) - 1] = '\0';
 
 	priv->selected = TRUE;
 
@@ -1949,4 +1953,11 @@ void temu_screen_set_font (TemuScreen *screen, const char *font)
 
 	fontdesc = pango_font_description_from_string(font);
 	temu_screen_set_font_description(screen, fontdesc);
+}
+
+const char *temu_screen_get_cur_selection (TemuScreen *screen)
+{
+	TemuScreenPrivate *priv = screen->priv;
+
+	return priv->cur_selection;
 }

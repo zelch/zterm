@@ -92,9 +92,7 @@ term_died (TemuTerminal *term, gpointer user_data)
 {
 	tracker_t *tracker = (tracker_t *) user_data;
 	terms_t *terms = tracker->terms;
-	int status, n;
-
-//	fprintf (stderr, "%s: %d\n", __func__, tracker->n);
+	int status;
 
 	waitpid (-1, &status, WNOHANG);
 
@@ -103,13 +101,6 @@ term_died (TemuTerminal *term, gpointer user_data)
 	gtk_container_remove (GTK_CONTAINER(terms->notebook), GTK_WIDGET(term));
 	terms->active[tracker->n] = NULL;
 	gtk_widget_destroy (GTK_WIDGET(term));
-
-//	n = gtk_notebook_get_current_page (terms->notebook);
-//	if (n >= 0) {
-//		term = TEMU_TERMINAL(gtk_notebook_get_nth_page (terms->notebook, n));
-//		gtk_widget_grab_focus (GTK_WIDGET(term));
-//		temu_window_title_changed (term, term->client_data);
-//	}
 
 	return TRUE;
 }
@@ -232,12 +223,17 @@ term_switch_page (GtkNotebook *notebook, GtkNotebookPage *page, gint page_num, g
 	temu_window_title_changed (term, term->client_data);
 }
 
+void temu_terminal_insert_text(GtkWidget *widget, const char *text);
+const char *temu_terminal_get_selection_text(GtkWidget *widget);
+
 static gboolean
 term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 {
 	terms_t *terms = (terms_t *) user_data;
 	bind_t	*cur;
 	guint state = event->state;
+	GtkClipboard *clipboard;
+	gchar *text;
 
 	state &= 0xED;
 //	fprintf (stderr, "%s: keyval: %d, state: 0x%x\n", __func__, event->keyval, state);
@@ -247,8 +243,36 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 			if (state == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-					default:
 						term_switch (terms, cur->base + (event->keyval - cur->key_min), cur->cmd);
+						break;
+					case BIND_ACT_CUT:
+						widget = gtk_notebook_get_nth_page(terms->notebook, gtk_notebook_get_current_page(terms->notebook));
+						if (GTK_WIDGET_REALIZED(widget)) {
+							clipboard = gtk_clipboard_get_for_display(gtk_widget_get_display(widget), GDK_SELECTION_CLIPBOARD);
+						} else {
+							clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD); /* wing it */
+						}
+
+						text = temu_terminal_get_selection_text(widget);
+
+//						printf("cut: '%s'\n", text);
+						gtk_clipboard_set_text(clipboard, text, strlen(text));
+						break;
+					case BIND_ACT_PASTE:
+						widget = gtk_notebook_get_nth_page(terms->notebook, gtk_notebook_get_current_page(terms->notebook));
+						if (GTK_WIDGET_REALIZED(widget)) {
+							clipboard = gtk_clipboard_get_for_display(gtk_widget_get_display(widget), GDK_SELECTION_CLIPBOARD);
+						} else {
+							clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD); /* wing it */
+						}
+
+						text = gtk_clipboard_wait_for_text(clipboard);
+						if (text) {
+//							printf("paste: '%s'\n", text);
+							temu_terminal_insert_text(widget, text);
+							g_free(text);
+						}
+						break;
 				}
 				return TRUE;
 			}
@@ -259,7 +283,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 }
 
 static void
-temu_parse_bind (terms_t *terms, char **subs, bind_actions_t action)
+temu_parse_bind_switch (terms_t *terms, char **subs, bind_actions_t action)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
 	bind->next = terms->keys;
@@ -279,6 +303,25 @@ temu_parse_bind (terms_t *terms, char **subs, bind_actions_t action)
 
 	terms->n_active += bind->key_max - bind->key_min;
 	terms->n_active++;
+}
+
+static void
+temu_parse_bind_action (terms_t *terms, char **subs)
+{
+	bind_t *bind = calloc (1, sizeof (bind_t));
+	bind->next = terms->keys;
+	terms->keys = bind;
+
+	if (!strcasecmp(subs[0], "CUT")) {
+		bind->action = BIND_ACT_CUT;
+	} else if (!strcasecmp(subs[0], "PASTE")) {
+		bind->action = BIND_ACT_PASTE;
+	} else {
+		return;
+	}
+	bind->state = strtol (subs[1], NULL, 0);
+	bind->key_min = bind->key_max = gdk_keyval_from_name (subs[2]);
+//	printf ("Binding: keyval: %d, state: 0x%x, action: %d\n", bind->key_min, bind->state, bind->action);
 }
 
 static void
@@ -310,7 +353,8 @@ temu_parse_size (terms_t *terms, char **subs)
 void
 temu_parse_config (terms_t *terms)
 {
-	struct regexp *bind = regexp_new("^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", 0);
+	struct regexp *bind_action = regexp_new("^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", 0);
+	struct regexp *bind_switch = regexp_new("^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", 0);
 	struct regexp *color = regexp_new("^color:[ \t]+([0-9]+)[ \t]+(.*?)$", 0);
 	struct regexp *font = regexp_new("^font:[ \t]+(.*?)$", 0);
 	struct regexp *size = regexp_new("^size:[ \t]+([0-9]+)x([0-9]+)$", 0);
@@ -323,7 +367,7 @@ temu_parse_config (terms_t *terms)
 	char *t1, *t2;
 	char conffile[512] = { 0 };
 
-	if (!bind || !color || !font)
+	if (!bind_action || !bind_switch || !color || !font)
 		return;
 
 	snprintf(conffile, sizeof(conffile) - 1, "%s/.temuterm/config", getenv("HOME"));
@@ -345,10 +389,17 @@ temu_parse_config (terms_t *terms)
 		j = t1[0] == '#' ? 1 : 0;
 
 		if (!j) {
-			j = regexp_find_first_str (t1, &subs, bind, &iterator);
+			j = regexp_find_first_str (t1, &subs, bind_action, &iterator);
 			if (j)
-				temu_parse_bind (terms, subs, BIND_ACT_SWITCH);
-			regexp_find_free (&subs, bind, &iterator);
+				temu_parse_bind_action (terms, subs);
+			regexp_find_free (&subs, bind_action, &iterator);
+		}
+
+		if (!j) {
+			j = regexp_find_first_str (t1, &subs, bind_switch, &iterator);
+			if (j)
+				temu_parse_bind_switch (terms, subs, BIND_ACT_SWITCH);
+			regexp_find_free (&subs, bind_switch, &iterator);
 		}
 
 		if (!j) {
@@ -377,7 +428,8 @@ temu_parse_config (terms_t *terms)
 
 		t1 = t2;
 	}
-	regexp_free (bind);
+	regexp_free (bind_action);
+	regexp_free (bind_switch);
 	regexp_free (color);
 	regexp_free (font);
 	free (file);

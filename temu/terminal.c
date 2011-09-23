@@ -393,10 +393,9 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButton *event)
 {
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
-	TemuTerminalPrivate *priv = terminal->priv;
 	TemuScreenClass *screen_class;
 	GtkClipboard *clipboard;
-	gchar *text, *c;
+	gchar *text;
 
 //	fprintf (stderr, "%s: button: %d, type: %d\n", __func__, event->button, event->type);
 	temu_screen_show_pointer (TEMU_SCREEN(terminal));
@@ -418,6 +417,20 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 
 	text = gtk_clipboard_wait_for_text(clipboard);
 	if (text) {
+		temu_terminal_insert_text(widget, text);
+		g_free(text);
+	}
+
+	return TRUE;
+}
+
+void temu_terminal_insert_text(GtkWidget *widget, const char *text)
+{
+	TemuTerminal *terminal = TEMU_TERMINAL(widget);
+	TemuTerminalPrivate *priv = terminal->priv;
+	gchar *c;
+
+	if (text) {
 		while ((c = g_utf8_strchr(text, -1, '\n')))
 			*c = '\r';
 		g_io_channel_write_chars(
@@ -425,10 +438,7 @@ static gboolean temu_terminal_button_press_event(GtkWidget *widget, GdkEventButt
 			text, strlen(text),
 			NULL, NULL
 		);
-		g_free(text);
 	}
-
-	return TRUE;
 }
 
 static gboolean temu_terminal_error_from_app(GIOChannel *chan, GIOCondition cond, gpointer data)
@@ -522,4 +532,10 @@ void temu_terminal_set_icon_title(TemuTerminal *terminal, const gchar *title)
 	terminal->icon_title = title ? g_strdup(title) : NULL;
 
 	g_signal_emit(terminal, signals[SIG_ICON_TITLE_CHANGED], 0);
+}
+
+const char *temu_terminal_get_selection_text(GtkWidget *widget)
+{
+	TemuTerminal *terminal = TEMU_TERMINAL(widget);
+	return temu_screen_get_cur_selection(TEMU_SCREEN(terminal));
 }

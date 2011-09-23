@@ -67,6 +67,7 @@ struct _TemuScreenPrivate {
 	GdkCursor *cursor_current;	/* The current cursor */
 
 	gint idle_id;
+	char cur_selection[16*1024];
 };
 
 #endif
