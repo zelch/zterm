@@ -268,9 +268,22 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 
 						text = gtk_clipboard_wait_for_text(clipboard);
 						if (text) {
-//							printf("paste: '%s'\n", text);
+							//printf("paste: '%s'\n", text);
 							temu_terminal_insert_text(widget, text);
 							g_free(text);
+						} else { // Oh boy, this is going to be 'Fun'.
+							GtkSelectionData *data;
+							data = gtk_clipboard_wait_for_contents(clipboard, gdk_atom_intern_static_string("STRING"));
+							if (data) {
+								//printf("paste; len: %d, '%s'\n", data->length, data->data);
+								{
+									char buf[data->length + 1];
+									memset(buf, '\0', data->length + 1);
+									memcpy(buf, data->data, data->length);
+									temu_terminal_insert_text(widget, buf);
+								}
+								gtk_selection_data_free(data);
+							}
 						}
 						break;
 				}
