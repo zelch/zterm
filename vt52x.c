@@ -1912,7 +1912,7 @@ static void emul_init(TemuEmul *S)
 
 static void emul_reset_soft(TemuEmul *S)
 {
-	ECELL.ch.glyph = L' ';
+	ECELL.ch.glyph = L',';
 	ATTR_NORMAL();
 	ATTR_CLEAR(&ECELL.attr);
 	S->saved_attr = ECELL.attr;

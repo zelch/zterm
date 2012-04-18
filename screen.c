@@ -116,7 +116,7 @@ static void temu_screen_init(TemuScreen *screen)
 	priv = screen->priv = g_malloc0(sizeof(*screen->priv));
 
 	/* default attributes */
-	priv->resize_cell.ch.glyph = L' ';
+	priv->resize_cell.ch.glyph = L'.';
 	priv->resize_cell.attr.fg = TEMU_SCREEN_FG_DEFAULT;
 	priv->resize_cell.attr.bg = TEMU_SCREEN_BG_DEFAULT;
 
@@ -445,10 +445,14 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 	old_visible_height = priv->visible_height;
 
 	priv->visible_height = height;
-	if (height > priv->height)
-		priv->height = height;
-	temu_screen_resize(screen, width, priv->height);
+#if 0
+	if ((height * 6) > priv->height) {
+		height = height * 6;
+	}
+#endif
+	temu_screen_resize(screen, width, height);
 
+#if 0
 	if (old_visible_height < priv->visible_height)
 		temu_screen_fill_rect_internal(
 			screen,
@@ -456,6 +460,7 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 			width, priv->visible_height - old_visible_height,
 			&priv->resize_cell
 		);
+#endif
 
 	widget->allocation = *allocation;
 
@@ -769,21 +774,7 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 
 	old_width = priv->width;
 	old_height = priv->height;
-	
-	if (old_width != width) {
-		priv->width = width;
 
-		for (i = 0; i < priv->height; i++)
-			priv->lines[i].c = g_realloc(priv->lines[i].c, width*sizeof(*priv->lines[i].c));
-
-		temu_screen_fill_rect_internal(
-			screen,
-			old_width, 0,
-			(priv->width - old_width), priv->height,
-			&priv->resize_cell
-		);
-	}
-	
 	if (old_height != height) {
 		priv->height = height;
 		priv->lines = g_realloc(priv->lines, height * sizeof(*priv->lines));
@@ -795,12 +786,34 @@ static void temu_screen_resize(TemuScreen *screen, gint width, gint height)
 			priv->lines[i].c = g_malloc0(priv->width*sizeof(*priv->lines[i].c));
 		}
 
+#if 1
+		if (priv->height > old_height) {
+			printf("priv->height %d, old_height %d, x 0, y %d, w %d, h %d\n", priv->height, old_height, old_height, priv->width, (priv->height - old_height));
+			temu_screen_fill_rect_internal(
+					screen,
+					0, old_height,
+					priv->width, (priv->height - old_height),
+					&priv->resize_cell
+					);
+		}
+#endif
+	}
+
+	if (old_width != width) {
+		priv->width = width;
+
+		for (i = 0; i < priv->height; i++) {
+			priv->lines[i].c = g_realloc(priv->lines[i].c, width*sizeof(*priv->lines[i].c));
+		}
+
+#if 1
 		temu_screen_fill_rect_internal(
 			screen,
-			0, old_height,
-			priv->width, (priv->height - old_height),
+			old_width, 0,
+			(priv->width - old_width), priv->height,
 			&priv->resize_cell
 		);
+#endif
 	}
 
 	/* Update top of scroll buffer */
@@ -1146,6 +1159,8 @@ static void temu_screen_cell_set(TemuScreen *screen, gint x, gint y, const temu_
 {
 	TemuScreenPrivate *priv = screen->priv;
 
+	g_assert(y < priv->height);
+
 	if (x > 0 && priv->lines[y].c[x-1].attr.wide) {
 		temu_cell_t tmp_cell = priv->lines[y].c[x-1];
 
@@ -1180,6 +1195,7 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 
 	shorten = (cell->ch.glyph == L' ');
 
+	printf("\nRunning %d %d - %d %d\n", x, y, x2, y2);
 	for (i = y; i < y2; i++) {
 		gint mod_i = i % priv->height;
 
@@ -1192,8 +1208,11 @@ static void temu_screen_fill_rect_internal(TemuScreen *screen, gint x, gint y, g
 				priv->lines[mod_i].len = x2;
 		}
 
-		for (j = x; j < x2; j += step)
+		for (j = x; j < x2; j += step) {
+			printf(" %d,%d=%d", j, mod_i, cell->ch.glyph);
 			temu_screen_cell_set(screen, j, mod_i, cell);
+		}
+		printf("\n");
 	}
 
 	temu_screen_apply_updates(screen);
@@ -1291,8 +1310,9 @@ void temu_screen_set_size(TemuScreen *screen, gint width, gint height, gint scro
 		width = priv->width;
 	if (height < 0)
 		height = priv->visible_height;
-	if (scrollback < 0)
+	if (scrollback < 0) {
 		scrollback = priv->height;
+	}
 
 	if (width != old_width || scrollback != priv->height)
 		temu_screen_resize(screen, width, scrollback);

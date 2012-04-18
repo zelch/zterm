@@ -354,13 +354,13 @@ static gboolean temu_terminal_key_press_event(GtkWidget *widget, GdkEventKey *ev
 	switch (event->keyval) {
 	  case GDK_Page_Up:
 		if (GDK_SHIFT_MASK == (event->state & TEMU_TERMINAL_SCROLL_MASK)) {
-			temu_screen_scroll_back(screen, temu_screen_get_rows(screen) / 2);
+			temu_screen_scroll_back(screen, temu_screen_get_rows(screen) - 1);
 			return TRUE;
 		}
 		break;
 	  case GDK_Page_Down:
 		if (GDK_SHIFT_MASK == (event->state & TEMU_TERMINAL_SCROLL_MASK)) {
-			temu_screen_scroll_forward(screen, temu_screen_get_rows(screen) / 2);
+			temu_screen_scroll_forward(screen, temu_screen_get_rows(screen) - 1);
 			return TRUE;
 		}
 		break;
