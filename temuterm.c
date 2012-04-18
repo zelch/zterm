@@ -255,7 +255,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 
 						text = temu_terminal_get_selection_text(widget);
 
-						printf("cut: '%s'\n", text);
+//						printf("cut: '%s'\n", text);
 						gtk_clipboard_set_text(clipboard, text, strlen(text));
 						break;
 					case BIND_ACT_PASTE:
