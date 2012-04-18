@@ -9,6 +9,8 @@ Things to do (critical, no order):
 - autotools or other automagical make system
 - Implement lots of unimplemented escapes
 - Find some way to let the glyphcache be shared among like-fonted temu widgets
+- Track down some screen clearing problems, reproduce and fix.
+- Track down some screen reset problems, reproduce and fix.
 
 Things to do (non-critical, no order):
 - Support more of the attributes that are already set in the code in screen-xft
