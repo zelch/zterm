@@ -3,3 +3,5 @@
 testgtk
 temuterm
 ChangeLog
+libtemu.a
+libtemu.so.0
