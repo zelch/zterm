@@ -56,7 +56,6 @@ struct _TemuScreenPrivate {
 	temu_cell_t clear_cell, resize_cell;
 
 	TScreenMove moves;
-	GMemChunk *moves_chunk;
 	GTrashStack *moves_free;
 
 	GdkRectangle update_rect;

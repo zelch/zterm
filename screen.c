@@ -49,10 +49,10 @@ static void temu_screen_apply_updates(TemuScreen *screen);
 
 static void temu_screen_class_init(TemuScreenClass *klass)
 {
-	GObjectClass *gobject_class;
+//	GObjectClass *gobject_class;
 	GtkWidgetClass *widget_class;
 
-	gobject_class = G_OBJECT_CLASS(klass);
+//	gobject_class = G_OBJECT_CLASS(klass);
 	widget_class = GTK_WIDGET_CLASS(klass);
 
 	GTK_OBJECT_CLASS (klass)->destroy = temu_screen_destroy;
@@ -122,7 +122,6 @@ static void temu_screen_init(TemuScreen *screen)
 
 	/* updates */
 	priv->moves.next = priv->moves.prev = &priv->moves;
-	priv->moves_chunk = g_mem_chunk_new("TemuScreen moves", sizeof(TScreenMove), 10*sizeof(TScreenMove), G_ALLOC_ONLY);
 	priv->moves_free = NULL;
 
 	/* cell screen */
@@ -385,13 +384,27 @@ static void temu_screen_destroy(GtkObject *object)
 	priv = screen->priv;
 	if (!priv)
 		goto destroy_chain;
+	printf("Destroying priv %p for screen %p\n", priv, screen);
 
 	/* cell screen */
 	for (i = 0; i < priv->height; i++)
 		g_free(priv->lines[i].c);
 	g_free(priv->lines);
 
-	g_mem_chunk_destroy(priv->moves_chunk);
+	{
+		gpointer move;
+		while ((move = g_trash_stack_pop(&priv->moves_free))) {
+			g_slice_free(TScreenMove, move);
+		}
+	}
+	{
+		TScreenMove *move, *next;
+		for (move = priv->moves.next; move && move != &priv->moves; move = next) {
+			next = move->next;
+			g_slice_free(TScreenMove, move);
+		}
+	}
+
 	if (priv->update_region)
 	    gdk_region_destroy(priv->update_region);
 
@@ -427,7 +440,7 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 {
 	TemuScreen *screen;
 	TemuScreenPrivate *priv;
-	glong width, height, old_visible_height;
+	glong width, height;
 
 	if (!GTK_WIDGET_REALIZED(widget))
 		return;
@@ -442,20 +455,8 @@ static void temu_screen_size_allocate(GtkWidget *widget, GtkAllocation *allocati
 		height = allocation->height / screen->font_height;
 	}
 
-	old_visible_height = priv->visible_height;
-
 	priv->visible_height = height;
 	temu_screen_resize(screen, width, height);
-
-#if 0
-	if (old_visible_height < priv->visible_height)
-		temu_screen_fill_rect_internal(
-			screen,
-			0, priv->scroll_offset + old_visible_height,
-			width, priv->visible_height - old_visible_height,
-			&priv->resize_cell
-		);
-#endif
 
 	widget->allocation = *allocation;
 
@@ -1104,7 +1105,7 @@ static void temu_screen_apply_move(TemuScreen *screen, GdkRectangle *rect, gint 
 		if (priv->moves_free) {
 			move = g_trash_stack_pop(&priv->moves_free);
 		} else {
-			move = g_chunk_new(TScreenMove, priv->moves_chunk);
+			move = g_slice_new(TScreenMove);
 		}
 
 		move->dx = dx;
@@ -1973,7 +1974,7 @@ void temu_screen_set_font (TemuScreen *screen, const char *font)
 	temu_screen_set_font_description(screen, fontdesc);
 }
 
-const char *temu_screen_get_cur_selection (TemuScreen *screen)
+char *temu_screen_get_cur_selection (TemuScreen *screen)
 {
 	TemuScreenPrivate *priv = screen->priv;
 

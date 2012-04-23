@@ -30,10 +30,15 @@ TGlyphCache *glyph_cache_new(GtkWidget *widget,
 	return cache;
 }
 
-void glyph_cache_destroy(TGlyphCache *cache) {
+void glyph_destroy_gfi(gpointer data)
+{
+	g_slice_free(TGlyphCache, data);
+}
+
+void glyph_cache_destroy(TGlyphCache *cache)
+{
 	if (cache->hash) {
 		g_hash_table_destroy(cache->hash);
-		g_mem_chunk_destroy(cache->chunk);
 		/* font_set can't be unref'd apparently */
 	}
 	if (cache->context)
@@ -55,18 +60,10 @@ void glyph_cache_set_font(TGlyphCache *cache, PangoFontDescription *font_desc)
 
 	if (cache->hash) {
 		g_hash_table_destroy(cache->hash);
-		g_mem_chunk_destroy(cache->chunk);
 		g_object_unref(cache->font_set);
 	}
 
-	cache->hash = g_hash_table_new(NULL, NULL);
-
-	cache->chunk = g_mem_chunk_new(
-		"Glyph information",
-		sizeof(TGlyphInfo),
-		512,
-		G_ALLOC_ONLY
-	);
+	cache->hash = g_hash_table_new_full(NULL, NULL, NULL, glyph_destroy_gfi);
 
 	font_map = pango_xft_get_font_map(
 		GDK_DISPLAY_XDISPLAY(cache->display),
@@ -126,7 +123,7 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 		if (!pglyph)
 			pglyph = pango_fc_font_get_glyph(PANGO_FC_FONT(font), glyph);
 		if (!pglyph)
-			pglyph = pango_fc_font_get_unknown_glyph(PANGO_FC_FONT(font), glyph);
+			pglyph = PANGO_GET_UNKNOWN_GLYPH (glyph);
 		if (!pglyph)
 			return NULL;
 	}
@@ -204,7 +201,7 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 
 	g_object_unref(font);
 
-	gfi = g_chunk_new(TGlyphInfo, cache->chunk);
+	gfi = g_slice_new(TGlyphInfo);
 	gfi->font = xftfont;
 
 	gfi->x_offset = PANGO_PIXELS(x_offset);

@@ -58,11 +58,9 @@ static void temu_terminal_class_init(TemuTerminalClass *klass)
 {
 	GObjectClass *gobject_class;
 	GtkWidgetClass *widget_class;
-	TemuScreenClass *screen_class;
 
 	gobject_class = G_OBJECT_CLASS(klass);
 	widget_class = GTK_WIDGET_CLASS(klass);
-	screen_class = TEMU_SCREEN_CLASS(klass);
 
 	GTK_OBJECT_CLASS(klass)->destroy = temu_terminal_destroy;
 	gobject_class->set_property = temu_terminal_set_property;
@@ -534,7 +532,7 @@ void temu_terminal_set_icon_title(TemuTerminal *terminal, const gchar *title)
 	g_signal_emit(terminal, signals[SIG_ICON_TITLE_CHANGED], 0);
 }
 
-const char *temu_terminal_get_selection_text(GtkWidget *widget)
+char *temu_terminal_get_selection_text(GtkWidget *widget)
 {
 	TemuTerminal *terminal = TEMU_TERMINAL(widget);
 	return temu_screen_get_cur_selection(TEMU_SCREEN(terminal));

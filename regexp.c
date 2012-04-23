@@ -803,17 +803,20 @@ struct Expression* parse_regexp(const RegexpTokenType* token_stream) {
    NFAs produced from regular expressions have this form.
 */
 struct nfa_node {
-    short group_start_number;
-    short group_end_number;
+    int group_start_number;
+    int group_end_number;
 
-    CharSet preceding_set;        /* Valid preceding characters */
-    CharSet following_set;        /* Valid following characters */
     struct nfa_node* set_next;    /* Following this edge consumes one character */
 
     struct nfa_node* epsilon_next1; /* The preferred epsilon transition */
     struct nfa_node* epsilon_next2;
     unsigned char eat_char;       /* Indicates whether to consume a character
 				     when traversing this edge */
+    int freeing;
+    int ref;
+
+    CharSet preceding_set;        /* Valid preceding characters */
+    CharSet following_set;        /* Valid following characters */
 };
 
 #define SET_NFA_NODE_TYPE             1
@@ -825,6 +828,9 @@ struct nfa {
     struct nfa_node* accept_node;
 };
 
+#define free_nfa_node(node) _free_nfa_node(node, __LINE__, 0)
+void _free_nfa_node (struct nfa_node *node, int line, int level);
+
 struct nfa_node* new_nfa_node(void) {
     struct nfa_node* result = malloc(sizeof(struct nfa_node));
     result->group_start_number = NO_GROUP;
@@ -835,6 +841,8 @@ struct nfa_node* new_nfa_node(void) {
     result->set_next = NULL;
     result->epsilon_next1 = NULL;
     result->epsilon_next2 = NULL;
+    result->freeing = 0;
+    result->ref = 0;
     return result;
 }
 
@@ -850,11 +858,15 @@ void add_epsilon_edge(struct nfa_node* source, struct nfa_node* dest) {
 /* Converts an abstract syntax tree of a regexp to an NFA (nondeterministic
    finite automaton) which the matching algorithm uses. */
 /* TODO: Make sure there are no epsilon-cycles */
-struct nfa regexp_to_nfa(struct Expression* expr) {
+//#define REF_NFA(nfa, inc) { if (nfa) { printf("%d %d: Ref %p, %d + %d\n", __LINE__, level, nfa, nfa->ref, inc); nfa->ref += inc; } }
+#define REF_NFA(nfa, inc) { if (nfa) { nfa->ref += inc; } }
+struct nfa regexp_to_nfa(struct Expression* expr, int ref, int level) {
     struct nfa result = { 0 };
     if (expr->typecode != LITERAL_STRING_EXPRESSION_TYPE) {
 	result.start_node  = new_nfa_node();
+	REF_NFA(result.start_node, ref);
 	result.accept_node = new_nfa_node();
+	REF_NFA(result.accept_node, ref);
     }
 
     switch (expr->typecode) {
@@ -871,17 +883,22 @@ struct nfa regexp_to_nfa(struct Expression* expr) {
 		 (lower_bound == 0 && upper_bound == INFINITY)  ||
                  (lower_bound == 1 && upper_bound == INFINITY)))
 	{
-	    struct nfa nfa_arg_clone = regexp_to_nfa(repExpr->expression_repeated);
+	    struct nfa nfa_arg_clone = regexp_to_nfa(repExpr->expression_repeated, 0, level + 1);
 	    end_node = new_nfa_node();
 	    add_epsilon_edge(start_node, nfa_arg_clone.start_node);
+	    REF_NFA(nfa_arg_clone.start_node, 1);
 	    add_epsilon_edge(nfa_arg_clone.accept_node, end_node);
+	    REF_NFA(end_node, 1);
 	    if (lower_bound == 0) {
 		if (repExpr->is_greedy) {
 		    start_node->epsilon_next2 = end_node;
+		    REF_NFA(start_node->epsilon_next2, 1);
 		} else {
 		    /* Give 0 times priority */
 		    start_node->epsilon_next2 = start_node->epsilon_next1;
 		    start_node->epsilon_next1 = end_node;
+		    REF_NFA(start_node->epsilon_next1, 1);
+		    REF_NFA(start_node->epsilon_next2, 1);
 		}
 	    } else {
 		lower_bound--;
@@ -895,55 +912,73 @@ struct nfa regexp_to_nfa(struct Expression* expr) {
 	/* Now do {0,0}, {0,1}, {0,}, or {1,} */
 	if (upper_bound > lower_bound || upper_bound == INFINITY)
 	{
-	    struct nfa nfa_arg = regexp_to_nfa(repExpr->expression_repeated);
+	    struct nfa nfa_arg = regexp_to_nfa(repExpr->expression_repeated, 0, level + 1);
 	    end_node = new_nfa_node();
 	    start_node->epsilon_next1 = nfa_arg.start_node;
+	    REF_NFA(start_node->epsilon_next1, 1);
 	    if (lower_bound == 0) {
 		if (repExpr->is_greedy) {
 		    start_node->epsilon_next2 = end_node;
+		    REF_NFA(start_node->epsilon_next2, 1);
 		} else {
 		    /* Give 0 times priority */
-		    start_node->epsilon_next2 = start_node->epsilon_next1;
+		    REF_NFA(start_node->epsilon_next1, -1);
 		    start_node->epsilon_next1 = end_node;
+		    REF_NFA(start_node->epsilon_next1, 1);
+
+		    start_node->epsilon_next2 = start_node->epsilon_next1;
+		    REF_NFA(start_node->epsilon_next2, 1);
 		}
 	    }
 	    add_epsilon_edge(nfa_arg.accept_node, end_node);
+	    REF_NFA(end_node, 1);
 	    if (upper_bound == INFINITY) {
 		if (repExpr->is_greedy) {
 		    end_node->epsilon_next1 = nfa_arg.start_node;
+		    REF_NFA(nfa_arg.start_node, 1);
 		} else {
 		    end_node->epsilon_next2 = nfa_arg.start_node;
+		    REF_NFA(nfa_arg.start_node, 1);
 		}
 	    }
 	}
 	add_epsilon_edge(end_node, result.accept_node);
+	REF_NFA(result.accept_node, 1);
 	break;
     }
     case UNION_EXPRESSION_TYPE: {
 	struct UnionExpression* unionExpr = (struct UnionExpression*)expr;
-	struct nfa nfa_left_arg = regexp_to_nfa(unionExpr->left_expression);
-	struct nfa nfa_right_arg = regexp_to_nfa(unionExpr->right_expression);
+	struct nfa nfa_left_arg = regexp_to_nfa(unionExpr->left_expression, 1, level + 1);
+	struct nfa nfa_right_arg = regexp_to_nfa(unionExpr->right_expression, 1, level + 1);
 	result.start_node->epsilon_next1 = nfa_left_arg.start_node;
 	result.start_node->epsilon_next2 = nfa_right_arg.start_node;
+	REF_NFA(result.start_node->epsilon_next1, 1);
+	REF_NFA(result.start_node->epsilon_next2, 1);
 	add_epsilon_edge(nfa_left_arg.accept_node, result.accept_node);
+	REF_NFA(result.accept_node, 1);
 	add_epsilon_edge(nfa_right_arg.accept_node, result.accept_node);
+	REF_NFA(result.accept_node, 1);
 	break;
     }
     case CONCATENATE_EXPRESSION_TYPE: {
 	struct ConcatenateExpression* concatExpr = (struct ConcatenateExpression*)expr;
-	struct nfa nfa_left_arg = regexp_to_nfa(concatExpr->left_expression);
-	struct nfa nfa_right_arg = regexp_to_nfa(concatExpr->right_expression);
+	struct nfa nfa_left_arg = regexp_to_nfa(concatExpr->left_expression, 0, level + 1);
+	struct nfa nfa_right_arg = regexp_to_nfa(concatExpr->right_expression, 0, level + 1);
 	/* Need to use new start/end node because the concatenation might have a
            separate group number from the components. */
 	result.start_node->epsilon_next1 = nfa_left_arg.start_node;
+	REF_NFA(result.start_node->epsilon_next1, 1);
 	add_epsilon_edge(nfa_left_arg.accept_node, nfa_right_arg.start_node);
+	REF_NFA(nfa_right_arg.start_node, 1);
 	add_epsilon_edge(nfa_right_arg.accept_node, result.accept_node);
+	REF_NFA(result.accept_node, 1);
 	break;
     }
     case CHARSET_EXPRESSION_TYPE: {
 	struct CharSetExpression* charSetExpr = (struct CharSetExpression*)expr;
 	CopyCharSet(result.start_node->following_set, charSetExpr->set);
 	result.start_node->set_next = result.accept_node;
+	REF_NFA(result.start_node->set_next, 1);
 	SetAllCharSet(result.start_node->preceding_set);
 	result.start_node->eat_char = 1;
 	break;
@@ -953,6 +988,7 @@ struct nfa regexp_to_nfa(struct Expression* expr) {
 	CopyCharSet(result.start_node->preceding_set, zeroWidthExpr->preceding_set);
 	CopyCharSet(result.start_node->following_set, zeroWidthExpr->following_set);
 	result.start_node->set_next = result.accept_node;
+	REF_NFA(result.start_node->set_next, 1);
 	result.start_node->eat_char = 0;
 	break;
     }
@@ -964,32 +1000,43 @@ struct nfa regexp_to_nfa(struct Expression* expr) {
 	if (str[0] == 0) {
 	    /* Must have separate start and end state */
 	    if (result.start_node) {
-		free (result.start_node);
+		free_nfa_node (result.start_node);
 		result.start_node = NULL;
 	    }
 	    result.start_node = new_nfa_node();
+	    REF_NFA(result.start_node, ref);
 	    if (result.accept_node) {
-		free (result.accept_node);
+		free_nfa_node (result.accept_node);
 		result.accept_node = NULL;
 	    }
 	    result.accept_node = new_nfa_node();
+	    REF_NFA(result.accept_node, ref);
 	    result.start_node->epsilon_next1 = result.accept_node;
+	    REF_NFA(result.start_node->epsilon_next1, 1);
 	} else {
 	    struct nfa_node* current_node = new_nfa_node();
 	    if (result.start_node) {
-		free (result.start_node);
+		free_nfa_node (result.start_node);
 		result.start_node = NULL;
 	    };
 	    result.start_node = current_node;
+	    REF_NFA(result.start_node, ref);
 	    for(i=0; str[i] != 0; i++) {
 		struct nfa_node* next_node = new_nfa_node();
 		CharSetInsert(current_node->following_set, (char)str[i]);
 		SetAllCharSet(current_node->preceding_set);
 		current_node->eat_char = 1;
 		current_node->set_next = next_node;
+		REF_NFA(current_node->set_next, 1);
 		current_node = next_node;
 	    }
+
+	    if (result.accept_node) {
+		free_nfa_node (result.accept_node);
+		result.accept_node = NULL;
+	    }
 	    result.accept_node = current_node;
+	    REF_NFA(result.accept_node, ref);
 	}
 	break;
     }
@@ -1107,7 +1154,7 @@ struct regexp *regexp_new (char *regex, int flags) {
     if (token_string == NULL) goto failed;
     parsed_regexp = parse_regexp(token_string);
     if (parsed_regexp == NULL) goto failed;
-    result->nfa = regexp_to_nfa(parsed_regexp);
+    result->nfa = regexp_to_nfa(parsed_regexp, 1, 0);
 
     /* Count groups */
     result->num_groups = 0;
@@ -1127,13 +1174,43 @@ struct regexp *regexp_new (char *regex, int flags) {
 }
 
 /* Frees storage associated with regexp object */
+void _free_nfa_node (struct nfa_node *node, int line, int level)
+{
+    node->ref--;
+    //printf("%d %d: Freeing %p %d: %d\n", line, level, node, node->freeing, node->ref);
+
+    if (node->freeing) {
+	return;
+    }
+
+    node->freeing++;
+
+    if (node->set_next) {
+	_free_nfa_node(node->set_next, line, level + 1);
+	node->set_next = NULL;
+    }
+    if (node->epsilon_next1) {
+	_free_nfa_node(node->epsilon_next1, line, level + 1);
+	node->epsilon_next1 = NULL;
+    }
+    if (node->epsilon_next2) {
+	_free_nfa_node(node->epsilon_next2, line, level + 1);
+	node->epsilon_next2 = NULL;
+    }
+
+    if (node->ref <= 0)
+	free (node);
+    else
+	node->freeing--;
+}
+
 void regexp_free(struct regexp* regexp) {
     if (regexp->nfa.start_node) {
-	free (regexp->nfa.start_node);
+	free_nfa_node(regexp->nfa.start_node);
 	regexp->nfa.start_node = NULL;
     }
     if (regexp->nfa.accept_node) {
-	free (regexp->nfa.accept_node);
+	free_nfa_node(regexp->nfa.accept_node);
 	regexp->nfa.accept_node = NULL;
     }
     free(regexp);
@@ -1163,6 +1240,7 @@ int regexp_find_next (char ***subpatterns, struct regexp* regexp, struct regexp_
     int i;
 
     if(result == 0) {
+	free(ranges);
 	return 0;
     }
 

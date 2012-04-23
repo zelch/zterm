@@ -150,9 +150,6 @@ term_switch (terms_t *terms, gint n, char *cmd)
 		if (!terminal->window_title)
 			terminal->window_title = g_strdup("temuterm");
 
-		snprintf(str, sizeof(str), "Terminal %d", n);
-		label = gtk_label_new(str);
-
 		if (terms->colors) {
 			color_t *color;
 
@@ -195,6 +192,9 @@ term_switch (terms_t *terms, gint n, char *cmd)
 			temu_terminal_execve(TEMU_TERMINAL(term), argv[0], argv, environ);
 		}
 
+		snprintf(str, sizeof(str), "Terminal %d", n);
+		label = gtk_label_new(str);
+
 		gtk_notebook_set_current_page(terms->notebook, gtk_notebook_append_page (terms->notebook, term, label));
 		gtk_widget_realize(term);
 		gtk_widget_show(label);
@@ -222,9 +222,6 @@ term_switch_page (GtkNotebook *notebook, GtkNotebookPage *page, gint page_num, g
 	gtk_widget_grab_focus (GTK_WIDGET(term));
 	temu_window_title_changed (term, term->client_data);
 }
-
-void temu_terminal_insert_text(GtkWidget *widget, const char *text);
-const char *temu_terminal_get_selection_text(GtkWidget *widget);
 
 static gboolean
 term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
@@ -374,19 +371,21 @@ temu_parse_config (terms_t *terms)
 	struct regexp_iterator *iterator = NULL;
 	char **subs = NULL;
 	FILE *f;
-	char *file;
+	char *file = NULL;
 	long f_len;
 	int j;
 	char *t1, *t2;
 	char conffile[512] = { 0 };
 
-	if (!bind_action || !bind_switch || !color || !font)
-		return;
+	if (!bind_action || !bind_switch || !color || !font || !size) {
+		printf("Unable to compile regexp for config file parsing!\n");
+		goto done;
+	}
 
 	snprintf(conffile, sizeof(conffile) - 1, "%s/.temuterm/config", getenv("HOME"));
 	f = fopen(conffile, "r");
 	if (!f)
-		return;
+		goto done;
 	fseek(f, 0, SEEK_END);
 	f_len = ftell(f);
 	fseek(f, 0, SEEK_SET);
@@ -441,11 +440,20 @@ temu_parse_config (terms_t *terms)
 
 		t1 = t2;
 	}
-	regexp_free (bind_action);
-	regexp_free (bind_switch);
-	regexp_free (color);
-	regexp_free (font);
-	free (file);
+
+done:
+	if (bind_action) 
+		regexp_free (bind_action);
+	if (bind_switch)
+		regexp_free (bind_switch);
+	if (color)
+		regexp_free (color);
+	if (font)
+		regexp_free (font);
+	if (size)
+		regexp_free (size);
+	if (file)
+		free (file);
 
 	return;
 }
@@ -455,6 +463,7 @@ int main(int argc, char *argv[], char *envp[])
 	GtkWidget *window, *notebook;
 	GdkColor black = { .red = 0, .green = 0, .blue = 0 };
 	terms_t *terms;
+	int i;
 
 	gtk_init(&argc, &argv);
 
@@ -508,6 +517,43 @@ int main(int argc, char *argv[], char *envp[])
 			terms);
 
 	gtk_main();
+
+	printf("Exiting, can free here. (%d)\n", terms->n_active);
+	for (i = 0; i < terms->n_active; i++) {
+		if (terms->active[i]) {
+			gtk_widget_hide (GTK_WIDGET(terms->active[i]));
+			gtk_container_remove (GTK_CONTAINER(terms->notebook), GTK_WIDGET(terms->active[i]));
+			gtk_widget_destroy (GTK_WIDGET(terms->active[i]));
+		}
+	}
+
+	gtk_widget_destroy (GTK_WIDGET(terms->notebook));
+	printf("Unrefed notebook, maybe not right.\n");
+	free (terms->active);
+	terms->active = NULL;
+
+	if (terms->font) {
+		free (terms->font);
+		terms->font = NULL;
+	}
+	if (terms->colors) {
+		free (terms->colors);
+		terms->colors = NULL;
+	}
+	{
+		bind_t *keys, *next;
+		for (keys = terms->keys; keys; keys = next) {
+			next = keys->next;
+			if (keys->cmd) {
+				free (keys->cmd);
+				keys->cmd = NULL;
+			}
+			free (keys);
+		}
+		terms->keys = NULL;
+	}
+
+	free (terms);
 
 	return 0;
 }

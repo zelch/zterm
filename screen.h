@@ -153,6 +153,6 @@ void		temu_screen_show_pointer	(TemuScreen *screen);
 void		temu_screen_hide_pointer	(TemuScreen *screen);
 
 /* Selection fun. */
-const char *temu_screen_get_cur_selection (TemuScreen *screen);
+char *temu_screen_get_cur_selection (TemuScreen *screen);
 
 #endif

@@ -2001,7 +2001,7 @@ static void emul_cursor_clear(TemuEmul *S)
 
 static void emul_cursor_draw(TemuEmul *S)
 {
-	temu_cell_t *tmp_cell;
+	const temu_cell_t *tmp_cell;
 	temu_cell_t cell;
 	gint x;
 
