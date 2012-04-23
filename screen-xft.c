@@ -22,6 +22,7 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 
 	for (; node != &priv->moves; node = next) {
 		GdkRectangle final_rect, clipped;
+		memset(&clipped, 0, sizeof(clipped));
 
 		next = node->next;
 
@@ -66,7 +67,7 @@ void temu_screen_render_moves_xft(TemuScreen *screen, GdkRegion *inv_region)
 		node->next->prev = node->prev;
 		g_trash_stack_push(&priv->moves_free, node);
 	}
-	
+
 	return;
 }
 
