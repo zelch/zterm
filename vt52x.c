@@ -1891,10 +1891,6 @@ static void emul_SM_dec(TemuEmul *S, gboolean set)
 
 static void emul_init(TemuEmul *S)
 {
-	S->out = NULL;
-	S->outs = 0;
-	S->outmax = 0;
-
 	S->tabstop = NULL;
 	S->tabstops = 0;
 	S->tabclear = FALSE;
@@ -1955,7 +1951,9 @@ static void emul_reset(TemuEmul *S)
 	S->chars = 0;
 	S->strs = 0;
 
-	g_free(S->out);
+	if (S->out) {
+		g_free(S->out);
+	}
 	S->out = NULL;
 	S->outs = 0;
 	S->outmax = 0;
