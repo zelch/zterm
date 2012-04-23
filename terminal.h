@@ -55,7 +55,7 @@ void temu_terminal_set_icon_title		(TemuTerminal *terminal,
 						 const gchar *title);
 
 void temu_terminal_insert_text(GtkWidget *widget, const char *text);
-const char *temu_terminal_get_selection_text(GtkWidget *widget);
+char *temu_terminal_get_selection_text(GtkWidget *widget);
 
 G_END_DECLS
 
