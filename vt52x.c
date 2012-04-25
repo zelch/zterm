@@ -1902,6 +1902,7 @@ static void emul_init(TemuEmul *S)
 	S->allow_resize	= TRUE;
 
 	S->conformance = 5;
+	S->out = NULL;
 
 	emul_reset(S);
 }
