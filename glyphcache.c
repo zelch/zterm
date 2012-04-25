@@ -32,7 +32,7 @@ TGlyphCache *glyph_cache_new(GtkWidget *widget,
 
 void glyph_destroy_gfi(gpointer data)
 {
-	g_slice_free(TGlyphCache, data);
+	g_slice_free(TGlyphInfo, data);
 }
 
 void glyph_cache_destroy(TGlyphCache *cache)
@@ -201,6 +201,7 @@ TGlyphInfo *glyph_cache_get_info(TGlyphCache *cache, gunichar glyph) {
 
 	g_object_unref(font);
 
+//	gfi = calloc(sizeof(TGlyphInfo), 1);
 	gfi = g_slice_new(TGlyphInfo);
 	gfi->font = xftfont;
 
