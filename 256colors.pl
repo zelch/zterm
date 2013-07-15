@@ -14,7 +14,9 @@ $scale = 1;
 $mode = $ARGV[0] if (defined($ARGV[0]));
 
 if ($mode == 0) {
-    $line = "\t/* %d */ \t{%3d, %3d, %3d}\n";
+#    $line = "\t/* %d */ \t{%3d, %3d, %3d}\n";
+    $line = "\t{.pixel = %d, .red = 0x%4.4x, .green = 0x%4.4x, .blue = 0x%4.4x},\n";
+    $scale = 257;
 } elsif ($mode == 1) {
     $line = "color:\t%d\t#%4.4x%4.4x%4.4x\n";
     $scale = 257;
@@ -30,6 +32,20 @@ EOF
 
 }
 if ($mode < 2) {
+    for ($code = 0; $code < 16; $code ++) {
+	$blue = ($code & 4) ? 170 : 0;
+	$green = ($code & 2) ? 170 : 0;
+	$red = ($code & 1) ? 170 : 0;
+	if ($code > 7) {
+	    $blue += 85;
+	    $green += 85;
+	    $red += 85;
+	}
+	printf($line, $code,
+		$red * $scale,
+		$green * $scale,
+		$blue * $scale);
+    }
     # colors 16-231 are a 6x6x6 color cube
     for ($red = 0; $red < 6; $red++) {
 	for ($green = 0; $green < 6; $green++) {
