@@ -6,8 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <gtk/gtk.h>
-#include <gdk/gdkkeys.h>
-#include <gdk/gdkkeysyms.h>
+#include <gdk/gdk.h>
 #include <vte/vte.h>
 #include <vte/vteaccess.h>
 #include <regex.h>
@@ -409,6 +408,7 @@ temu_parse_config (void)
 	int j, ret;
 	char *t1, *t2;
 	char conffile[512] = { 0 };
+	size_t read;
 
 	regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", REG_EXTENDED);
 	regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_EXTENDED);
@@ -416,7 +416,7 @@ temu_parse_config (void)
 	regcomp (&font, "^font:[ \t]+(.*?)$", REG_EXTENDED);
 	regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_EXTENDED);
 
-	snprintf(conffile, sizeof(conffile) - 1, "%s/.temuterm/config", getenv("HOME"));
+	snprintf(conffile, sizeof(conffile) - 1, "%s/.zterm/config", getenv("HOME"));
 	f = fopen(conffile, "r");
 	if (!f)
 		goto done;
@@ -424,8 +424,10 @@ temu_parse_config (void)
 	f_len = ftell(f);
 	fseek(f, 0, SEEK_SET);
 	file = calloc (1, f_len + 1);
-	fread (file, f_len, 1, f);
+	read = fread (file, f_len, 1, f);
 	fclose(f);
+	if (read != 1)
+		goto done;
 
 	t1 = file;
 	while (*t1) {
