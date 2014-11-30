@@ -506,7 +506,7 @@ done:
 int main(int argc, char *argv[], char *envp[])
 {
 	GtkWidget *window, *notebook;
-	GdkColor black = { .red = 0, .green = 0, .blue = 0 };
+	GdkRGBA black = { .red = 0, .green = 0, .blue = 0, .alpha = 1 };
 	int i;
 
 	gtk_init(&argc, &argv);
@@ -514,7 +514,7 @@ int main(int argc, char *argv[], char *envp[])
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_container_set_border_width(GTK_CONTAINER(window), 0);
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
-	gtk_widget_modify_bg(window, GTK_STATE_NORMAL, &black);
+	gtk_widget_override_background_color(window, GTK_STATE_NORMAL, &black);
 
 	notebook = gtk_notebook_new();
 	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), FALSE);
