@@ -5,8 +5,9 @@
 # Also based on 256colors2.pl directly.
 
 # Mode 0 outputs a header file, 8 bit colors.
-# Mode 1 outputs the colors for the temuterm config file.
-# Mode 2 just shows all the colors.
+# Mode 1 outputs a header file, float colors.
+# Mode 2 outputs the colors for the temuterm config file.
+# Mode 3 just shows all the colors.
 
 $mode = 0;
 $scale = 1;
@@ -17,9 +18,16 @@ if ($mode == 0) {
 #    $line = "\t/* %d */ \t{%3d, %3d, %3d}\n";
     $line = "\t{.pixel = %d, .red = 0x%4.4x, .green = 0x%4.4x, .blue = 0x%4.4x},\n";
     $scale = 257;
+    $div = 1;
 } elsif ($mode == 1) {
+#    $line = "\t/* %d */ \t{%3d, %3d, %3d}\n";
+    $line = "\t/* %d */ {.red = %16.16f, .green = %16.16f, .blue = %16.16f, .alpha = 1},\n";
+    $scale = 257;
+    $div = 0xffff;
+} elsif ($mode == 2) {
     $line = "color:\t%d\t#%4.4x%4.4x%4.4x\n";
     $scale = 257;
+    $div = 1;
 }
 
 if ($mode == 0) {
@@ -31,7 +39,7 @@ if ($mode == 0) {
 EOF
 
 }
-if ($mode < 2) {
+if ($mode < 3) {
     for ($code = 0; $code < 16; $code ++) {
 	$blue = ($code & 4) ? 170 : 0;
 	$green = ($code & 2) ? 170 : 0;
@@ -42,9 +50,9 @@ if ($mode < 2) {
 	    $red += 85;
 	}
 	printf($line, $code,
-		$red * $scale,
-		$green * $scale,
-		$blue * $scale);
+		($red * $scale) / $div,
+		($green * $scale) / $div,
+		($blue * $scale) / $div);
     }
     # colors 16-231 are a 6x6x6 color cube
     for ($red = 0; $red < 6; $red++) {
@@ -52,9 +60,9 @@ if ($mode < 2) {
 	    for ($blue = 0; $blue < 6; $blue++) {
 		$code = 16 + ($red * 36) + ($green * 6) + $blue;
 		printf($line, $code,
-			($red ? ($red * 40 + 55) : 0) * $scale,
-			($green ? ($green * 40 + 55) : 0) * $scale,
-			($blue ? ($blue * 40 + 55) : 0) * $scale);
+			(($red ? ($red * 40 + 55) : 0) * $scale) / $div,
+			(($green ? ($green * 40 + 55) : 0) * $scale) / $div,
+			(($blue ? ($blue * 40 + 55) : 0) * $scale) / $div);
 	    }
 	}
     }
@@ -66,11 +74,12 @@ if ($mode < 2) {
 	$level = ($gray * 10) + 8;
 	$code = 232 + $gray;
 	$level *= $scale;
+	$level = $level / $div;
 	printf($line, $code, $level, $level, $level);
     }
 }
 
-if ($mode == 2) {
+if ($mode == 3) {
     # display the colors
 
     # first the system ones:
