@@ -551,21 +551,19 @@ int main(int argc, char *argv[], char *envp[])
 
 	terms.menu = gtk_menu_new();
 
-	terms.m_copy = gtk_image_menu_item_new_from_stock(GTK_STOCK_COPY, NULL);
+	terms.m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
 	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_copy);
 	g_signal_connect(terms.m_copy, "activate", G_CALLBACK(do_copy), NULL);
 
-	terms.m_paste = gtk_image_menu_item_new_from_stock(GTK_STOCK_PASTE, NULL);
+	terms.m_paste = gtk_menu_item_new_with_mnemonic("_Paste");
 	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_paste);
 	g_signal_connect(terms.m_paste, "activate", G_CALLBACK(do_paste), NULL);
 
-	terms.m_t_decorate = gtk_image_menu_item_new_with_mnemonic("_Toggle decorations");
-	gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(terms.m_t_decorate), gtk_image_new_from_stock(GTK_STOCK_LEAVE_FULLSCREEN, GTK_ICON_SIZE_MENU));
+	terms.m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
 	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_t_decorate);
 	g_signal_connect(terms.m_t_decorate, "activate", G_CALLBACK(do_t_decorate), NULL);
 
-	terms.m_t_tabbar = gtk_image_menu_item_new_with_mnemonic("_Toggle tab bar");
-	gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(terms.m_t_tabbar), gtk_image_new_from_stock(GTK_STOCK_LEAVE_FULLSCREEN, GTK_ICON_SIZE_MENU));
+	terms.m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
 	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_t_tabbar);
 	g_signal_connect(terms.m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), NULL);
 
