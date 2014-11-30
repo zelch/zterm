@@ -8,10 +8,9 @@
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
 #include <vte/vte.h>
-#include <vte/vteaccess.h>
 #include <regex.h>
 
-GdkColor colors[256] = {
+GdkRGBA colors[256] = {
 #include "256colors.h"
 };
 
@@ -149,8 +148,15 @@ term_switch (long n, char *cmd)
 
 		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(255, sizeof (colors) / sizeof(colors[0])));
 
-		if (terms.font)
-			vte_terminal_set_font_from_string (VTE_TERMINAL (term), terms.font);
+		if (terms.font) {
+			PangoFontDescription *font = pango_font_description_from_string(terms.font);
+			if (font) {
+				vte_terminal_set_font (VTE_TERMINAL (term), font);
+				pango_font_description_free (font);
+			} else {
+				printf ("Unable to load font '%s'\n", terms.font);
+			}
+		}
 		vte_terminal_set_allow_bold (VTE_TERMINAL (term), FALSE);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
 		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), 512);
@@ -172,14 +178,14 @@ term_switch (long n, char *cmd)
 				cmd,
 				NULL
 			};
-			vte_terminal_fork_command_full (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
+			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL, NULL);
 		} else {
 			char *argv[] = {
 				getenv("SHELL"), // one good temp. hack deserves another
 				"--login",
 				NULL
 			};
-			vte_terminal_fork_command_full (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH | G_SPAWN_FILE_AND_ARGV_ZERO, NULL, NULL, NULL, NULL);
+			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH | G_SPAWN_FILE_AND_ARGV_ZERO, NULL, NULL, NULL, NULL, NULL);
 		}
 
 		snprintf(str, sizeof(str), "Terminal %ld", n);
@@ -320,7 +326,7 @@ temu_parse_color (char **subs)
 		return;
 	}
 
-	gdk_color_parse (subs[1], &colors[n]);
+	gdk_rgba_parse (&colors[n], subs[1]);
 }
 
 static void
