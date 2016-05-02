@@ -42,7 +42,6 @@ typedef struct color_s {
 
 typedef struct terms_s {
 	GtkNotebook *notebook;
-	GtkWidget **active;
 	GtkWidget *window;
 	GtkWidget *menu;
 	GtkWidget *m_copy;
@@ -50,7 +49,9 @@ typedef struct terms_s {
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
-	gint n_active, alive;
+	GtkWidget **active; // Indexes to the widgets for a given term.
+	gint n_active; // Total number of configured terms.
+	gint alive; // Total number of 'alive' terms.
 	char **envp;
 
 	/* Configuration options. */
