@@ -40,7 +40,7 @@ typedef struct color_s {
 	struct color_s *next;
 } color_t;
 
-typedef struct terms_s {
+typedef struct window_s {
 	GtkNotebook *notebook;
 	GtkWidget *window;
 	GtkWidget *menu;
@@ -49,7 +49,11 @@ typedef struct terms_s {
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
+} window_t;
+
+typedef struct terms_s {
 	GtkWidget **active; // Indexes to the widgets for a given term.
+	int *active_window; // Indexes to the window for a given term.
 	gint n_active; // Total number of configured terms.
 	gint alive; // Total number of 'alive' terms.
 	char **envp;
@@ -60,6 +64,7 @@ typedef struct terms_s {
 } terms_t;
 
 terms_t terms;
+window_t windows[MAX_WINDOWS];
 
 static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data);
 
