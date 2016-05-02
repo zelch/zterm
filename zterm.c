@@ -65,11 +65,13 @@ static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpo
 static void
 temu_reorder (void)
 {
+#if 0
 	int i, j;
 
 	for (i = j = 0; i < terms.n_active && j < terms.alive; i++)
 		if (terms.active[i])
 			gtk_notebook_reorder_child (terms.notebook, terms.active[i], j++);
+#endif
 }
 
 
