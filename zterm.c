@@ -14,6 +14,8 @@ GdkRGBA colors[256] = {
 #include "256colors.h"
 };
 
+#define MAX_WINDOWS 8
+
 int start_width = 1024;
 int start_height = 768;
 
