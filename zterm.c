@@ -68,6 +68,7 @@ window_t windows[MAX_WINDOWS];
 
 static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data);
 int new_window (void);
+void destroy_window (int i);
 
 static void
 temu_reorder (void)
@@ -582,6 +583,26 @@ int new_window (void)
 	return i;
 }
 
+void destroy_window (int i)
+{
+	if (windows[i].window) {
+		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].window));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_paste));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_tabbar));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].menu));
+		windows[i].notebook = NULL;
+		windows[i].window = NULL;
+		windows[i].menu = NULL;
+		windows[i].m_copy = NULL;
+		windows[i].m_paste = NULL;
+		windows[i].m_t_decorate = NULL;
+		windows[i].m_t_tabbar = NULL;
+	}
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
 	int i;
@@ -622,7 +643,10 @@ int main(int argc, char *argv[], char *envp[])
 		}
 	}
 
-	gtk_widget_destroy (GTK_WIDGET(terms.notebook));
+	for (i = 0; i < MAX_WINDOWS; i++) {
+		destroy_window (i);
+	}
+
 	free (terms.active);
 	terms.active = NULL;
 
