@@ -67,6 +67,7 @@ terms_t terms;
 window_t windows[MAX_WINDOWS];
 
 static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data);
+int new_window (void);
 
 static void
 temu_reorder (void)
@@ -519,13 +520,22 @@ done:
 	return;
 }
 
-int main(int argc, char *argv[], char *envp[])
+int new_window (void)
 {
 	GtkWidget *window, *notebook;
 	GdkRGBA black = { .red = 0, .green = 0, .blue = 0, .alpha = 1 };
 	int i;
 
-	gtk_init(&argc, &argv);
+	for (i = 0; i < MAX_WINDOWS; i++) {
+		if (!windows[i].window) {
+			break;
+		}
+	}
+
+	if (i == MAX_WINDOWS) {
+		fprintf (stderr, "ERROR: Unable to allocate new window.\n");
+		return -1;
+	}
 
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_container_set_border_width(GTK_CONTAINER(window), 0);
@@ -540,10 +550,46 @@ int main(int argc, char *argv[], char *envp[])
 	gtk_container_set_border_width (GTK_CONTAINER(notebook), 0);
 	gtk_widget_show(notebook);
 
+	windows[i].window = GTK_WIDGET(window);
+	windows[i].notebook = GTK_NOTEBOOK(notebook);
+
+	windows[i].menu = gtk_menu_new();
+
+	windows[i].m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_copy);
+	g_signal_connect(windows[i].m_copy, "activate", G_CALLBACK(do_copy), NULL);
+
+	windows[i].m_paste = gtk_menu_item_new_with_mnemonic("_Paste");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_paste);
+	g_signal_connect(windows[i].m_paste, "activate", G_CALLBACK(do_paste), NULL);
+
+	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
+	g_signal_connect(windows[i].m_t_decorate, "activate", G_CALLBACK(do_t_decorate), NULL);
+
+	windows[i].m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
+	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), NULL);
+
+	gtk_widget_set_can_focus(notebook, FALSE);
+
+	gtk_widget_show(window);
+
+	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK(notebook));
+
+	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &terms);
+
+	return i;
+}
+
+int main(int argc, char *argv[], char *envp[])
+{
+	int i;
+
+	gtk_init(&argc, &argv);
+
 	memset (&terms, 0, sizeof (terms));
-	terms.notebook = GTK_NOTEBOOK(notebook);
 	terms.envp = envp;
-	terms.window = window;
 	temu_parse_config ();
 	if (!terms.n_active) {
 		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
@@ -564,32 +610,6 @@ int main(int argc, char *argv[], char *envp[])
 
 		term_switch (0, cmd);
 	}
-
-	terms.menu = gtk_menu_new();
-
-	terms.m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
-	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_copy);
-	g_signal_connect(terms.m_copy, "activate", G_CALLBACK(do_copy), NULL);
-
-	terms.m_paste = gtk_menu_item_new_with_mnemonic("_Paste");
-	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_paste);
-	g_signal_connect(terms.m_paste, "activate", G_CALLBACK(do_paste), NULL);
-
-	terms.m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
-	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_t_decorate);
-	g_signal_connect(terms.m_t_decorate, "activate", G_CALLBACK(do_t_decorate), NULL);
-
-	terms.m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
-	gtk_menu_shell_append(GTK_MENU_SHELL(terms.menu), terms.m_t_tabbar);
-	g_signal_connect(terms.m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), NULL);
-
-	gtk_widget_set_can_focus(notebook, FALSE);
-
-	gtk_widget_show(window);
-
-	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK(notebook));
-
-	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &terms);
 
 	gtk_main();
 
