@@ -167,7 +167,7 @@ term_destroyed (VteTerminal *term, gpointer user_data)
 {
 	int n = (long) user_data;
 
-//	fprintf (stderr, "%s: %d\n", __func__, tracker->n);
+//	fprintf (stderr, "%s: %d\n", __func__, n);
 
 	g_object_unref (G_OBJECT(term));
 
