@@ -108,6 +108,30 @@ temu_window_title_changed(VteTerminal *terminal, gpointer data)
 	temu_window_title_change (terminal, terms.window, (long) data);
 }
 
+static void
+prune_windows (void)
+{
+	int active = 0;
+
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			int active_pages = gtk_notebook_get_n_pages(windows[i].notebook);
+			active += active_pages;
+			if (active_pages <= 0) {
+				destroy_window (i);
+			}
+		}
+	}
+
+	if (active != terms.alive) {
+		printf ("Found %d active tabs, but %d terms alive.\n", active, terms.alive);
+	}
+
+	if (active <= 0) {
+		gtk_main_quit();
+	}
+}
+
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
