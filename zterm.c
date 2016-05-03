@@ -135,15 +135,29 @@ prune_windows (void)
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
-	int status, n = (long) user_data;
+	int status, n = -1, window_i = -1;
 
 	waitpid (-1, &status, WNOHANG);
 
-	gtk_notebook_prev_page (terms.notebook);
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i] == GTK_WIDGET(term)) {
+			n = i;
+			window_i = terms.active_window[n];
+			break;
+		}
+	}
+	if (n == -1 || window_i == -1) {
+		printf ("Unable to find term that died.\n");
+		return FALSE;
+	}
+
+	//printf ("Removing dead term %d from window %d.\n", n, window_i);
+	gtk_notebook_prev_page (windows[window_i].notebook);
 	gtk_widget_hide (GTK_WIDGET(term));
-	gtk_container_remove (GTK_CONTAINER(terms.notebook), GTK_WIDGET(term));
-	terms.active[n] = NULL;
+	gtk_container_remove (GTK_CONTAINER(windows[window_i].notebook), GTK_WIDGET(term));
 	gtk_widget_destroy (GTK_WIDGET(term));
+
+	prune_windows ();
 
 	return TRUE;
 }
