@@ -235,7 +235,7 @@ term_switch (long n, char *cmd, int window_i)
 		gtk_widget_set_hexpand (term, TRUE);
 		gtk_widget_set_vexpand (term, TRUE);
 
-		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(255, sizeof (colors) / sizeof(colors[0])));
+		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 
 		if (terms.font) {
 			PangoFontDescription *font = pango_font_description_from_string(terms.font);
