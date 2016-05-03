@@ -318,6 +318,7 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 static gboolean
 term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 {
+	window_t *window = (window_t *) user_data;
 	bind_t	*cur;
 	guint state = event->state;
 
@@ -332,11 +333,11 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 						term_switch (cur->base + (event->keyval - cur->key_min), cur->cmd, 0);
 						break;
 					case BIND_ACT_CUT:
-						widget = gtk_notebook_get_nth_page(terms.notebook, gtk_notebook_get_current_page(terms.notebook));
+						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 						vte_terminal_copy_clipboard (VTE_TERMINAL(widget));
 						break;
 					case BIND_ACT_PASTE:
-						widget = gtk_notebook_get_nth_page(terms.notebook, gtk_notebook_get_current_page(terms.notebook));
+						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 						vte_terminal_paste_clipboard (VTE_TERMINAL(widget));
 						break;
 				}
@@ -459,29 +460,33 @@ void free_subs (char *subs[], size_t count)
 void
 do_copy (GtkMenuItem *item, void *data)
 {
-	GtkWidget *widget = gtk_notebook_get_nth_page(terms.notebook, gtk_notebook_get_current_page(terms.notebook));
+	window_t *window = (window_t *) data;
+	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 	vte_terminal_copy_clipboard (VTE_TERMINAL(widget));
 }
 
 void
 do_paste (GtkMenuItem *item, void *data)
 {
-	GtkWidget *widget = gtk_notebook_get_nth_page(terms.notebook, gtk_notebook_get_current_page(terms.notebook));
+	window_t *window = (window_t *) data;
+	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 	vte_terminal_paste_clipboard (VTE_TERMINAL(widget));
 }
 
 void
 do_t_decorate (GtkMenuItem *item, void *data)
 {
-	gboolean decorated = gtk_window_get_decorated (GTK_WINDOW(terms.window));
-	gtk_window_set_decorated(GTK_WINDOW(terms.window), !decorated);
+	window_t *window = (window_t *) data;
+	gboolean decorated = gtk_window_get_decorated (GTK_WINDOW(window->window));
+	gtk_window_set_decorated(GTK_WINDOW(window->window), !decorated);
 }
 
 void
 do_t_tabbar (GtkMenuItem *item, void *data)
 {
-	gboolean show_tabs = gtk_notebook_get_show_tabs (GTK_NOTEBOOK(terms.notebook));
-	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(terms.notebook), !show_tabs);
+	window_t *window = (window_t *) data;
+	gboolean show_tabs = gtk_notebook_get_show_tabs (GTK_NOTEBOOK(window->notebook));
+	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(window->notebook), !show_tabs);
 }
 
 void
@@ -629,19 +634,19 @@ int new_window (void)
 
 	windows[i].m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_copy);
-	g_signal_connect(windows[i].m_copy, "activate", G_CALLBACK(do_copy), NULL);
+	g_signal_connect(windows[i].m_copy, "activate", G_CALLBACK(do_copy), &windows[i]);
 
 	windows[i].m_paste = gtk_menu_item_new_with_mnemonic("_Paste");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_paste);
-	g_signal_connect(windows[i].m_paste, "activate", G_CALLBACK(do_paste), NULL);
+	g_signal_connect(windows[i].m_paste, "activate", G_CALLBACK(do_paste), &windows[i]);
 
 	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
-	g_signal_connect(windows[i].m_t_decorate, "activate", G_CALLBACK(do_t_decorate), NULL);
+	g_signal_connect(windows[i].m_t_decorate, "activate", G_CALLBACK(do_t_decorate), &windows[i]);
 
 	windows[i].m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
-	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), NULL);
+	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
 	gtk_widget_set_can_focus(notebook, FALSE);
 
@@ -649,7 +654,7 @@ int new_window (void)
 
 	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK(notebook));
 
-	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &terms);
+	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &windows[i]);
 
 	return i;
 }
