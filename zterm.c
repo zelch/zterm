@@ -617,6 +617,7 @@ int main(int argc, char *argv[], char *envp[])
 		exit (0);
 	}
 	terms.active = calloc(terms.n_active, sizeof(*terms.active));
+	terms.active_window = calloc(terms.n_active, sizeof(*terms.active_window));
 
 	{
 		bind_t *cur;
@@ -648,6 +649,7 @@ int main(int argc, char *argv[], char *envp[])
 	}
 
 	free (terms.active);
+	free (terms.active_window);
 	terms.active = NULL;
 
 	if (terms.font) {
