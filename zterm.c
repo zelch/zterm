@@ -181,14 +181,53 @@ term_destroyed (VteTerminal *term, gpointer user_data)
 }
 
 static void
+term_set_window (int n, int window_i)
+{
+	GtkWidget *term = terms.active[n];
+	GtkWidget *label;
+	char str[32];
+
+	// Remove from any previous window.
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			if (gtk_notebook_page_num (windows[i].notebook, term) >= 0) {
+				//printf ("Removing term %d from window %d.\n", n, i);
+				gtk_notebook_prev_page (windows[i].notebook);
+				gtk_widget_hide (term);
+				gtk_container_remove (GTK_CONTAINER(windows[i].notebook), GTK_WIDGET(term));
+			}
+		}
+	}
+
+	//printf ("Setting term %d to window %d.\n", n, window_i);
+	if (!windows[window_i].window) {
+		window_i = new_window ();
+		//printf ("Setting term %d to NEW window %d.\n", n, window_i);
+	}
+
+	// Notebook label.
+	snprintf(str, sizeof(str), "Terminal %d", n);
+	label = gtk_label_new(str);
+
+	gtk_notebook_set_current_page(windows[window_i].notebook, gtk_notebook_append_page (windows[window_i].notebook, term, label));
+	gtk_widget_realize(term);
+	gtk_widget_show(term);
+	gtk_widget_show(label);
+
+	terms.active_window[n] = window_i;
+
+	prune_windows ();
+	temu_reorder ();
+}
+
+static void
 term_switch (long n, char *cmd, int window_i)
 {
 	if (n > terms.n_active)
 		return;
 
 	if (!terms.active[n]) {
-		GtkWidget *term, *label;
-		char str[32];
+		GtkWidget *term;
 
 		term = vte_terminal_new();
 		g_object_ref (G_OBJECT(term));
@@ -238,18 +277,12 @@ term_switch (long n, char *cmd, int window_i)
 			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH | G_SPAWN_FILE_AND_ARGV_ZERO, NULL, NULL, NULL, NULL, NULL);
 		}
 
-		snprintf(str, sizeof(str), "Terminal %ld", n);
-		label = gtk_label_new(str);
-
 		g_signal_connect (term, "button-press-event", G_CALLBACK (term_button_event), &terms);
-		gtk_notebook_set_current_page(terms.notebook, gtk_notebook_append_page (terms.notebook, term, label));
-		gtk_widget_realize(term);
-		gtk_widget_show(label);
-
 		terms.active[n] = term;
 		terms.alive++;
 
-		temu_reorder ();
+
+		term_set_window (n, window_i);
 	}
 
 	gtk_notebook_set_current_page (terms.notebook, gtk_notebook_page_num (terms.notebook, terms.active[n]));
