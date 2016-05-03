@@ -277,10 +277,14 @@ term_switch (long n, char *cmd, int window_i)
 			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH | G_SPAWN_FILE_AND_ARGV_ZERO, NULL, NULL, NULL, NULL, NULL);
 		}
 
-		g_signal_connect (term, "button-press-event", G_CALLBACK (term_button_event), &terms);
 		terms.active[n] = term;
 		terms.alive++;
 
+		// This is the index of the term, not a pointer to the window.
+		//
+		// This is because the term may be moved to a new window, and we want
+		// the button press event to still operate against the correct window.
+		g_signal_connect (term, "button-press-event", G_CALLBACK (term_button_event), (void *) n);
 
 		term_set_window (n, window_i);
 	}
@@ -352,9 +356,12 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 static gboolean
 term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
+	long int n = (long int) user_data;
+	window_t *window = &windows[terms.active_window[n]];
+
 	if (event->button == 3) {
-		gtk_widget_show_all(terms.menu);
-		gtk_menu_popup(GTK_MENU(terms.menu), NULL, NULL, NULL, NULL, event->button, event->time);
+		gtk_widget_show_all(window->menu);
+		gtk_menu_popup(GTK_MENU(window->menu), NULL, NULL, NULL, NULL, event->button, event->time);
 	}
 
 	return FALSE;
