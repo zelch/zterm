@@ -181,7 +181,7 @@ term_destroyed (VteTerminal *term, gpointer user_data)
 }
 
 static void
-term_switch (long n, char *cmd)
+term_switch (long n, char *cmd, int window_i)
 {
 	if (n > terms.n_active)
 		return;
@@ -296,7 +296,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 			if (state == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (event->keyval - cur->key_min), cur->cmd);
+						term_switch (cur->base + (event->keyval - cur->key_min), cur->cmd, 0);
 						break;
 					case BIND_ACT_CUT:
 						widget = gtk_notebook_get_nth_page(terms.notebook, gtk_notebook_get_current_page(terms.notebook));
@@ -668,7 +668,7 @@ int main(int argc, char *argv[], char *envp[])
 			}
 		}
 
-		term_switch (0, cmd);
+		term_switch (0, cmd, 0);
 	}
 
 	gtk_main();
