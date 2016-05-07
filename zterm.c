@@ -9,6 +9,7 @@
 #include <gdk/gdk.h>
 #include <vte/vte.h>
 #include <regex.h>
+#include <bsd/string.h>
 
 GdkRGBA colors[256] = {
 #include "256colors.h"
@@ -63,6 +64,15 @@ typedef struct terms_s {
 	/* Configuration options. */
 	bind_t	*keys;
 	char	*font;
+	gboolean audible_bell;
+	char     word_char_exceptions[64];
+	gdouble  font_scale;
+	gboolean scroll_on_output;
+	gboolean scroll_on_keystroke;
+	gboolean rewrap_on_resize;
+	glong    scrollback_lines;
+	gboolean allow_bold;
+	gboolean mouse_autohide;
 } terms_t;
 
 terms_t terms;
@@ -272,10 +282,16 @@ term_switch (long n, char *cmd, int window_i)
 				printf ("Unable to load font '%s'\n", terms.font);
 			}
 		}
-		vte_terminal_set_allow_bold (VTE_TERMINAL (term), FALSE);
+		vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
+		vte_terminal_set_audible_bell (VTE_TERMINAL (term), terms.audible_bell);
+		vte_terminal_set_font_scale (VTE_TERMINAL (term), terms.font_scale);
+		vte_terminal_set_scroll_on_output (VTE_TERMINAL (term), terms.scroll_on_output);
+		vte_terminal_set_scroll_on_keystroke (VTE_TERMINAL (term), terms.scroll_on_keystroke);
+		vte_terminal_set_rewrap_on_resize (VTE_TERMINAL (term), terms.rewrap_on_resize);
+		vte_terminal_set_allow_bold (VTE_TERMINAL (term), terms.allow_bold);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
-		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), 512);
-		vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), TRUE);
+		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
+		vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
 
 		unsetenv ("TERM");
 		unsetenv ("COLORTERM");
@@ -575,7 +591,7 @@ void
 temu_parse_config (void)
 {
 #define MATCHES	16
-	regex_t bind_action, bind_switch, color, font, size;
+	regex_t bind_action, bind_switch, color, font, size, other;
 	regmatch_t regexp_matches[MATCHES];
 	char *subs[MATCHES] = { 0 };
 	FILE *f;
@@ -591,6 +607,7 @@ temu_parse_config (void)
 	regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_EXTENDED);
 	regcomp (&font, "^font:[ \t]+(.*?)$", REG_EXTENDED);
 	regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_EXTENDED);
+	regcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_EXTENDED);
 
 	snprintf(conffile, sizeof(conffile) - 1, "%s/.zterm/config", getenv("HOME"));
 	f = fopen(conffile, "r");
@@ -657,6 +674,36 @@ temu_parse_config (void)
 			if (!ret) {
 				gen_subs (t1, subs, regexp_matches, MATCHES);
 				temu_parse_size (subs);
+				free_subs (subs, MATCHES);
+				j++;
+			}
+		}
+
+		if (!j) {
+			ret = regexec (&other, t1, MATCHES, regexp_matches, 0);
+			if (!ret) {
+				gen_subs (t1, subs, regexp_matches, MATCHES);
+				if (!strcmp(subs[0], "audible_bell")) {
+					terms.audible_bell = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "word_char_exceptions")) {
+					strlcpy (terms.word_char_exceptions, subs[1], sizeof (terms.word_char_exceptions));
+				} else if (!strcmp(subs[0], "font_scale")) {
+					terms.audible_bell = atof(subs[1]);
+				} else if (!strcmp(subs[0], "scroll_on_output")) {
+					terms.scroll_on_output = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "scroll_on_keystroke")) {
+					terms.scroll_on_keystroke = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "rewrap_on_resize")) {
+					terms.rewrap_on_resize = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "scrollback_lines")) {
+					terms.scrollback_lines = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "allow_bold")) {
+					terms.allow_bold = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "mouse_autohide")) {
+					terms.mouse_autohide = atoi(subs[1]);
+				} else {
+					fprintf (stderr, "Unable to parse line in config: '%s'\n", t1);
+				}
 				free_subs (subs, MATCHES);
 				j++;
 			}
@@ -815,6 +862,16 @@ int main(int argc, char *argv[], char *envp[])
 
 	memset (&terms, 0, sizeof (terms));
 	terms.envp = envp;
+	printf ("Using VTE: %s (%s)\n", vte_get_features(), vte_get_user_shell());
+	terms.audible_bell = TRUE;
+	terms.font_scale = 1;
+	terms.scroll_on_output = FALSE;
+	terms.scroll_on_keystroke = TRUE;
+	terms.rewrap_on_resize = TRUE;
+	terms.scrollback_lines = 512;
+	terms.allow_bold = FALSE;
+	terms.mouse_autohide = TRUE;
+
 	temu_parse_config ();
 	if (!terms.n_active) {
 		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
