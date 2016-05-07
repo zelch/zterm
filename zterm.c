@@ -334,7 +334,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 			if (state == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (event->keyval - cur->key_min), cur->cmd, 0);
+						term_switch (cur->base + (event->keyval - cur->key_min), cur->cmd, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
 						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
