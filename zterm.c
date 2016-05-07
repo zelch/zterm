@@ -289,8 +289,8 @@ term_switch (long n, char *cmd, int window_i)
 		term_set_window (n, window_i);
 	}
 
-	gtk_notebook_set_current_page (terms.notebook, gtk_notebook_page_num (terms.notebook, terms.active[n]));
-	temu_window_title_change (VTE_TERMINAL(terms.active[n]), terms.window, n);
+	gtk_notebook_set_current_page (windows[window_i].notebook, gtk_notebook_page_num (windows[window_i].notebook, terms.active[n]));
+	temu_window_title_change (VTE_TERMINAL(terms.active[n]), windows[window_i].window, n);
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n]));
 }
 
