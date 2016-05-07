@@ -722,7 +722,7 @@ int main(int argc, char *argv[], char *envp[])
 	for (i = 0; i < terms.n_active; i++) {
 		if (terms.active[i]) {
 			gtk_widget_hide (GTK_WIDGET(terms.active[i]));
-			gtk_container_remove (GTK_CONTAINER(terms.notebook), GTK_WIDGET(terms.active[i]));
+			gtk_container_remove (GTK_CONTAINER(windows[terms.active_window[i]].notebook), GTK_WIDGET(terms.active[i]));
 			gtk_widget_destroy (GTK_WIDGET(terms.active[i]));
 		}
 	}
