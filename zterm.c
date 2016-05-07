@@ -106,7 +106,7 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 		title_str = vte_terminal_get_window_title(terminal);
 	}
 
-	if (asprintf(&new_str, "%s%s [%ld]", window_str, title_str, n) < 0) {
+	if (asprintf(&new_str, "%s%s [%ld]", window_str, title_str, n + 1) < 0) {
 		return; // Memory allocation issue.
 	}
 
