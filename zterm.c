@@ -84,28 +84,42 @@ temu_reorder (void)
 
 
 static void
-temu_window_title_change (VteTerminal *terminal, GtkWidget *window, int n)
+temu_window_title_change (VteTerminal *terminal, long int n)
 {
+	char window_str[16] = { 0 };
+	const char *title_str = "zterm";
 	gchar *new_str;
+	int max_windows = 0;
+	int window_i = terms.active_window[n];
 
-	if (vte_terminal_get_window_title(terminal)) {
-		if (asprintf(&new_str, "%s [%d]", vte_terminal_get_window_title(terminal), n) < 0) {
-			return; // Memory allocation issue.
-		}
-	} else {
-		if (asprintf(&new_str, "zterm [%d]", n) < 0) {
-			return; // Memory allocation issue.
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			max_windows++;
 		}
 	}
 
-	gtk_window_set_title(GTK_WINDOW(window), new_str);
+	if (max_windows != 1) {
+		snprintf (window_str, sizeof (window_str), "[%d]: ", window_i + 1);
+	}
+
+	if (vte_terminal_get_window_title(terminal)) {
+		title_str = vte_terminal_get_window_title(terminal);
+	}
+
+	if (asprintf(&new_str, "%s%s [%ld]", window_str, title_str, n) < 0) {
+		return; // Memory allocation issue.
+	}
+
+	gtk_window_set_title(GTK_WINDOW(windows[window_i].window), new_str);
 	free (new_str);
 }
 
 static void
 temu_window_title_changed(VteTerminal *terminal, gpointer data)
 {
-	temu_window_title_change (terminal, terms.window, (long) data);
+	gint n = (long) data;
+
+	temu_window_title_change (terminal, n);
 }
 
 static void
@@ -290,7 +304,7 @@ term_switch (long n, char *cmd, int window_i)
 	}
 
 	gtk_notebook_set_current_page (windows[window_i].notebook, gtk_notebook_page_num (windows[window_i].notebook, terms.active[n]));
-	temu_window_title_change (VTE_TERMINAL(terms.active[n]), windows[window_i].window, n);
+	temu_window_title_change (VTE_TERMINAL(terms.active[n]), n);
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n]));
 }
 
