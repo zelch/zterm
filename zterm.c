@@ -303,6 +303,11 @@ term_switch (long n, char *cmd, int window_i)
 		term_set_window (n, window_i);
 	}
 
+	if (window_i != terms.active_window[n]) {
+		window_i = terms.active_window[n];
+		gtk_window_present (GTK_WINDOW(windows[window_i].window));
+	}
+
 	gtk_notebook_set_current_page (windows[window_i].notebook, gtk_notebook_page_num (windows[window_i].notebook, terms.active[n]));
 	temu_window_title_change (VTE_TERMINAL(terms.active[n]), n);
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n]));
