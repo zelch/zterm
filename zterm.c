@@ -793,6 +793,21 @@ int new_window (void)
 	return i;
 }
 
+void
+add_menu_switch_item (int menu_window, long item_window, int new)
+{
+	char title[64] = { 0 };
+	if (new) {
+		snprintf (title, sizeof (title), "Move to _new window");
+	} else {
+		snprintf (title, sizeof (title), "Move to window _%ld", item_window + 1);
+	}
+
+	windows[menu_window].m_t_move[item_window] = gtk_menu_item_new_with_mnemonic (title);
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[menu_window].menu), windows[menu_window].m_t_move[item_window]);
+	g_signal_connect(windows[menu_window].m_t_move[item_window], "activate", G_CALLBACK(do_move_to_window), (void *) item_window);
+}
+
 void rebuild_menu_switch_lists (void)
 {
 	for (int i = 0; i < MAX_WINDOWS; i++) {
@@ -804,21 +819,19 @@ void rebuild_menu_switch_lists (void)
 				}
 			}
 
-			int first_empty = 1;
+			long first_empty = -1;
 			for (long n = 0; n < MAX_WINDOWS; n++) {
-				char title[64] = { 0 };
-				if (windows[n].window) {
-					snprintf (title, sizeof (title), "Move to window _%ld", n);
-				} else if (first_empty) {
-					snprintf (title, sizeof (title), "Move to _new window");
-					first_empty = 0;
-				} else {
+				if (n == i) { // Don't offer to move to the same window, that's just weird.
 					continue;
+				} else if (windows[n].window) {
+					add_menu_switch_item (i, n, 0);
+				} else if (first_empty == -1) {
+					first_empty = n;
 				}
+			}
 
-				windows[i].m_t_move[n] = gtk_menu_item_new_with_mnemonic (title);
-				gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_move[n]);
-				g_signal_connect(windows[i].m_t_move[n], "activate", G_CALLBACK(do_move_to_window), (void *) n);
+			if (first_empty != -1) {
+				add_menu_switch_item (i, first_empty, 1);
 			}
 		}
 	}
