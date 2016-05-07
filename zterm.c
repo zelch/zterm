@@ -49,6 +49,7 @@ typedef struct window_s {
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
+	GtkWidget *m_t_move[MAX_WINDOWS];
 } window_t;
 
 typedef struct terms_s {
@@ -69,6 +70,7 @@ window_t windows[MAX_WINDOWS];
 static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data);
 int new_window (void);
 void destroy_window (int i);
+void rebuild_menu_switch_lists (void);
 
 static void
 temu_reorder (void)
@@ -518,6 +520,39 @@ do_t_tabbar (GtkMenuItem *item, void *data)
 }
 
 void
+do_move_to_window (GtkMenuItem *item, void *data)
+{
+	long int new_window_i = (long int) data;
+	long int window_i = -1;
+	int i;
+	GtkWidget *parent = gtk_widget_get_parent (GTK_WIDGET(item));
+	GtkWidget *widget;
+
+	for (i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			if (parent == windows[i].menu) {
+				window_i = i;
+			}
+		}
+	}
+
+	if (window_i == -1) {
+		printf ("Unable to find window.\n");
+		return;
+	}
+
+	widget = gtk_notebook_get_nth_page(windows[window_i].notebook, gtk_notebook_get_current_page(windows[window_i].notebook));
+
+	for (i = 0; i < terms.n_active; i++) {
+		if (terms.active[i] == widget) {
+			term_set_window (i, new_window_i);
+			term_switch (i, NULL, window_i);
+			break;
+		}
+	}
+}
+
+void
 temu_parse_config (void)
 {
 #define MATCHES	16
@@ -674,6 +709,8 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
+	rebuild_menu_switch_lists ();
+
 	gtk_widget_set_can_focus(notebook, FALSE);
 
 	gtk_widget_show(window);
@@ -685,9 +722,46 @@ int new_window (void)
 	return i;
 }
 
+void rebuild_menu_switch_lists (void)
+{
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			for (long n = 0; n < MAX_WINDOWS; n++) {
+				if (windows[i].m_t_move[n]) {
+					gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_move[n]));
+					windows[i].m_t_move[n] = NULL;
+				}
+			}
+
+			int first_empty = 1;
+			for (long n = 0; n < MAX_WINDOWS; n++) {
+				char title[64] = { 0 };
+				if (windows[n].window) {
+					snprintf (title, sizeof (title), "Move to window _%ld", n);
+				} else if (first_empty) {
+					snprintf (title, sizeof (title), "Move to _new window");
+					first_empty = 0;
+				} else {
+					continue;
+				}
+
+				windows[i].m_t_move[n] = gtk_menu_item_new_with_mnemonic (title);
+				gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_move[n]);
+				g_signal_connect(windows[i].m_t_move[n], "activate", G_CALLBACK(do_move_to_window), (void *) n);
+			}
+		}
+	}
+}
+
 void destroy_window (int i)
 {
 	if (windows[i].window) {
+		for (long n = 0; n < MAX_WINDOWS; n++) {
+			if (windows[i].m_t_move[n]) {
+				gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_move[n]));
+				windows[i].m_t_move[n] = NULL;
+			}
+		}
 		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].window));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
@@ -703,6 +777,8 @@ void destroy_window (int i)
 		windows[i].m_t_decorate = NULL;
 		windows[i].m_t_tabbar = NULL;
 	}
+
+	rebuild_menu_switch_lists ();
 }
 
 int main(int argc, char *argv[], char *envp[])
