@@ -50,6 +50,7 @@ typedef struct window_s {
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
 	GtkWidget *m_t_move[MAX_WINDOWS];
+	GdkWindowState window_state;
 } window_t;
 
 typedef struct terms_s {
@@ -84,6 +85,13 @@ temu_reorder (void)
 #endif
 }
 
+
+static void temu_window_state_changed (GtkWidget *widget, GdkEventWindowState *event, void *data)
+{
+	window_t *window = data;
+
+	window->window_state = event->new_window_state;
+}
 
 static void
 temu_window_title_change (VteTerminal *terminal, long int n)
@@ -512,6 +520,17 @@ do_t_decorate (GtkMenuItem *item, void *data)
 }
 
 void
+do_t_fullscreen (GtkMenuItem *item, void *data)
+{
+	window_t *window = (window_t *) data;
+	if (window->window_state & GDK_WINDOW_STATE_FULLSCREEN) {
+		gtk_window_unfullscreen (GTK_WINDOW (window->window));
+	} else {
+		gtk_window_fullscreen (GTK_WINDOW (window->window));
+	}
+}
+
+void
 do_t_tabbar (GtkMenuItem *item, void *data)
 {
 	window_t *window = (window_t *) data;
@@ -705,6 +724,10 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
 	g_signal_connect(windows[i].m_t_decorate, "activate", G_CALLBACK(do_t_decorate), &windows[i]);
 
+	windows[i].m_t_fullscreen = gtk_menu_item_new_with_mnemonic("_Toggle fullscreen");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_fullscreen);
+	g_signal_connect(windows[i].m_t_fullscreen, "activate", G_CALLBACK(do_t_fullscreen), &windows[i]);
+
 	windows[i].m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
@@ -718,6 +741,7 @@ int new_window (void)
 	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK(notebook));
 
 	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &windows[i]);
+	g_signal_connect (window, "window-state-event", G_CALLBACK (temu_window_state_changed), &windows[i]);
 
 	return i;
 }
@@ -767,6 +791,7 @@ void destroy_window (int i)
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_paste));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_fullscreen));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_tabbar));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].menu));
 		windows[i].notebook = NULL;
@@ -775,6 +800,7 @@ void destroy_window (int i)
 		windows[i].m_copy = NULL;
 		windows[i].m_paste = NULL;
 		windows[i].m_t_decorate = NULL;
+		windows[i].m_t_fullscreen = NULL;
 		windows[i].m_t_tabbar = NULL;
 	}
 
