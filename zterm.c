@@ -201,6 +201,16 @@ term_set_window (int n, int window_i)
 	GtkWidget *label;
 	char str[32];
 
+	// Create a new window if we are passed a non-existant window.
+	if (!windows[window_i].window) {
+		window_i = new_window ();
+		//printf ("Setting term %d to NEW window %d.\n", n, window_i);
+	}
+
+	// Set the new active window before removing from the old window.
+	// This is done first so that all of the window titles come out right.
+	terms.active_window[n] = window_i;
+
 	// Remove from any previous window.
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
@@ -213,12 +223,6 @@ term_set_window (int n, int window_i)
 		}
 	}
 
-	//printf ("Setting term %d to window %d.\n", n, window_i);
-	if (!windows[window_i].window) {
-		window_i = new_window ();
-		//printf ("Setting term %d to NEW window %d.\n", n, window_i);
-	}
-
 	// Notebook label.
 	snprintf(str, sizeof(str), "Terminal %d", n);
 	label = gtk_label_new(str);
@@ -227,8 +231,6 @@ term_set_window (int n, int window_i)
 	gtk_widget_realize(term);
 	gtk_widget_show(term);
 	gtk_widget_show(label);
-
-	terms.active_window[n] = window_i;
 
 	prune_windows ();
 	temu_reorder ();
