@@ -16,6 +16,7 @@ GdkRGBA colors[256] = {
 };
 
 #define MAX_WINDOWS 8
+#define MAX_COLOR_SCHEMES 8
 
 int start_width = 1024;
 int start_height = 768;
@@ -35,6 +36,11 @@ typedef struct bind_s {
 	bind_actions_t action;
 } bind_t;
 
+typedef struct color_scheme_s {
+	GdkRGBA foreground;
+	GdkRGBA background;
+	char name[32];
+} color_scheme_t;
 
 typedef struct window_s {
 	GtkNotebook *notebook;
@@ -46,7 +52,9 @@ typedef struct window_s {
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
 	GtkWidget *m_t_move[MAX_WINDOWS];
+	GtkWidget *m_t_color_scheme[MAX_COLOR_SCHEMES];
 	GdkWindowState window_state;
+	int color_scheme;
 } window_t;
 
 typedef struct terms_s {
@@ -68,6 +76,8 @@ typedef struct terms_s {
 	glong    scrollback_lines;
 	gboolean allow_bold;
 	gboolean mouse_autohide;
+
+	color_scheme_t color_schemes[MAX_COLOR_SCHEMES];
 } terms_t;
 
 terms_t terms;
@@ -238,6 +248,12 @@ term_set_window (int n, int window_i)
 		}
 	}
 
+	if (terms.color_schemes[windows[window_i].color_scheme].name[0]) {
+		vte_terminal_set_colors (VTE_TERMINAL (term), &terms.color_schemes[windows[window_i].color_scheme].foreground, &terms.color_schemes[windows[window_i].color_scheme].background, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
+	} else {
+		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
+	}
+
 	// Notebook label.
 	snprintf(str, sizeof(str), "Terminal %d", n);
 	label = gtk_label_new(str);
@@ -265,8 +281,6 @@ term_switch (long n, char *cmd, int window_i)
 		gtk_widget_show(term);
 		gtk_widget_set_hexpand (term, TRUE);
 		gtk_widget_set_vexpand (term, TRUE);
-
-		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 
 		if (terms.font) {
 			PangoFontDescription *font = pango_font_description_from_string(terms.font);
@@ -579,10 +593,41 @@ do_move_to_window (GtkMenuItem *item, void *data)
 }
 
 void
+do_set_window_color_scheme (GtkMenuItem *item, void *data)
+{
+	long int color_scheme = (long int) data;
+	long int window_i = -1;
+	int i;
+	GtkWidget *parent = gtk_widget_get_parent (GTK_WIDGET(item));
+
+	for (i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			if (parent == windows[i].menu) {
+				window_i = i;
+			}
+		}
+	}
+
+	if (window_i == -1) {
+		printf ("Unable to find window.\n");
+		return;
+	}
+
+	windows[window_i].color_scheme = color_scheme;
+
+	for (i = 0; i < terms.n_active; i++) {
+		if (terms.active[i] && terms.active_window[i] == window_i) {
+			vte_terminal_set_colors (VTE_TERMINAL (terms.active[i]), &terms.color_schemes[windows[window_i].color_scheme].foreground, &terms.color_schemes[windows[window_i].color_scheme].background, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
+		}
+	}
+}
+
+
+void
 temu_parse_config (void)
 {
 #define MATCHES	16
-	regex_t bind_action, bind_switch, color, font, size, other;
+	regex_t bind_action, bind_switch, color, color_scheme, font, size, other;
 	regmatch_t regexp_matches[MATCHES];
 	char *subs[MATCHES] = { 0 };
 	FILE *f;
@@ -592,10 +637,12 @@ temu_parse_config (void)
 	char *t1, *t2;
 	char conffile[512] = { 0 };
 	size_t read;
+	int n_color_scheme = 0;
 
 	regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", REG_EXTENDED);
 	regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_EXTENDED);
 	regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_EXTENDED);
+	regcomp (&color_scheme, "^color_scheme:[ \t]*+([-a-zA-Z0-9_ ]*?)[ \t]+(#[0-9a-fA-F]+)[ \t]+(#[0-9a-fA-F]+)$", REG_EXTENDED);
 	regcomp (&font, "^font:[ \t]+(.*?)$", REG_EXTENDED);
 	regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_EXTENDED);
 	regcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_EXTENDED);
@@ -645,6 +692,19 @@ temu_parse_config (void)
 			if (!ret) {
 				gen_subs (t1, subs, regexp_matches, MATCHES);
 				temu_parse_color (subs);
+				free_subs (subs, MATCHES);
+				j++;
+			}
+		}
+
+		if (!j && n_color_scheme < (sizeof (terms.color_schemes) / sizeof (terms.color_schemes[0]))) {
+			ret = regexec (&color_scheme, t1, MATCHES, regexp_matches, 0);
+			if (!ret) {
+				gen_subs (t1, subs, regexp_matches, MATCHES);
+				strlcpy (terms.color_schemes[n_color_scheme].name, subs[0], sizeof (terms.color_schemes[n_color_scheme].name));
+				gdk_rgba_parse (&terms.color_schemes[n_color_scheme].foreground, subs[1]);
+				gdk_rgba_parse (&terms.color_schemes[n_color_scheme].background, subs[2]);
+				n_color_scheme++;
 				free_subs (subs, MATCHES);
 				j++;
 			}
@@ -770,6 +830,12 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
+	for (long int j = 0; j < MAX_COLOR_SCHEMES && terms.color_schemes[j].name[0]; j++) {
+		windows[i].m_t_color_scheme[j] = gtk_menu_item_new_with_mnemonic (terms.color_schemes[j].name);
+		gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_color_scheme[j]);
+		g_signal_connect(windows[i].m_t_color_scheme[j], "activate", G_CALLBACK(do_set_window_color_scheme), (void *) j);
+	}
+
 	rebuild_menu_switch_lists ();
 
 	gtk_widget_set_can_focus(notebook, FALSE);
@@ -835,6 +901,12 @@ void destroy_window (int i)
 			if (windows[i].m_t_move[n]) {
 				gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_move[n]));
 				windows[i].m_t_move[n] = NULL;
+			}
+		}
+		for (long n = 0; n < MAX_COLOR_SCHEMES; n++) {
+			if (windows[i].m_t_color_scheme[n]) {
+				gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_color_scheme[n]));
+				windows[i].m_t_color_scheme[n] = NULL;
 			}
 		}
 		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
