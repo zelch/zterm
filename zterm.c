@@ -35,11 +35,6 @@ typedef struct bind_s {
 	bind_actions_t action;
 } bind_t;
 
-typedef struct color_s {
-	GdkColor color;
-	guint n;
-	struct color_s *next;
-} color_t;
 
 typedef struct window_s {
 	GtkNotebook *notebook;
