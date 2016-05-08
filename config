@@ -1,0 +1,50 @@
+# Bind: Bind a key to an action.
+# Action, Modifier, Key / Key Range.
+# Actions: If numeric, a terminal number. (Base 0)  CUT and PASTE copy into and
+# paste out of the clipboard.
+#
+# Modifiers are the X11 key modifiers. (I should add a pointer to a reference on these.)
+#
+bind:	CUT	5	C
+bind:	PASTE	5	V
+bind:	40	4	F5-F12
+bind:	36	4	F1-F4
+bind:	24	1	F1-F12
+bind:	12	64	F1-F12
+bind:	0	8	F1-F12
+#
+# What font to use, you can usually put the font size last in the string.
+#
+font:	Classic Console 16
+#font:	Source Code Pro 16
+#font:	Console 14
+#font:	VGA 16
+#
+# A color scheme, which consists of a name, a foreground color, and a background color.
+# The first scheme is set by default, and you can switch between schemes at runtime.
+#
+color_scheme:	Grey on black	#aaaaaaaaaaaa	#000000000000
+color_scheme:	Black on white	#000000000000	#ffffffffffff
+#
+# Override the default colors.  Color number, and then a color.
+# There are 256 palette colors: 8 standard colors, their 8 bright
+# counterparts, 6x6x6 color cube, and 24 grayscale colors.
+#
+color:	3	#aaaa55550000
+color:	4	#11111111cccc
+#
+# Allow the use of bold fonts for bold text.
+#
+allow_bold:	0
+#
+# When scrolling back, scroll on output?
+#
+scroll_on_output: 0
+#
+# When scrolling back, scroll on key strokes?
+#
+scroll_on_keystroke: 1
+#
+# Rewrap lines on terminal resize?
+#
+rewrap_on_resize: 1
