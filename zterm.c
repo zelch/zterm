@@ -91,13 +91,18 @@ void rebuild_menu_switch_lists (void);
 static void
 temu_reorder (void)
 {
-#if 0
+	int window_i;
 	int i, j;
 
-	for (i = j = 0; i < terms.n_active && j < terms.alive; i++)
-		if (terms.active[i])
-			gtk_notebook_reorder_child (terms.notebook, terms.active[i], j++);
-#endif
+	for (window_i = 0; window_i < MAX_WINDOWS; window_i++) {
+		if (windows[window_i].window) {
+			for (i = j = 0; i < terms.n_active; i++) {
+				if (terms.active[i] && terms.active_window[i] == window_i) {
+					gtk_notebook_reorder_child (windows[window_i].notebook, terms.active[i], j++);
+				}
+			}
+		}
+	}
 }
 
 
