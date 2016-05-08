@@ -288,10 +288,6 @@ term_switch (long n, char *cmd, int window_i)
 		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
 		vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
 
-		unsetenv ("TERM");
-		unsetenv ("COLORTERM");
-		setenv("TERM", "temu", 1);
-		setenv("COLORTERM", "temu", 1);
 
 		g_signal_connect_after (G_OBJECT (term), "child-exited", G_CALLBACK (term_died), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "destroy", G_CALLBACK (term_destroyed), (void *) n);
