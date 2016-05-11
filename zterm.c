@@ -804,6 +804,7 @@ int new_window (void)
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 
 	notebook = gtk_notebook_new();
+	g_object_set (G_OBJECT (notebook), "scrollable", TRUE, "enable-popup", TRUE, NULL);
 	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), FALSE);
 	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), FALSE);
 	gtk_container_add(GTK_CONTAINER(window), notebook);
