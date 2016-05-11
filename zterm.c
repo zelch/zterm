@@ -46,6 +46,7 @@ typedef struct window_s {
 	GtkNotebook *notebook;
 	GtkWidget *window;
 	GtkWidget *menu;
+	GtkWidget *m_show_terms;
 	GtkWidget *m_copy;
 	GtkWidget *m_paste;
 	GtkWidget *m_t_decorate;
@@ -566,6 +567,15 @@ do_t_tabbar (GtkMenuItem *item, void *data)
 }
 
 void
+do_show_terms (GtkMenuItem *item, void *data)
+{
+	long int window_i = (long int) data;
+	gboolean return_value;
+
+	g_signal_emit_by_name (G_OBJECT(windows[window_i].notebook), "popup-menu", &return_value);
+}
+
+void
 do_move_to_window (GtkMenuItem *item, void *data)
 {
 	long int new_window_i = (long int) data;
@@ -786,7 +796,7 @@ done:
 int new_window (void)
 {
 	GtkWidget *window, *notebook;
-	int i;
+	long int i;
 
 	for (i = 0; i < MAX_WINDOWS; i++) {
 		if (!windows[i].window) {
@@ -816,6 +826,10 @@ int new_window (void)
 	windows[i].notebook = GTK_NOTEBOOK(notebook);
 
 	windows[i].menu = gtk_menu_new();
+
+	windows[i].m_show_terms = gtk_menu_item_new_with_mnemonic("_Show terminals");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
+	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
 
 	windows[i].m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_copy);
@@ -918,6 +932,7 @@ void destroy_window (int i)
 		}
 		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].window));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_show_terms));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_paste));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
