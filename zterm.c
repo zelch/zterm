@@ -419,6 +419,7 @@ term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 	if (event->button == 3) {
 		gtk_widget_show_all(window->menu);
 		gtk_menu_popup(GTK_MENU(window->menu), NULL, NULL, NULL, NULL, event->button, event->time);
+		return TRUE;
 	}
 
 	return FALSE;
