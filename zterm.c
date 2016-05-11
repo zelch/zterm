@@ -235,8 +235,6 @@ static void
 term_set_window (int n, int window_i)
 {
 	GtkWidget *term = terms.active[n];
-	GtkWidget *label;
-	char str[32];
 
 	// Create a new window if we are passed a non-existant window.
 	if (!windows[window_i].window) {
@@ -266,14 +264,9 @@ term_set_window (int n, int window_i)
 		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 	}
 
-	// Notebook label.
-	snprintf(str, sizeof(str), "Terminal %d", n);
-	label = gtk_label_new(str);
-
-	gtk_notebook_set_current_page(windows[window_i].notebook, gtk_notebook_append_page (windows[window_i].notebook, term, label));
+	gtk_notebook_set_current_page(windows[window_i].notebook, gtk_notebook_append_page (windows[window_i].notebook, term, NULL));
 	gtk_widget_realize(term);
 	gtk_widget_show(term);
-	gtk_widget_show(label);
 
 	prune_windows ();
 	temu_reorder ();
