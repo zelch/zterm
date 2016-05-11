@@ -121,6 +121,7 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 	gchar *new_str;
 	int max_windows = 0;
 	int window_i = terms.active_window[n];
+	int notebook_i = 0;
 
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
@@ -141,6 +142,12 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 	}
 
 	gtk_window_set_title(GTK_WINDOW(windows[window_i].window), new_str);
+
+	notebook_i = gtk_notebook_page_num (windows[window_i].notebook, GTK_WIDGET (terminal));
+	if (notebook_i >= 0) {
+		gtk_notebook_set_menu_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
+		gtk_notebook_set_tab_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
+	}
 	free (new_str);
 }
 
