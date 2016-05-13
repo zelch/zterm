@@ -847,15 +847,15 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
 	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
 
-	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
+	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("Toggle _decorations");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
 	g_signal_connect(windows[i].m_t_decorate, "activate", G_CALLBACK(do_t_decorate), &windows[i]);
 
-	windows[i].m_t_fullscreen = gtk_menu_item_new_with_mnemonic("_Toggle fullscreen");
+	windows[i].m_t_fullscreen = gtk_menu_item_new_with_mnemonic("Toggle _fullscreen");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_fullscreen);
 	g_signal_connect(windows[i].m_t_fullscreen, "activate", G_CALLBACK(do_t_fullscreen), &windows[i]);
 
-	windows[i].m_t_tabbar = gtk_menu_item_new_with_mnemonic("_Toggle tab bar");
+	windows[i].m_t_tabbar = gtk_menu_item_new_with_mnemonic("Toggle _tab bar");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
