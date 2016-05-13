@@ -49,11 +49,15 @@ typedef struct window_s {
 	GtkWidget *menu;
 	GtkWidget *m_copy;
 	GtkWidget *m_paste;
+	GtkWidget *m_sep_0;
 	GtkWidget *m_show_terms;
+	GtkWidget *m_sep_1;
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
+	GtkWidget *m_sep_2;
 	GtkWidget *m_move[MAX_WINDOWS];
+	GtkWidget *m_sep_3;
 	GtkWidget *m_color_scheme[MAX_COLOR_SCHEMES];
 	GdkWindowState window_state;
 	int color_scheme;
@@ -843,9 +847,15 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_paste);
 	g_signal_connect(windows[i].m_paste, "activate", G_CALLBACK(do_paste), &windows[i]);
 
+	windows[i].m_sep_0 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_0);
+
 	windows[i].m_show_terms = gtk_menu_item_new_with_mnemonic("_Show terminals");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
 	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
+
+	windows[i].m_sep_1 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_1);
 
 	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("Toggle _decorations");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
@@ -859,11 +869,17 @@ int new_window (void)
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_tabbar);
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
+	windows[i].m_sep_2 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_2);
+
 	for (long int j = 0; j < MAX_COLOR_SCHEMES && terms.color_schemes[j].name[0]; j++) {
 		windows[i].m_color_scheme[j] = gtk_menu_item_new_with_mnemonic (terms.color_schemes[j].name);
 		gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_color_scheme[j]);
 		g_signal_connect(windows[i].m_color_scheme[j], "activate", G_CALLBACK(do_set_window_color_scheme), (void *) j);
 	}
+
+	windows[i].m_sep_3 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_3);
 
 	rebuild_menu_switch_lists ();
 
@@ -946,6 +962,10 @@ void destroy_window (int i)
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_fullscreen));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_tabbar));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_0));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_1));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_2));
+		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_3));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].menu));
 		windows[i].notebook = NULL;
 		windows[i].window = NULL;
@@ -955,6 +975,10 @@ void destroy_window (int i)
 		windows[i].m_t_decorate = NULL;
 		windows[i].m_t_fullscreen = NULL;
 		windows[i].m_t_tabbar = NULL;
+		windows[i].m_sep_0 = NULL;
+		windows[i].m_sep_1 = NULL;
+		windows[i].m_sep_2 = NULL;
+		windows[i].m_sep_3 = NULL;
 	}
 
 	rebuild_menu_switch_lists ();
