@@ -25,6 +25,7 @@ typedef enum bind_actions {
 	BIND_ACT_SWITCH	= 0,
 	BIND_ACT_CUT,
 	BIND_ACT_PASTE,
+	BIND_ACT_MENU,
 } bind_actions_t;
 
 typedef struct bind_s {
@@ -402,6 +403,11 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 						vte_terminal_paste_clipboard (VTE_TERMINAL(widget));
 						break;
+					case BIND_ACT_MENU:
+						printf ("Bringing up menu.\n");
+						gtk_widget_show_all(window->menu);
+						gtk_menu_popup(GTK_MENU(window->menu), NULL, NULL, NULL, NULL, event->keyval, event->time);
+						break;
 				}
 				return TRUE;
 			}
@@ -460,6 +466,8 @@ temu_parse_bind_action (char **subs)
 		bind->action = BIND_ACT_CUT;
 	} else if (!strcasecmp(subs[0], "PASTE")) {
 		bind->action = BIND_ACT_PASTE;
+	} else if (!strcasecmp(subs[0], "MENU")) {
+		bind->action = BIND_ACT_MENU;
 	} else {
 		return;
 	}
