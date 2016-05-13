@@ -53,8 +53,8 @@ typedef struct window_s {
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
-	GtkWidget *m_t_move[MAX_WINDOWS];
-	GtkWidget *m_t_color_scheme[MAX_COLOR_SCHEMES];
+	GtkWidget *m_move[MAX_WINDOWS];
+	GtkWidget *m_color_scheme[MAX_COLOR_SCHEMES];
 	GdkWindowState window_state;
 	int color_scheme;
 } window_t;
@@ -860,9 +860,9 @@ int new_window (void)
 	g_signal_connect(windows[i].m_t_tabbar, "activate", G_CALLBACK(do_t_tabbar), &windows[i]);
 
 	for (long int j = 0; j < MAX_COLOR_SCHEMES && terms.color_schemes[j].name[0]; j++) {
-		windows[i].m_t_color_scheme[j] = gtk_menu_item_new_with_mnemonic (terms.color_schemes[j].name);
-		gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_color_scheme[j]);
-		g_signal_connect(windows[i].m_t_color_scheme[j], "activate", G_CALLBACK(do_set_window_color_scheme), (void *) j);
+		windows[i].m_color_scheme[j] = gtk_menu_item_new_with_mnemonic (terms.color_schemes[j].name);
+		gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_color_scheme[j]);
+		g_signal_connect(windows[i].m_color_scheme[j], "activate", G_CALLBACK(do_set_window_color_scheme), (void *) j);
 	}
 
 	rebuild_menu_switch_lists ();
@@ -889,9 +889,9 @@ add_menu_switch_item (int menu_window, long item_window, int new)
 		snprintf (title, sizeof (title), "Move to window _%ld", item_window + 1);
 	}
 
-	windows[menu_window].m_t_move[item_window] = gtk_menu_item_new_with_mnemonic (title);
-	gtk_menu_shell_append(GTK_MENU_SHELL(windows[menu_window].menu), windows[menu_window].m_t_move[item_window]);
-	g_signal_connect(windows[menu_window].m_t_move[item_window], "activate", G_CALLBACK(do_move_to_window), (void *) item_window);
+	windows[menu_window].m_move[item_window] = gtk_menu_item_new_with_mnemonic (title);
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[menu_window].menu), windows[menu_window].m_move[item_window]);
+	g_signal_connect(windows[menu_window].m_move[item_window], "activate", G_CALLBACK(do_move_to_window), (void *) item_window);
 }
 
 void rebuild_menu_switch_lists (void)
@@ -899,9 +899,9 @@ void rebuild_menu_switch_lists (void)
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
 			for (long n = 0; n < MAX_WINDOWS; n++) {
-				if (windows[i].m_t_move[n]) {
-					gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_move[n]));
-					windows[i].m_t_move[n] = NULL;
+				if (windows[i].m_move[n]) {
+					gtk_widget_destroy (GTK_WIDGET (windows[i].m_move[n]));
+					windows[i].m_move[n] = NULL;
 				}
 			}
 
@@ -927,15 +927,15 @@ void destroy_window (int i)
 {
 	if (windows[i].window) {
 		for (long n = 0; n < MAX_WINDOWS; n++) {
-			if (windows[i].m_t_move[n]) {
-				gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_move[n]));
-				windows[i].m_t_move[n] = NULL;
+			if (windows[i].m_move[n]) {
+				gtk_widget_destroy (GTK_WIDGET (windows[i].m_move[n]));
+				windows[i].m_move[n] = NULL;
 			}
 		}
 		for (long n = 0; n < MAX_COLOR_SCHEMES; n++) {
-			if (windows[i].m_t_color_scheme[n]) {
-				gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_color_scheme[n]));
-				windows[i].m_t_color_scheme[n] = NULL;
+			if (windows[i].m_color_scheme[n]) {
+				gtk_widget_destroy (GTK_WIDGET (windows[i].m_color_scheme[n]));
+				windows[i].m_color_scheme[n] = NULL;
 			}
 		}
 		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
