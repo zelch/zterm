@@ -47,9 +47,9 @@ typedef struct window_s {
 	GtkNotebook *notebook;
 	GtkWidget *window;
 	GtkWidget *menu;
-	GtkWidget *m_show_terms;
 	GtkWidget *m_copy;
 	GtkWidget *m_paste;
+	GtkWidget *m_show_terms;
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
@@ -835,10 +835,6 @@ int new_window (void)
 
 	windows[i].menu = gtk_menu_new();
 
-	windows[i].m_show_terms = gtk_menu_item_new_with_mnemonic("_Show terminals");
-	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
-	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
-
 	windows[i].m_copy = gtk_menu_item_new_with_mnemonic("_Copy");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_copy);
 	g_signal_connect(windows[i].m_copy, "activate", G_CALLBACK(do_copy), &windows[i]);
@@ -846,6 +842,10 @@ int new_window (void)
 	windows[i].m_paste = gtk_menu_item_new_with_mnemonic("_Paste");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_paste);
 	g_signal_connect(windows[i].m_paste, "activate", G_CALLBACK(do_paste), &windows[i]);
+
+	windows[i].m_show_terms = gtk_menu_item_new_with_mnemonic("_Show terminals");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
+	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
 
 	windows[i].m_t_decorate = gtk_menu_item_new_with_mnemonic("_Toggle decorations");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_t_decorate);
