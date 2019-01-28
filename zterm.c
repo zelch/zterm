@@ -410,7 +410,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 					case BIND_ACT_MENU:
 						printf ("Bringing up menu.\n");
 						gtk_widget_show_all(window->menu);
-						gtk_menu_popup(GTK_MENU(window->menu), NULL, NULL, NULL, NULL, event->keyval, event->time);
+						gtk_menu_popup_at_pointer(GTK_MENU(window->menu), NULL);
 						break;
 				}
 				return TRUE;
@@ -429,7 +429,7 @@ term_button_event (GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 
 	if (event->button == 3) {
 		gtk_widget_show_all(window->menu);
-		gtk_menu_popup(GTK_MENU(window->menu), NULL, NULL, NULL, NULL, event->button, event->time);
+		gtk_menu_popup_at_pointer(GTK_MENU(window->menu), NULL);
 		return TRUE;
 	}
 
