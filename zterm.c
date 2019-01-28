@@ -325,14 +325,14 @@ term_switch (long n, char *cmd, int window_i)
 				cmd,
 				NULL
 			};
-			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, -1, NULL, NULL, NULL);
 		} else {
 			char *argv[] = {
 				getenv("SHELL"), // one good temp. hack deserves another
 				"--login",
 				NULL
 			};
-			vte_terminal_spawn_sync (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH | G_SPAWN_FILE_AND_ARGV_ZERO, NULL, NULL, NULL, NULL, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (term), VTE_PTY_NO_LASTLOG | VTE_PTY_NO_UTMP | VTE_PTY_NO_WTMP | VTE_PTY_NO_HELPER, NULL, argv, environ, G_SPAWN_CHILD_INHERITS_STDIN | G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, -1, NULL, NULL, NULL);
 		}
 
 		terms.active[n] = term;
