@@ -401,7 +401,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 						break;
 					case BIND_ACT_CUT:
 						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
-						vte_terminal_copy_clipboard (VTE_TERMINAL(widget));
+						vte_terminal_copy_clipboard_format (VTE_TERMINAL(widget), VTE_FORMAT_TEXT);
 						break;
 					case BIND_ACT_PASTE:
 						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
@@ -540,7 +540,7 @@ do_copy (GtkMenuItem *item, void *data)
 {
 	window_t *window = (window_t *) data;
 	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
-	vte_terminal_copy_clipboard (VTE_TERMINAL(widget));
+	vte_terminal_copy_clipboard_format (VTE_TERMINAL(widget), VTE_FORMAT_TEXT);
 }
 
 void
