@@ -767,7 +767,7 @@ temu_parse_config (void)
 				} else if (!strcmp(subs[0], "word_char_exceptions")) {
 					strlcpy (terms.word_char_exceptions, subs[1], sizeof (terms.word_char_exceptions));
 				} else if (!strcmp(subs[0], "font_scale")) {
-					terms.audible_bell = atof(subs[1]);
+					terms.font_scale = atof(subs[1]);
 				} else if (!strcmp(subs[0], "scroll_on_output")) {
 					terms.scroll_on_output = atoi(subs[1]);
 				} else if (!strcmp(subs[0], "scroll_on_keystroke")) {
