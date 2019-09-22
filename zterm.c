@@ -81,6 +81,7 @@ typedef struct terms_s {
 	gboolean rewrap_on_resize;
 	glong    scrollback_lines;
 	gboolean allow_bold;
+	gboolean bold_is_bright;
 	gboolean mouse_autohide;
 
 	color_scheme_t color_schemes[MAX_COLOR_SCHEMES];
@@ -309,6 +310,7 @@ term_switch (long n, char *cmd, int window_i)
 		vte_terminal_set_scroll_on_keystroke (VTE_TERMINAL (term), terms.scroll_on_keystroke);
 		vte_terminal_set_rewrap_on_resize (VTE_TERMINAL (term), terms.rewrap_on_resize);
 		vte_terminal_set_allow_bold (VTE_TERMINAL (term), terms.allow_bold);
+		vte_terminal_set_bold_is_bright (VTE_TERMINAL (term), terms.bold_is_bright);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
 		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
 		vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
@@ -778,6 +780,8 @@ temu_parse_config (void)
 					terms.scrollback_lines = atoi(subs[1]);
 				} else if (!strcmp(subs[0], "allow_bold")) {
 					terms.allow_bold = atoi(subs[1]);
+				} else if (!strcmp(subs[0], "bold_is_bright")) {
+					terms.bold_is_bright = atoi(subs[1]);
 				} else if (!strcmp(subs[0], "mouse_autohide")) {
 					terms.mouse_autohide = atoi(subs[1]);
 				} else {
@@ -1000,6 +1004,7 @@ int main(int argc, char *argv[], char *envp[])
 	terms.rewrap_on_resize = TRUE;
 	terms.scrollback_lines = 512;
 	terms.allow_bold = FALSE;
+	terms.bold_is_bright = TRUE;
 	terms.mouse_autohide = TRUE;
 
 	temu_parse_config ();
