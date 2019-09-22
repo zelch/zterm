@@ -896,6 +896,23 @@ int new_window (void)
 	g_signal_connect (window, "key-press-event", G_CALLBACK (term_key_event), &windows[i]);
 	g_signal_connect (window, "window-state-event", G_CALLBACK (temu_window_state_changed), &windows[i]);
 
+	// Alright, this is annoying.
+	// For reasons that I currently can't figure out, if we ask for the initial
+	// window size to be reasonably large, we get a maximized window by
+	// default.
+	// This behavior is fairly inconsistent.
+	//
+	// To avoid that, we need to present the window, and then tell it to unmaximize.
+	// Otherwise when we add the first term to the notebook we get a maximized window.
+	//
+	// Oh, and then we need to present again, because otherwise we lose focus
+	// again when we unmaximize.
+	//
+	// I'd really like to better understand this behavior, but, eh, this works.
+	gtk_window_present (GTK_WINDOW(window));
+	gtk_window_unmaximize (GTK_WINDOW (window));
+	gtk_window_present (GTK_WINDOW(window));
+
 	return i;
 }
 
