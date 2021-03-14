@@ -308,8 +308,6 @@ term_switch (long n, char *cmd, int window_i)
 		vte_terminal_set_font_scale (VTE_TERMINAL (term), terms.font_scale);
 		vte_terminal_set_scroll_on_output (VTE_TERMINAL (term), terms.scroll_on_output);
 		vte_terminal_set_scroll_on_keystroke (VTE_TERMINAL (term), terms.scroll_on_keystroke);
-		vte_terminal_set_rewrap_on_resize (VTE_TERMINAL (term), terms.rewrap_on_resize);
-		vte_terminal_set_allow_bold (VTE_TERMINAL (term), terms.allow_bold);
 		vte_terminal_set_bold_is_bright (VTE_TERMINAL (term), terms.bold_is_bright);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
 		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
