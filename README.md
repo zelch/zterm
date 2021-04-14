@@ -12,7 +12,7 @@ As such, the tab bar is pretty useless, so while it can be enabled (right click 
 
 You can define different color maps in the config as well, such as grey on black, and black on white, and toggle through the right click menu, and you can move specific terminals to a separate window.  Those stay in the same process and you can switch between windows just by selecting a terminal via key binding that is in the other window.
 
-(Both of these were added at a time when I needed to be able to show things on a projector.  Together they quite well for that job.)
+(Both of these were added at a time when I needed to be able to show things on a projector.  Together they work quite well for that job.)
 
 Speaking of the config, the 'config' in the repository has my current config file, it needs to go in ~/.zterm/
 
