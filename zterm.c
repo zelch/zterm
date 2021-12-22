@@ -9,7 +9,17 @@
 #include <gdk/gdk.h>
 #include <vte/vte.h>
 #include <regex.h>
-#include <bsd/string.h>
+
+#if __APPLE__
+#  include <TargetConditionals.h>
+#  if TARGET_OS_MAC
+extern char **environ;
+#  else
+#    include <bsd/string.h>
+#  endif
+#else
+#  include <bsd/string.h>
+#endif
 
 GdkRGBA colors[256] = {
 #include "256colors.h"
