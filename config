@@ -17,7 +17,13 @@ bind:	0	<Alt>	F1-F12
 #
 # What font to use, you can usually put the font size last in the string.
 #
-font:	Classic Console 16
+# The font string is passed to Pango, and you really want a monospace font if you can get one.
+#
+# PT Mono Regular is a decent choice shipped by default on OS X.
+font:	PT Mono Regular 16
+
+# Classic Console is my current preference on Linux, but getting it is awkward and it doesn't scale very well.
+#font:	Classic Console 16
 #font:	IBM 3270 16
 #font:	VGA 14
 #font:	Console
