@@ -39,9 +39,11 @@ color_scheme:	Black on white	#000000000000	#ffffffffffff
 # There are 256 palette colors: 8 standard colors, their 8 bright
 # counterparts, 6x6x6 color cube, and 24 grayscale colors.
 #
-size:	1918x1168
 color:	3	#aaaa55550000
 color:	4	#11111111cccc
+
+# Initial window size.
+size:	1918x1168
 #
 # Allow the use of bold fonts for bold text.
 #
