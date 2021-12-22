@@ -679,13 +679,34 @@ temu_parse_config (void)
 	size_t read;
 	int n_color_scheme = 0;
 
-	regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", REG_EXTENDED);
-	regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_EXTENDED);
-	regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_EXTENDED);
-	regcomp (&color_scheme, "^color_scheme:[ \t]*+([-a-zA-Z0-9_ ]*?)[ \t]+(#[0-9a-fA-F]+)[ \t]+(#[0-9a-fA-F]+)$", REG_EXTENDED);
-	regcomp (&font, "^font:[ \t]+(.*?)$", REG_EXTENDED);
-	regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_EXTENDED);
-	regcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_EXTENDED);
+	ret = regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&color_scheme, "^color_scheme:[ \t]+([-a-zA-Z0-9_ ]*?)[ \t]+(#[0-9a-fA-F]+)[ \t]+(#[0-9a-fA-F]+)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&font, "^font:[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
+	ret = regcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
+	}
 
 	snprintf(conffile, sizeof(conffile) - 1, "%s/.zterm/config", getenv("HOME"));
 	f = fopen(conffile, "r");
