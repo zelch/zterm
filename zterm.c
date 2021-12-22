@@ -826,7 +826,7 @@ temu_parse_config (void)
 				} else if (!strcmp(subs[0], "mouse_autohide")) {
 					terms.mouse_autohide = atoi(subs[1]);
 				} else {
-					fprintf (stderr, "Unable to parse line in config: '%s'\n", t1);
+					fprintf (stderr, "Unable to parse line in config: '%s' (%s)\n", t1, subs[0]);
 				}
 				free_subs (subs, MATCHES);
 				j++;
