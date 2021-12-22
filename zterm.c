@@ -399,8 +399,10 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 	bind_t	*cur;
 	guint state = event->state;
 
-	state &= 0xED;
-//	fprintf (stderr, "%s: keyval: %d, state: 0x%x\n", __func__, event->keyval, state);
+	//state &= 0xED;
+	state &= GDK_MODIFIER_MASK ^ (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
+	// FIXME: This is a memory leak when uncommented, because we're supposed to free the return value of gtk_accelerator_name.
+	//fprintf (stderr, "%s: keyval: %d (%s), state: 0x%x, 0x%x, group: %d, is_modifier: %d, '%s'\n", __func__, event->keyval, gdk_keyval_name(event->keyval), state, event->state, event->group, event->is_modifier, gtk_accelerator_name(event->keyval, state));
 
 	for (cur = terms.keys; cur; cur = cur->next) {
 		if ((event->keyval >= cur->key_min) && (event->keyval <= cur->key_max)) {
