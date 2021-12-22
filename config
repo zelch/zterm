@@ -5,14 +5,15 @@
 #
 # Modifiers are the X11 key modifiers. (I should add a pointer to a reference on these.)
 #
-bind:	MENU	4	Multi_key
-bind:	CUT	5	C
-bind:	PASTE	5	V
-bind:	36	4	F1-F12
-bind:	24	1	F1-F12
+bind:	MENU	<Control>	Multi_key
+bind:	CUT	<Control><Shift>	C
+bind:	PASTE	<Control><Shift>	V
+bind:	36	<Control>	F1-F12
+bind:	24	<Shift>	F1-F12
 # 128 is level 3 shift, so if I make right windows be level 3 shift, I avoid win-F1 bringing up help instead of terminal 13.
-bind:	12	128	F1-F12
-bind:	0	8	F1-F12
+#bind:	12	128	F1-F12
+bind:	12	<Primary><Mod2>	F1-F12
+bind:	0	<Alt>	F1-F12
 #
 # What font to use, you can usually put the font size last in the string.
 #

@@ -458,6 +458,11 @@ temu_parse_bind_switch (char **subs, bind_actions_t action)
 	bind->action = action;
 	bind->base = strtol(subs[0], NULL, 0);
 	bind->state = strtol(subs[1], NULL, 0);
+	// The new style is actually a GTK accelerator string, but with only the modifier component.
+	if (bind->state == 0) {
+		gtk_accelerator_parse(subs[1], NULL, &bind->state);
+		printf("Parsing '%s' as accelerator, result: 0x%x\n", subs[1], bind->state);
+	}
 	bind->key_min = gdk_keyval_from_name (subs[2]);
 	if (subs[4])
 		bind->key_max = gdk_keyval_from_name (subs[4]);
@@ -488,6 +493,11 @@ temu_parse_bind_action (char **subs)
 		return;
 	}
 	bind->state = strtol (subs[1], NULL, 0);
+	// The new style is actually a GTK accelerator string, but with only the modifier component.
+	if (bind->state == 0) {
+		gtk_accelerator_parse(subs[1], NULL, &bind->state);
+		printf("Parsing '%s' as accelerator, result: 0x%x\n", subs[1], bind->state);
+	}
 	bind->key_min = bind->key_max = gdk_keyval_from_name (subs[2]);
 //	printf ("Binding: keyval: %d, state: 0x%x, action: %d\n", bind->key_min, bind->state, bind->action);
 }
@@ -679,11 +689,11 @@ temu_parse_config (void)
 	size_t read;
 	int n_color_scheme = 0;
 
-	ret = regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
+	ret = regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
 	if (ret) {
 		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
 	}
-	ret = regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([0-9]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
+	ret = regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
 	if (ret) {
 		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
 	}
