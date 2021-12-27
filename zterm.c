@@ -419,6 +419,7 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 	//fprintf (stderr, "%s: keyval: %d (%s), state: 0x%x, 0x%x, group: %d, is_modifier: %d, '%s'\n", __func__, event->keyval, gdk_keyval_name(event->keyval), state, event->state, event->group, event->is_modifier, gtk_accelerator_name(event->keyval, state));
 
 	for (cur = terms.keys; cur; cur = cur->next) {
+		//fprintf (stderr, "key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)\n", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, gtk_accelerator_name(0, cur->state));
 		if ((event->keyval >= cur->key_min) && (event->keyval <= cur->key_max)) {
 			if (state == cur->state) {
 				switch (cur->action) {
@@ -532,7 +533,7 @@ temu_parse_bind_action (char **subs)
 	if (bind->key_min == 0xffffff) {
 		bind->key_min = bind->key_max = strtol(subs[2], NULL, 0);
 	}
-//	printf ("Binding: keyval: %d, state: 0x%x, action: %d\n", bind->key_min, bind->state, bind->action);
+	//printf ("Binding: keyval: 0x%x, state: 0x%x, action: %d (%s %s %s)\n", bind->key_min, bind->state, bind->action, subs[0], subs[1], subs[2]);
 }
 
 static void
