@@ -13,6 +13,16 @@ all: zterm .syntastic_c_config
 zterm: zterm.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
+app: zterm
+	rm -rf zterm.app
+	mkdir zterm.app
+	mkdir zterm.app/Contents
+	mkdir zterm.app/Contents/MacOS
+	mkdir zterm.app/Contents/Resources
+	cp Info.plist zterm.app/Contents/
+	cp PkgInfo zterm.app/Contents/
+	cp zterm zterm.app/Contents/MacOS/
+
 clean:
 	rm -f zterm.o zterm
 

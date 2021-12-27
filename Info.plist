@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>English</string>
+    <key>CFBundleExecutable</key>
+    <string>zterm</string>
+    <key>CFBundleGetInfoString</key>
+    <string>Copyright 2021 Zephaniah Loss-Cutler-Hull</string>
+    <key>CFBundleIconFile</key>
+    <string>LMS</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.aehallh.zterm</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>LMS</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleSignature</key>
+    <string>ZTRM</string>
+    <key>CFBundleVersion</key>
+    <string>Version 1.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+  </dict>
+</plist>
