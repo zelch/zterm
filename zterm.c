@@ -1255,6 +1255,10 @@ int main(int argc, char *argv[], char *envp[])
 	terms.active = calloc(terms.n_active, sizeof(*terms.active));
 	terms.active_window = calloc(terms.n_active, sizeof(*terms.active_window));
 
+	setenv("TERM", "xterm-256colors", 1);
+	setenv("TERM_PROGRAM", "zterm", 1);
+	chdir(getenv("HOME"));
+
 	{
 		bind_t *cur;
 		char *cmd = NULL;
