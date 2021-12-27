@@ -71,8 +71,10 @@ typedef struct window_s {
 	GtkWidget *m_t_fullscreen;
 	GtkWidget *m_t_tabbar;
 	GtkWidget *m_sep_2;
-	GtkWidget *m_move[MAX_WINDOWS];
+	GtkWidget *m_reload_config;
 	GtkWidget *m_sep_3;
+	GtkWidget *m_move[MAX_WINDOWS];
+	GtkWidget *m_sep_4;
 	GtkWidget *m_color_scheme[MAX_COLOR_SCHEMES];
 	GdkWindowState window_state;
 	int color_scheme;
@@ -109,6 +111,8 @@ static gboolean term_button_event (GtkWidget *widget, GdkEventButton *event, gpo
 int new_window (void);
 void destroy_window (int i);
 void rebuild_menu_switch_lists (void);
+void destroy_window_menu (int i);
+void rebuild_window_menu (GtkWidget *window, long int i);
 
 static void
 temu_reorder (void)
@@ -295,6 +299,35 @@ term_set_window (int n, int window_i)
 }
 
 static void
+term_config (GtkWidget *term, int window_i)
+{
+	if (terms.font) {
+		PangoFontDescription *font = pango_font_description_from_string(terms.font);
+		if (font) {
+			vte_terminal_set_font (VTE_TERMINAL (term), font);
+			pango_font_description_free (font);
+		} else {
+			printf ("Unable to load font '%s'\n", terms.font);
+		}
+	}
+	vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
+	vte_terminal_set_audible_bell (VTE_TERMINAL (term), terms.audible_bell);
+	vte_terminal_set_font_scale (VTE_TERMINAL (term), terms.font_scale);
+	vte_terminal_set_scroll_on_output (VTE_TERMINAL (term), terms.scroll_on_output);
+	vte_terminal_set_scroll_on_keystroke (VTE_TERMINAL (term), terms.scroll_on_keystroke);
+	vte_terminal_set_bold_is_bright (VTE_TERMINAL (term), terms.bold_is_bright);
+	vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
+	vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
+	vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
+
+	if (terms.color_schemes[windows[window_i].color_scheme].name[0]) {
+		vte_terminal_set_colors (VTE_TERMINAL (term), &terms.color_schemes[windows[window_i].color_scheme].foreground, &terms.color_schemes[windows[window_i].color_scheme].background, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
+	} else {
+		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
+	}
+}
+
+static void
 term_switch (long n, char *cmd, int window_i)
 {
 	if (n > terms.n_active)
@@ -309,24 +342,7 @@ term_switch (long n, char *cmd, int window_i)
 		gtk_widget_set_hexpand (term, TRUE);
 		gtk_widget_set_vexpand (term, TRUE);
 
-		if (terms.font) {
-			PangoFontDescription *font = pango_font_description_from_string(terms.font);
-			if (font) {
-				vte_terminal_set_font (VTE_TERMINAL (term), font);
-				pango_font_description_free (font);
-			} else {
-				printf ("Unable to load font '%s'\n", terms.font);
-			}
-		}
-		vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
-		vte_terminal_set_audible_bell (VTE_TERMINAL (term), terms.audible_bell);
-		vte_terminal_set_font_scale (VTE_TERMINAL (term), terms.font_scale);
-		vte_terminal_set_scroll_on_output (VTE_TERMINAL (term), terms.scroll_on_output);
-		vte_terminal_set_scroll_on_keystroke (VTE_TERMINAL (term), terms.scroll_on_keystroke);
-		vte_terminal_set_bold_is_bright (VTE_TERMINAL (term), terms.bold_is_bright);
-		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (term), VTE_CURSOR_BLINK_OFF);
-		vte_terminal_set_scrollback_lines (VTE_TERMINAL (term), terms.scrollback_lines);
-		vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
+		term_config(term, window_i);
 
 
 		g_signal_connect_after (G_OBJECT (term), "child-exited", G_CALLBACK (term_died), (void *) n);
@@ -491,8 +507,6 @@ static void
 temu_parse_bind_action (char **subs)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
-	bind->next = terms.keys;
-	terms.keys = bind;
 
 	if (!strcasecmp(subs[0], "CUT")) {
 		bind->action = BIND_ACT_CUT;
@@ -505,8 +519,14 @@ temu_parse_bind_action (char **subs)
 	} else if (!strcasecmp(subs[0], "PREV_TERM")) {
 		bind->action = BIND_ACT_PREV_TERM;
 	} else {
+		fprintf(stderr, "Unknown bind action '%s'.\n", subs[0]);
+		free(bind);
 		return;
 	}
+
+	bind->next = terms.keys;
+	terms.keys = bind;
+
 	bind->state = strtol (subs[1], NULL, 0);
 	// The new style is actually a GTK accelerator string, but with only the modifier component.
 	if (bind->state == 0) {
@@ -515,6 +535,18 @@ temu_parse_bind_action (char **subs)
 	}
 	bind->key_min = bind->key_max = gdk_keyval_from_name (subs[2]);
 //	printf ("Binding: keyval: %d, state: 0x%x, action: %d\n", bind->key_min, bind->state, bind->action);
+}
+
+static void
+temu_free_keys (void)
+{
+	while (terms.keys != NULL) {
+		bind_t *next = terms.keys->next;
+		
+		free(terms.keys);
+
+		terms.keys = next;
+	}
 }
 
 static void
@@ -749,6 +781,10 @@ temu_parse_config (void)
 		fprintf(stderr, "%s %d (%s): recomp failed: %d\n", __FILE__, __LINE__, __func__, ret);
 	}
 
+	temu_free_keys();
+	// FIXME: We need to correctly handle the case where this number changes with a reload, it's going to be a bit rough.
+	terms.n_active = 0;
+
 	snprintf(conffile, sizeof(conffile) - 1, "%s/.zterm/config", getenv("HOME"));
 	f = fopen(conffile, "r");
 	if (!f)
@@ -881,37 +917,46 @@ done:
 	return;
 }
 
-int new_window (void)
+void
+do_reload_config (GtkMenuItem *item, void *data)
 {
-	GtkWidget *window, *notebook;
-	long int i;
+	int old_n_active = terms.n_active;
 
-	for (i = 0; i < MAX_WINDOWS; i++) {
-		if (!windows[i].window) {
-			break;
+	temu_parse_config();
+	if (!terms.n_active) {
+		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
+		return;
+	}
+
+	// We actively don't want to worry about the number shrinking.  That just makes too much pain.
+	// But we absolutely have to handle it growing.
+	if (terms.n_active > old_n_active) {
+		fprintf(stderr, "%s %d (%s): old_n_active: %d, terms.n_active: %d\n", __FILE__, __LINE__, __func__, old_n_active, terms.n_active);
+		terms.active = realloc(terms.active, terms.n_active * sizeof(*terms.active));
+		terms.active_window = realloc(terms.active, terms.n_active * sizeof(*terms.active_window));
+		memset(&terms.active[old_n_active], 0, (terms.n_active - old_n_active) * sizeof(*terms.active));
+		memset(&terms.active_window[old_n_active], 0, (terms.n_active - old_n_active) * sizeof(*terms.active_window));
+	}
+
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i]) {
+			term_config(terms.active[i], terms.active_window[i]);
 		}
 	}
 
-	if (i == MAX_WINDOWS) {
-		fprintf (stderr, "ERROR: Unable to allocate new window.\n");
-		return -1;
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			rebuild_window_menu(windows[i].window, i);
+		}
 	}
+}
 
-	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	gtk_container_set_border_width(GTK_CONTAINER(window), 0);
-	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
-
-	notebook = gtk_notebook_new();
-	g_object_set (G_OBJECT (notebook), "scrollable", TRUE, "enable-popup", TRUE, NULL);
-	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), FALSE);
-	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), FALSE);
-	gtk_container_add(GTK_CONTAINER(window), notebook);
-	gtk_container_set_border_width (GTK_CONTAINER(window), 0);
-	gtk_container_set_border_width (GTK_CONTAINER(notebook), 0);
-	gtk_widget_show(notebook);
-
-	windows[i].window = GTK_WIDGET(window);
-	windows[i].notebook = GTK_NOTEBOOK(notebook);
+void
+rebuild_window_menu (GtkWidget *window, long int i)
+{
+	if (windows[i].menu != NULL) {
+		destroy_window_menu(i);
+	}
 
 	windows[i].menu = gtk_menu_new();
 
@@ -967,16 +1012,59 @@ int new_window (void)
 	windows[i].m_sep_2 = gtk_separator_menu_item_new ();
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_2);
 
+	windows[i].m_reload_config = gtk_menu_item_new_with_mnemonic("_Reload config file");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_reload_config);
+	g_signal_connect(windows[i].m_reload_config, "activate", G_CALLBACK(do_reload_config), &windows[i]);
+
+	windows[i].m_sep_3 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_3);
+
 	for (long int j = 0; j < MAX_COLOR_SCHEMES && terms.color_schemes[j].name[0]; j++) {
 		windows[i].m_color_scheme[j] = gtk_menu_item_new_with_mnemonic (terms.color_schemes[j].name);
 		gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_color_scheme[j]);
 		g_signal_connect(windows[i].m_color_scheme[j], "activate", G_CALLBACK(do_set_window_color_scheme), (void *) j);
 	}
 
-	windows[i].m_sep_3 = gtk_separator_menu_item_new ();
-	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_3);
+	windows[i].m_sep_4 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_4);
 
 	rebuild_menu_switch_lists ();
+}
+
+int new_window (void)
+{
+	GtkWidget *window, *notebook;
+	long int i;
+
+	for (i = 0; i < MAX_WINDOWS; i++) {
+		if (!windows[i].window) {
+			break;
+		}
+	}
+
+	if (i == MAX_WINDOWS) {
+		fprintf (stderr, "ERROR: Unable to allocate new window.\n");
+		return -1;
+	}
+
+	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_container_set_border_width(GTK_CONTAINER(window), 0);
+	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
+
+	notebook = gtk_notebook_new();
+	g_object_set (G_OBJECT (notebook), "scrollable", TRUE, "enable-popup", TRUE, NULL);
+	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), FALSE);
+	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), FALSE);
+	gtk_container_add(GTK_CONTAINER(window), notebook);
+	gtk_container_set_border_width (GTK_CONTAINER(window), 0);
+	gtk_container_set_border_width (GTK_CONTAINER(notebook), 0);
+	gtk_widget_show(notebook);
+
+	windows[i].window = GTK_WIDGET(window);
+	windows[i].notebook = GTK_NOTEBOOK(notebook);
+
+	rebuild_window_menu(window, i);
+
 
 	gtk_widget_set_can_focus(notebook, FALSE);
 
@@ -1051,6 +1139,41 @@ void rebuild_menu_switch_lists (void)
 	}
 }
 
+void destroy_window_menu (int i)
+{
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_show_terms));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_paste));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_next_term));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_prev_term));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_reload_config));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_fullscreen));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_tabbar));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_0));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_0_1));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_1));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_2));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_3));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_4));
+	gtk_widget_destroy (GTK_WIDGET (windows[i].menu));
+	windows[i].menu = NULL;
+	windows[i].m_copy = NULL;
+	windows[i].m_paste = NULL;
+	windows[i].m_next_term = NULL;
+	windows[i].m_prev_term = NULL;
+	windows[i].m_reload_config = NULL;
+	windows[i].m_t_decorate = NULL;
+	windows[i].m_t_fullscreen = NULL;
+	windows[i].m_t_tabbar = NULL;
+	windows[i].m_sep_0 = NULL;
+	windows[i].m_sep_0_1 = NULL;
+	windows[i].m_sep_1 = NULL;
+	windows[i].m_sep_2 = NULL;
+	windows[i].m_sep_3 = NULL;
+	windows[i].m_sep_4 = NULL;
+}
+
 void destroy_window (int i)
 {
 	if (windows[i].window) {
@@ -1066,31 +1189,11 @@ void destroy_window (int i)
 				windows[i].m_color_scheme[n] = NULL;
 			}
 		}
+		destroy_window_menu (i);
 		gtk_widget_destroy (GTK_WIDGET (windows[i].notebook));
 		gtk_widget_destroy (GTK_WIDGET (windows[i].window));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_show_terms));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_copy));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_paste));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_decorate));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_fullscreen));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_t_tabbar));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_0));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_1));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_2));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].m_sep_3));
-		gtk_widget_destroy (GTK_WIDGET (windows[i].menu));
 		windows[i].notebook = NULL;
 		windows[i].window = NULL;
-		windows[i].menu = NULL;
-		windows[i].m_copy = NULL;
-		windows[i].m_paste = NULL;
-		windows[i].m_t_decorate = NULL;
-		windows[i].m_t_fullscreen = NULL;
-		windows[i].m_t_tabbar = NULL;
-		windows[i].m_sep_0 = NULL;
-		windows[i].m_sep_1 = NULL;
-		windows[i].m_sep_2 = NULL;
-		windows[i].m_sep_3 = NULL;
 	}
 
 	rebuild_menu_switch_lists ();
