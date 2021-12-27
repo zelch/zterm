@@ -2,6 +2,7 @@ CC=gcc
 CFLAGS=-g -Wall -O2 -fPIC `pkg-config gtk+-3.0 vte-2.91 --cflags`
 LDFLAGS=`pkg-config gtk+-3.0 vte-2.91 --libs` `pkg-config --exists libbsd && pkg-config --libs libbsd` -lutil -g
 UNAME_S := $(shell uname -s)
+CFLAGS += `pkg-config --exists libbsd && echo -D HAVE_LIBBSD`
 ifeq (${UNAME_S},Darwin)
 	CFLAGS += -D OSX -mmacosx-version-min=11.0
 else ifeq (${UNAME_S},Linux)
