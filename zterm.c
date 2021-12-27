@@ -36,6 +36,8 @@ typedef enum bind_actions {
 	BIND_ACT_CUT,
 	BIND_ACT_PASTE,
 	BIND_ACT_MENU,
+	BIND_ACT_NEXT_TERM,
+	BIND_ACT_PREV_TERM,
 } bind_actions_t;
 
 typedef struct bind_s {
@@ -61,6 +63,9 @@ typedef struct window_s {
 	GtkWidget *m_paste;
 	GtkWidget *m_sep_0;
 	GtkWidget *m_show_terms;
+	GtkWidget *m_sep_0_1;
+	GtkWidget *m_next_term;
+	GtkWidget *m_prev_term;
 	GtkWidget *m_sep_1;
 	GtkWidget *m_t_decorate;
 	GtkWidget *m_t_fullscreen;
@@ -424,6 +429,12 @@ term_key_event (GtkWidget * widget, GdkEventKey * event, gpointer user_data)
 						gtk_widget_show_all(window->menu);
 						gtk_menu_popup_at_pointer(GTK_MENU(window->menu), NULL);
 						break;
+					case BIND_ACT_NEXT_TERM:
+						gtk_notebook_next_page(GTK_NOTEBOOK(window->notebook));
+						break;
+					case BIND_ACT_PREV_TERM:
+						gtk_notebook_prev_page(GTK_NOTEBOOK(window->notebook));
+						break;
 				}
 				return TRUE;
 			}
@@ -489,6 +500,10 @@ temu_parse_bind_action (char **subs)
 		bind->action = BIND_ACT_PASTE;
 	} else if (!strcasecmp(subs[0], "MENU")) {
 		bind->action = BIND_ACT_MENU;
+	} else if (!strcasecmp(subs[0], "NEXT_TERM")) {
+		bind->action = BIND_ACT_NEXT_TERM;
+	} else if (!strcasecmp(subs[0], "PREV_TERM")) {
+		bind->action = BIND_ACT_PREV_TERM;
 	} else {
 		return;
 	}
@@ -607,6 +622,22 @@ do_show_terms (GtkMenuItem *item, void *data)
 	gboolean return_value;
 
 	g_signal_emit_by_name (G_OBJECT(windows[window_i].notebook), "popup-menu", &return_value);
+}
+
+void
+do_next_term (GtkMenuItem *item, void *data)
+{
+	window_t *window = (window_t *) data;
+
+	gtk_notebook_next_page(GTK_NOTEBOOK(window->notebook));
+}
+
+void
+do_prev_term (GtkMenuItem *item, void *data)
+{
+	window_t *window = (window_t *) data;
+
+	gtk_notebook_prev_page(GTK_NOTEBOOK(window->notebook));
 }
 
 void
@@ -898,6 +929,25 @@ int new_window (void)
 	windows[i].m_show_terms = gtk_menu_item_new_with_mnemonic("_Show terminals");
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_show_terms);
 	g_signal_connect(windows[i].m_show_terms, "activate", G_CALLBACK(do_show_terms), (void *) i);
+
+	// I am unable to explain why this is necessary.
+	// But if it is missing, on a config reload (which rebuilds menus), the
+	// next widget appears to get destroyed despite no destruction call being
+	// mode.
+	GtkWidget *tmp_widget = gtk_separator_menu_item_new();
+	gtk_widget_destroy(tmp_widget);
+
+
+	windows[i].m_sep_0_1 = gtk_separator_menu_item_new ();
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_0_1);
+
+	windows[i].m_prev_term = gtk_menu_item_new_with_mnemonic("_Previous terminal");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_prev_term);
+	g_signal_connect(windows[i].m_prev_term, "activate", G_CALLBACK(do_prev_term), &windows[i]);
+
+	windows[i].m_next_term = gtk_menu_item_new_with_mnemonic("_Next terminal");
+	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_next_term);
+	g_signal_connect(windows[i].m_next_term, "activate", G_CALLBACK(do_next_term), &windows[i]);
 
 	windows[i].m_sep_1 = gtk_separator_menu_item_new ();
 	gtk_menu_shell_append(GTK_MENU_SHELL(windows[i].menu), windows[i].m_sep_1);
