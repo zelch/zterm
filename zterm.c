@@ -10,16 +10,7 @@
 #include <vte/vte.h>
 #include <regex.h>
 
-#if __APPLE__
-#  include <TargetConditionals.h>
-#  if TARGET_OS_MAC
 extern char **environ;
-#  else
-#    include <bsd/string.h>
-#  endif
-#else
-#  include <bsd/string.h>
-#endif
 
 GdkRGBA colors[256] = {
 #include "256colors.h"
@@ -144,7 +135,7 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 {
 	char window_str[16] = { 0 };
 	const char *title_str = "zterm";
-	gchar *new_str;
+	gchar new_str[64] = { 0 };
 	int max_windows = 0;
 	int window_i = terms.active_window[n];
 	int notebook_i = 0;
@@ -163,7 +154,7 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 		title_str = vte_terminal_get_window_title(terminal);
 	}
 
-	if (asprintf(&new_str, "%s%s [%ld]", window_str, title_str, n + 1) < 0) {
+	if (snprintf(new_str, sizeof(new_str) - 1, "%s%s [%ld]", window_str, title_str, n + 1) < 0) {
 		return; // Memory allocation issue.
 	}
 
@@ -174,7 +165,6 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 		gtk_notebook_set_menu_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
 		gtk_notebook_set_tab_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
 	}
-	free (new_str);
 }
 
 static void
