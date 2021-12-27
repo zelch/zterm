@@ -736,6 +736,11 @@ do_set_window_color_scheme (GtkMenuItem *item, void *data)
 }
 
 
+// REG_ENHANCED does not exist on Linux, but we still want to compile. (I know, picky picky.)
+#ifndef REG_ENHANCED
+#define REG_ENHANCED	0
+#endif
+
 void
 temu_parse_config (void)
 {
