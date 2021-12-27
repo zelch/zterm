@@ -830,6 +830,9 @@ temu_parse_config (void)
 		*t2++ = '\0';
 
 		j = t1[0] == '#' ? 1 : 0;
+		if (!j) {
+			j = t1[0] == '\0' ? 1 : 0;
+		}
 
 		if (!j) {
 			ret = regexec (&bind_action, t1, MATCHES, regexp_matches, 0);
