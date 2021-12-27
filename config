@@ -6,6 +6,7 @@
 # Modifiers are the X11 key modifiers. (I should add a pointer to a reference on these.)
 #
 bind:	MENU	<Control>	Multi_key
+bind:	MENU	<Control>	0x1000010
 bind:	CUT	<Primary><Mod2>	c
 bind:	PASTE	<Primary><Mod2>	v
 bind:	CUT	<Control><Shift>	C

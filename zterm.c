@@ -527,6 +527,11 @@ temu_parse_bind_action (char **subs)
 		printf("Parsing '%s' as accelerator, result: 0x%x\n", subs[1], bind->state);
 	}
 	bind->key_min = bind->key_max = gdk_keyval_from_name (subs[2]);
+	// Handle the case where we want to bind a raw key value by number.
+	// This was created because gdk has no name for the menu key on OS X.
+	if (bind->key_min == 0xffffff) {
+		bind->key_min = bind->key_max = strtol(subs[2], NULL, 0);
+	}
 //	printf ("Binding: keyval: %d, state: 0x%x, action: %d\n", bind->key_min, bind->state, bind->action);
 }
 
