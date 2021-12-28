@@ -55,6 +55,10 @@ size:	1918x1168
 #
 allow_bold:	0
 #
+# Use bright colors for bold.
+#
+bold_is_bright:	1
+#
 # When scrolling back, scroll on output?
 #
 scroll_on_output: 0
