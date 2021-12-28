@@ -9,7 +9,7 @@ else ifeq (${UNAME_S},Linux)
 	CFLAGS += -D LINUX
 endif
 
-all: zterm .syntastic_c_config
+all: zterm .syntastic_c_config app
 
 zterm: zterm.o
 	$(CC) -o $@ $^ $(LDFLAGS)
@@ -23,6 +23,8 @@ app: zterm
 	cp Info.plist zterm.app/Contents/
 	cp PkgInfo zterm.app/Contents/
 	cp zterm zterm.app/Contents/MacOS/
+	./icon_gen Linux_terminal.svg
+	cp Linux_terminal.icns zterm.app/Contents/Resources/
 
 clean:
 	rm -f zterm.o zterm
