@@ -27,7 +27,7 @@ app: zterm
 	cp Linux_terminal.icns zterm.app/Contents/Resources/
 
 clean:
-	rm -f zterm.o zterm
+	rm -f zterm.o zterm zterm.app
 
 .PHONY: .syntastic_c_config
 .syntastic_c_config:
