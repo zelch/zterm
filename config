@@ -46,7 +46,7 @@ color_scheme:	Black on white	#000000000000	#ffffffffffff
 # counterparts, 6x6x6 color cube, and 24 grayscale colors.
 #
 color:	3	#aaaa55550000
-color:	4	#11111111cccc
+color:	4	#55555555dddd
 
 # Initial window size.
 size:	1918x1168
