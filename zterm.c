@@ -744,7 +744,7 @@ void
 temu_parse_config (void)
 {
 #define MATCHES	16
-	regex_t bind_action, bind_switch, color, color_scheme, font, size, other;
+	regex_t bind_action, bind_switch, color, color_scheme, font, size, env, other;
 	regmatch_t regexp_matches[MATCHES];
 	char *subs[MATCHES] = { 0 };
 	FILE *f;
@@ -792,6 +792,13 @@ temu_parse_config (void)
 		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
 	}
 	ret = regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		char errbuf[128] = { 0 };
+
+		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
+		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
+	}
+	ret = regcomp (&env, "^env:[ \t]+([^=]*?)=(.*?)$", REG_ENHANCED | REG_EXTENDED);
 	if (ret) {
 		char errbuf[128] = { 0 };
 
@@ -891,6 +898,16 @@ temu_parse_config (void)
 			if (!ret) {
 				gen_subs (t1, subs, regexp_matches, MATCHES);
 				temu_parse_size (subs);
+				free_subs (subs, MATCHES);
+				j++;
+			}
+		}
+
+		if (!j) {
+			ret = regexec (&env, t1, MATCHES, regexp_matches, 0);
+			if (!ret) {
+				gen_subs (t1, subs, regexp_matches, MATCHES);
+				setenv(subs[0], subs[1], 1);
 				free_subs (subs, MATCHES);
 				j++;
 			}
