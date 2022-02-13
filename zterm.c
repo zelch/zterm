@@ -285,6 +285,7 @@ term_set_window (int n, int window_i)
 
 	gtk_notebook_set_current_page(windows[window_i].notebook, gtk_notebook_append_page (windows[window_i].notebook, term, NULL));
 	gtk_widget_realize(term);
+	vte_terminal_set_geometry_hints_for_window(VTE_TERMINAL (term), GTK_WINDOW (windows[window_i].window));
 	gtk_widget_show(term);
 
 	prune_windows ();
