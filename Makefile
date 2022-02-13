@@ -15,16 +15,18 @@ zterm: zterm.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 app: zterm
-	rm -rf zterm.app
-	mkdir zterm.app
-	mkdir zterm.app/Contents
-	mkdir zterm.app/Contents/MacOS
-	mkdir zterm.app/Contents/Resources
-	cp Info.plist zterm.app/Contents/
-	cp PkgInfo zterm.app/Contents/
-	cp zterm zterm.app/Contents/MacOS/
-	./icon_gen Linux_terminal.svg
-	cp Linux_terminal.icns zterm.app/Contents/Resources/
+	if [ "`uname`" != "Linux" ]; then \
+		rm -rf zterm.app; \
+		mkdir zterm.app; \
+		mkdir zterm.app/Contents; \
+		mkdir zterm.app/Contents/MacOS; \
+		mkdir zterm.app/Contents/Resources; \
+		cp Info.plist zterm.app/Contents/; \
+		cp PkgInfo zterm.app/Contents/; \
+		cp zterm zterm.app/Contents/MacOS/; \
+		./icon_gen Linux_terminal.svg; \
+		cp Linux_terminal.icns zterm.app/Contents/Resources/; \
+	fi
 
 clean:
 	rm -f zterm.o zterm zterm.app
