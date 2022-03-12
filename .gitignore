@@ -1,3 +1,6 @@
+.syntastic_c_config
+zterm
+zterm.app
 *.o
 .*.sw?
 testgtk
