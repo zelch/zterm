@@ -29,7 +29,7 @@ app: zterm
 	fi
 
 clean:
-	rm -f zterm.o zterm zterm.app
+	rm -rf zterm.o zterm zterm.app
 
 .PHONY: .syntastic_c_config
 .syntastic_c_config:
