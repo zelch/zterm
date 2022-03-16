@@ -303,6 +303,7 @@ term_config (GtkWidget *term, int window_i)
 		} else {
 			printf ("Unable to load font '%s'\n", terms.font);
 		}
+		vte_terminal_set_geometry_hints_for_window(VTE_TERMINAL (term), GTK_WINDOW (windows[window_i].window));
 	}
 	vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
 	vte_terminal_set_audible_bell (VTE_TERMINAL (term), terms.audible_bell);
