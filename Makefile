@@ -15,7 +15,7 @@ zterm: zterm.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 app: zterm
-	if [ "`uname`" != "Linux" ]; then \
+	if [ "`uname`" = "Darwin" ]; then \
 		rm -rf zterm.app; \
 		mkdir zterm.app; \
 		mkdir zterm.app/Contents; \
