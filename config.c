@@ -124,7 +124,7 @@ temu_parse_size (char **subs)
 	start_height = strtol(subs[1], NULL, 10);
 }
 
-void
+static void
 gen_subs (char *str, char *subs[], regmatch_t matches[], size_t count)
 {
 	int i;
@@ -142,7 +142,8 @@ gen_subs (char *str, char *subs[], regmatch_t matches[], size_t count)
 	}
 }
 
-void free_subs (char *subs[], size_t count)
+static void
+free_subs (char *subs[], size_t count)
 {
 	int i;
 	for (i = 0; i < count; i++) {
