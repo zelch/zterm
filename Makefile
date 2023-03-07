@@ -15,7 +15,7 @@ endif
 
 all: zterm .syntastic_c_config app
 
-zterm: zterm.o menus.o
+zterm: zterm.o menus.o config.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 app: zterm
