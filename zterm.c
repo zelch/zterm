@@ -23,11 +23,6 @@ GdkRGBA colors[256] = {
 #include "256colors.h"
 };
 
-#define DEBUG	1
-//#undef DEBUG
-
-#define debugf(format, ...)		_fdebugf(stderr, "%s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
-
 int _fdebugf(FILE *io, const char *fmt, ...)
 {
 #ifdef DEBUG
@@ -54,10 +49,6 @@ GtkApplication *app;
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
 int new_window (void);
 void destroy_window (int i);
-/*
-void rebuild_menu_switch_lists (void);
-void destroy_window_menu (int i);
-*/
 
 static void
 temu_reorder (void)
