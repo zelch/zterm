@@ -170,7 +170,7 @@ term_died (VteTerminal *term, gpointer user_data)
 
 	debugf ("Removing dead term %d from window %d.", n, window_i);
 	gtk_notebook_prev_page (windows[window_i].notebook);
-	gtk_widget_hide (GTK_WIDGET(term));
+	gtk_widget_set_visible(GTK_WIDGET(term), false);
 	int i = gtk_notebook_page_num(windows[window_i].notebook, GTK_WIDGET(term));
 	debugf("About to remove notebook page %d", i);
 	gtk_notebook_remove_page(windows[window_i].notebook, i);
@@ -259,7 +259,7 @@ term_set_window (int n, int window_i)
 	gtk_notebook_set_current_page(windows[window_i].notebook, i);
 	gtk_widget_set_can_focus(term, true);
 	gtk_widget_realize(term);
-	gtk_widget_show(term);
+	gtk_widget_set_visible(term, true);
 	gtk_widget_grab_focus(term);
 
 	terms.active[n].moving--;
@@ -342,7 +342,7 @@ term_switch (long n, char *cmd, int window_i)
 
 		term = vte_terminal_new();
 		g_object_ref (G_OBJECT(term));
-		gtk_widget_show(term);
+		gtk_widget_set_visible(term, true);
 		gtk_widget_set_hexpand (term, TRUE);
 		gtk_widget_set_vexpand (term, TRUE);
 
@@ -526,7 +526,7 @@ int new_window (void)
 	gtk_window_set_child(GTK_WINDOW(window), GTK_WIDGET(notebook));
 #else
 #endif
-	gtk_widget_show(GTK_WIDGET(notebook));
+	gtk_widget_set_visible(GTK_WIDGET(notebook), true);
 
 	windows[i].window = GTK_WIDGET(window);
 	windows[i].notebook = GTK_NOTEBOOK(notebook);
@@ -634,7 +634,7 @@ int main(int argc, char *argv[], char *envp[])
 	for (i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term) {
 			int page_num = gtk_notebook_page_num(windows[terms.active[i].window].notebook, GTK_WIDGET(terms.active[i].term));
-			gtk_widget_hide (GTK_WIDGET(terms.active[i].term));
+			gtk_widget_set_visible(GTK_WIDGET(terms.active[i].term), false);
 			gtk_notebook_remove_page(windows[terms.active[i].window].notebook, page_num);
 		}
 	}
