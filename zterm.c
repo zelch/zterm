@@ -461,7 +461,7 @@ gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpo
 
 	GdkEvent *event = gtk_gesture_get_last_event (gesture, sequence);
 	if (gdk_event_triggers_context_menu(event)) {
-		GdkRectangle rect = { width: 1, height: 1 };
+		GdkRectangle rect = { .width = 1, .height = 1 };
 		double x, y;
 
 		gtk_gesture_get_point(gesture, sequence, &x, &y);
