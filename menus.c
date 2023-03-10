@@ -1,4 +1,5 @@
 #include "zterm.h"
+#include <alloca.h>
 
 void
 do_reload_config (GSimpleAction *self, GVariant *parameter, gpointer user_data)
@@ -156,19 +157,12 @@ do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer d
 	}
 }
 
-static char static_bufs[16][64] = {0};
-static int static_n;
-
-static char *
-dupstr(const char *str)
-{
-	char *buf = static_bufs[static_n++];
-	static_n %= sizeof(static_bufs) / sizeof(static_bufs[0]);
-
-	strlcpy(buf, str, sizeof(static_bufs[0]));
-
-	return buf;
-}
+#define dupstr(str)		({ \
+		char *in = str; \
+		char *new = alloca(strlen(in) + 1); \
+		char *ret = strcpy(new, in); \
+		ret; \
+})
 
 typedef struct {
 	GActionEntry entry;
