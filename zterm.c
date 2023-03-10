@@ -328,6 +328,10 @@ term_realized (GtkWidget *widget, void *data)
 		}
 
 		terms.active[n].spawned++;
+
+		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
+		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_ON);
+		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_OFF);
 	}
 }
 
