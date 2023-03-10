@@ -26,7 +26,8 @@ bind:	0	<Alt>	F1-F12
 # The font string is passed to Pango, and you really want a monospace font if you can get one.
 #
 # PT Mono Regular is a decent choice shipped by default on OS X.
-font:	PT Mono Regular 16
+#font:	PT Mono Regular 16
+font:	MesloLGS NF Regular 24
 
 # Classic Console is my current preference on Linux, but getting it is awkward and it doesn't scale very well.
 #font:	Classic Console 16
