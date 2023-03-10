@@ -156,6 +156,20 @@ do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer d
 	}
 }
 
+static char static_bufs[16][64] = {0};
+static int static_n;
+
+static char *
+dupstr(const char *str)
+{
+	char *buf = static_bufs[static_n++];
+	static_n %= sizeof(static_bufs) / sizeof(static_bufs[0]);
+
+	strlcpy(buf, str, sizeof(static_bufs[0]));
+
+	return buf;
+}
+
 typedef struct {
 	GActionEntry entry;
 	gpointer user_data;
@@ -229,8 +243,8 @@ rebuild_window_menu(long int window_n)
 
 			snprintf(title, sizeof (title), "Move to window _%ld", n);
 			snprintf(action, sizeof(action), "window.move_%ld", n);
-			char *_title = strdupa(title);
-			char *_action = strdupa(action);
+			char *_title = dupstr(title);
+			char *_action = dupstr(action);
 			z_menu_append(window, add_actions, &n_add_actions, "menu.", _title, _action, do_move_to_window, ((n << 8) + window_n));
 		} else if (first_empty == -1) {
 			first_empty = n;
@@ -244,8 +258,8 @@ rebuild_window_menu(long int window_n)
 		snprintf(title, sizeof (title), "Move to _new window %ld", first_empty);
 		snprintf(action, sizeof(action), "window.move_%ld", first_empty);
 
-		char *_title = strdupa(title);
-		char *_action = strdupa(action);
+		char *_title = dupstr(title);
+		char *_action = dupstr(action);
 		z_menu_append(window, add_actions, &n_add_actions, "menu.", _title, _action, do_move_to_window, ((first_empty << 8) + window_n));
 	} else {
 		debugf("first_empty: %d", first_empty);
