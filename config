@@ -80,3 +80,5 @@ font_scale: 1
 #
 env:	TERM=xterm-256color
 env:	TERM_PROGRAM=zterm
+
+scrollback_lines: 2048
