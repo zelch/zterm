@@ -302,12 +302,17 @@ term_config (GtkWidget *term, int window_i)
 	}
 }
 
-static void
-term_realized (GtkWidget *widget, void *data)
+static gboolean
+term_spawn (gpointer data)
 {
 	int n = (long int) data;
+	int realized = gtk_widget_get_realized(terms.active[n].term);
 
-	debugf("Realized for terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+	debugf("For terminal %d, spawned: %d, realized: %d, cmd: %s.", n, terms.active[n].spawned, realized, terms.active[n].cmd);
+
+	if (!realized) {
+		return true;
+	}
 
 	if (!terms.active[n].spawned) {
 		if (terms.active[n].cmd) {
@@ -332,7 +337,39 @@ term_realized (GtkWidget *widget, void *data)
 		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_ON);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_OFF);
+
+		return false;
 	}
+
+	return true;
+}
+
+static void
+term_show (GtkWidget *widget, void *data)
+{
+	int n = (long int) data;
+
+	debugf("Show for terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+}
+
+static void
+term_realized (GtkWidget *widget, void *data)
+{
+	int n = (long int) data;
+
+	debugf("For terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+
+	if (!terms.active[n].spawned) {
+		g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, &term_spawn, data, NULL);
+	}
+}
+
+static void
+term_map (GtkWidget *widget, void *data)
+{
+	int n = (long int) data;
+
+	debugf("For terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
 }
 
 
@@ -356,6 +393,8 @@ term_switch (long n, char *cmd, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "unrealize", G_CALLBACK (term_unrealized), (void *) n);
 		g_signal_connect (G_OBJECT(term), "window_title_changed", G_CALLBACK(temu_window_title_changed), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "realize", G_CALLBACK (term_realized), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "show", G_CALLBACK (term_show), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "map", G_CALLBACK (term_map), (void *) n);
 
 		terms.active[n].cmd = cmd;
 		terms.active[n].term = term;
