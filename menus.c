@@ -175,16 +175,17 @@ typedef struct {
 	gpointer user_data;
 } ZActionEntry;
 
-#define z_menu_append(menu, actions, n_actions, prefix, label, _name, function, _user_data) \
-	do { \
-		char buf[70] = { 0 }; \
-		snprintf(buf, sizeof(buf) - 1, "%s%s", prefix, _name); \
-		g_menu_append(menu, label, buf); \
-		debugf("label: %s, action: %s, name: %s", label, buf, _name); \
-		ZActionEntry tmp = { .entry = { _name, function }, .user_data = (gpointer) _user_data }; \
-		actions[(*n_actions)++] = tmp; \
-		debugf("action: %d, name: %s", *n_actions - 1, actions[*n_actions - 1].entry.name); \
-	} while(0)
+static void
+z_menu_append(GMenu *menu, ZActionEntry *actions, int *n_actions, char *prefix, char *label, char *_name, void (*function)(GSimpleAction *, GVariant *, gpointer), long int _user_data)
+{
+	char buf[70] = { 0 };
+	snprintf(buf, sizeof(buf) - 1, "%s%s", prefix, _name);
+	g_menu_append(menu, label, buf);
+	debugf("label: %s, action: %s, name: %s", label, buf, _name);
+	ZActionEntry tmp = { .entry = { _name, function }, .user_data = (gpointer) _user_data };
+	actions[(*n_actions)++] = tmp;
+	debugf("action: %d, name: %s", *n_actions - 1, actions[*n_actions - 1].entry.name);
+}
 
 static void
 rebuild_window_menu(long int window_n)
