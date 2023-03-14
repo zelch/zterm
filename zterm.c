@@ -12,8 +12,6 @@
 #include <vte/vte.h>
 #include <stdbool.h>
 
-#define GTK4 1
-
 extern char **environ;
 #ifdef HAVE_LIBBSD
 #  include <bsd/string.h>
@@ -566,10 +564,7 @@ int new_window (void)
 	debugf("");
 	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), FALSE);
 	debugf("");
-#if GTK4
 	gtk_window_set_child(GTK_WINDOW(window), GTK_WIDGET(notebook));
-#else
-#endif
 	gtk_widget_set_visible(GTK_WIDGET(notebook), true);
 
 	windows[i].window = GTK_WIDGET(window);
