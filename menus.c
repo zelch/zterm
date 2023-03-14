@@ -157,6 +157,12 @@ do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer d
 	}
 }
 
+// This is really strdupa.
+// It really must be a macro, not a function, so that alloca gets called with
+// the caller function's stack.
+// And we're using the gcc statement expression syntax, because nothing else
+// gives us the ability to have temporary variables, return values, and the
+// ability to have a return value.
 #define dupstr(str)		({ \
 		char *in = str; \
 		char *new = alloca(strlen(in) + 1); \
