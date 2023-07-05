@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS := -DDEBUG -g -Wall -Werror -O2 -fPIC $(shell pkg-config gtk4 vte-2.91-gtk4 --cflags)
+CFLAGS := -g -Wall -Werror -O2 -fPIC $(shell pkg-config gtk4 vte-2.91-gtk4 --cflags)
 LDFLAGS := $(shell pkg-config gtk4 vte-2.91-gtk4 --libs) $(shell pkg-config --exists libbsd && pkg-config --libs libbsd) -lutil -g
 UNAME_S := $(shell uname -s)
 CFLAGS += $(shell pkg-config --exists libbsd && echo -D HAVE_LIBBSD)
@@ -13,6 +13,9 @@ else ifeq (${UNAME_S},Linux)
 endif
 
 all: zterm .syntastic_c_config ${EXTRA} tags
+
+debug : CFLAGS += -DDEBUG
+debug : all
 
 zterm: zterm.o menus.o config.o
 	$(CC) -o $@ $^ $(LDFLAGS)
