@@ -227,7 +227,7 @@ rebuild_window_menu(long int window_n)
 
 	GMenu *schemes = g_menu_new();
 	for (long int j = 0; j < MAX_COLOR_SCHEMES && terms.color_schemes[j].name[0]; j++) {
-		printf("name: %s, action: %s\n", terms.color_schemes[j].name, terms.color_schemes[j].action);
+		debugf("name: %s, action: %s", terms.color_schemes[j].name, terms.color_schemes[j].action);
 		z_menu_append(schemes, add_actions, &n_add_actions, "menu.", terms.color_schemes[j].name, terms.color_schemes[j].action, do_set_window_color_scheme, ((j << 8) + window_n));
 	}
 	g_menu_append_section(main, "Color schemes", G_MENU_MODEL(schemes));
