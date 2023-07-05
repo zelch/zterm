@@ -10,9 +10,6 @@
 #include <gio/gio.h>
 #include <vte/vte.h>
 
-#define DEBUG	1
-//#undef DEBUG
-
 #define MAX_WINDOWS 8
 #define MAX_COLOR_SCHEMES 8
 
