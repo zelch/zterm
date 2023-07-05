@@ -350,8 +350,10 @@ term_spawn (gpointer data)
 			};
 			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, NULL, NULL);
 		} else {
+			struct passwd *pass = getpwuid(getuid());
+
 			char *argv[] = {
-				getenv("SHELL"), // one good temp. hack deserves another
+				pass->pw_shell,
 				"--login",
 				NULL
 			};
