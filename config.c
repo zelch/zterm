@@ -19,7 +19,7 @@ temu_parse_bind_switch (char **subs, bind_actions_t action)
 	if (bind->state == 0) {
 		gtk_accelerator_parse(subs[1], NULL, &bind->state);
 		if (bind->state) {
-			printf("Parsing '%s' as accelerator, result: 0x%x\n", subs[1], bind->state);
+			debugf("Parsing '%s' as accelerator, result: 0x%x", subs[1], bind->state);
 		} else {
 			fprintf(stderr, "Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s-%s %s\n", subs[1], subs[0], subs[1], subs[2], subs[4], subs[6]);
 			return;
@@ -83,7 +83,7 @@ temu_parse_bind_action (char **subs)
 		}
 	}
 
-	debugf ("Binding: keyval: 0x%x, state: 0x%x, action: %d (%s %s %s)\n", bind->key_min, bind->state, bind->action, subs[0], subs[1], subs[2]);
+	debugf ("Binding: keyval: 0x%x, state: 0x%x, action: %d (%s %s %s)", bind->key_min, bind->state, bind->action, subs[0], subs[1], subs[2]);
 }
 
 static void

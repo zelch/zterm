@@ -129,11 +129,11 @@ prune_windows (void)
 	}
 
 	if (active != terms.alive) {
-		printf ("Found %d active tabs, but %d terms alive.\n", active, terms.alive);
+		fprintf (stderr, "Found %d active tabs, but %d terms alive.\n", active, terms.alive);
 	}
 
 	if (active <= 0) {
-		printf("Attempting to exit...\n");
+		debugf("Attempting to exit...");
 		g_application_quit(G_APPLICATION(app));
 	}
 
@@ -198,7 +198,7 @@ term_unrealized (VteTerminal *term, gpointer user_data)
 	terms.alive--;
 
 	if (!terms.alive) {
-		printf("Attempting to exit...\n");
+		debugf("Attempting to exit...");
 		g_application_quit(G_APPLICATION(app));
 	}
 
@@ -277,7 +277,7 @@ term_config (GtkWidget *term, int window_i)
 			vte_terminal_set_font (VTE_TERMINAL (term), font);
 			pango_font_description_free (font);
 		} else {
-			printf ("Unable to load font '%s'\n", terms.font);
+			fprintf (stderr, "Unable to load font '%s'\n", terms.font);
 		}
 	}
 	vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
@@ -549,7 +549,7 @@ int new_window (void)
 		return -1;
 	}
 
-	printf("Building a new window...\n");
+	debugf("Building a new window...");
 
 	window = gtk_application_window_new(app);
 	debugf("");
@@ -589,7 +589,7 @@ int new_window (void)
 
 	gtk_window_present_with_time (GTK_WINDOW(window), time(NULL));
 
-	printf("Window should be visible...\n");
+	debugf("Window should be visible...");
 
 	return i;
 }
@@ -645,7 +645,7 @@ int main(int argc, char *argv[], char *envp[])
 
 	memset (&terms, 0, sizeof (terms));
 	terms.envp = envp;
-	printf ("Using VTE: %s (%s)\n", vte_get_features(), vte_get_user_shell());
+	debugf ("Using VTE: %s (%s)", vte_get_features(), vte_get_user_shell());
 	terms.audible_bell = TRUE;
 	terms.font_scale = 1;
 	terms.scroll_on_output = FALSE;
@@ -669,7 +669,7 @@ int main(int argc, char *argv[], char *envp[])
 
 	g_application_run(G_APPLICATION (app), argc, argv);
 
-	printf("Exiting, can free here. (%d)\n", terms.n_active);
+	debugf("Exiting, can free here. (%d)", terms.n_active);
 	for (i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term) {
 			int page_num = gtk_notebook_page_num(windows[terms.active[i].window].notebook, GTK_WIDGET(terms.active[i].term));
