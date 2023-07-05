@@ -7,8 +7,10 @@
 #
 bind:	MENU	<Control>	Multi_key
 bind:	MENU	<Control>	0x1000010
-bind:	CUT	<Primary><Mod2>	c
-bind:	PASTE	<Primary><Mod2>	v
+#bind:	CUT	<Primary><Mod2>	c
+#bind:	PASTE	<Primary><Mod2>	v
+bind:	CUT	<Meta>	c
+bind:	PASTE	<Meta>	v
 bind:	CUT	<Control><Shift>	C
 bind:	PASTE	<Control><Shift>	V
 bind:	NEXT_TERM	<Control><Shift>	Right
@@ -18,7 +20,8 @@ bind:	24	<Shift>	F1-F12
 # 128 is level 3 shift, so if I make right windows be level 3 shift, I avoid win-F1 bringing up help instead of terminal 13.
 #bind:	12	128	F1-F12
 # On OS X, Command appears to generate the <Primary><Mod2> set of modifiers for some reason.
-bind:	12	<Primary><Mod2>	F1-F12
+#bind:	12	<Primary><Mod2>	F1-F12
+bind:	12	<Meta>	F1-F12
 bind:	0	<Alt>	F1-F12
 #
 # What font to use, you can usually put the font size last in the string.
