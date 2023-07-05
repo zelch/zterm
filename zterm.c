@@ -709,13 +709,6 @@ int main(int argc, char *argv[], char *envp[])
 	terms.bold_is_bright = TRUE;
 	terms.mouse_autohide = TRUE;
 
-	temu_parse_config ();
-	if (!terms.n_active) {
-		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
-		exit (0);
-	}
-	terms.active = calloc(terms.n_active, sizeof(*terms.active));
-
 	chdir(getenv("HOME"));
 
 	g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
