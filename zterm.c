@@ -11,6 +11,9 @@
 #include <gio/gio.h>
 #include <vte/vte.h>
 #include <stdbool.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <sys/time.h>
 
 extern char **environ;
 #ifdef HAVE_LIBBSD
@@ -25,6 +28,23 @@ int _fdebugf(FILE *io, const char *fmt, ...)
 {
 #ifdef DEBUG
 	va_list args;
+	char buf[32] = { 0 }; // With some extra space, because.
+	int millisec;
+	struct tm *tm_info;
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+
+	millisec = lrint(tv.tv_usec/1000.0);
+	if (millisec >= 1000) {
+	    millisec -= 1000;
+	    tv.tv_sec++;
+	}
+
+	tm_info = localtime(&tv.tv_sec);
+
+	strftime(buf, sizeof(buf) - 1, "%Y:%m:%d %H:%M:%S", tm_info);
+	fprintf(io, "%s.%03d: ", buf, millisec);
 
 	va_start (args, fmt);
 
