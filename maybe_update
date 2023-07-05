@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# First parameter is file name.
+# Second parameter is desired content.
+
+decho () {
+  if [[ "${debug:-0}" == "1" ]]; then
+    echo "$@"
+    return
+  fi
+}
+
+
+updatefile () {
+  local FILENAME
+  local DIRNAME
+  local FILEALREADYMATCHING
+  local CURRENTFILECONTENT
+
+  if [[ $# -ne 2 ]]; then
+    decho returning                                    #echo if debug=1
+    return 99
+  fi
+
+  FILENAME=$(basename "$1")
+  DIRNAME=$(dirname "${FILENAME}")
+  FILECONTENT="$2"
+
+  mkdir -p "${DIRNAME}"
+  if [[ -d "${DIRNAME}" ]] ; then
+    FILEALREADYMATCHING=true
+    if ! [[ -f "${FILENAME}" ]] ; then
+      FILEALREADYMATCHING=false
+      decho "file doesn't exist"                       #echo if debug=1
+    else
+      CURRENTFILECONTENT="$(IFS= cat "${FILENAME}")X"
+      CURRENTFILECONTENT=${CURRENTFILECONTENT%?}
+      decho "file exists"                              #echo if debug=1
+
+      if [[ "${CURRENTFILECONTENT}" != "${FILECONTENT}" ]] ; then
+        decho "content is different"                   #echo if debug=1
+        FILEALREADYMATCHING=false
+      fi
+    fi
+    if [[ "${FILEALREADYMATCHING}" != "true" ]] ; then
+       decho "file doesnt match, making it match now"  #echo if debug=1
+       decho "file is ${FILENAME} by the way"            #echo if debug=1
+      printf '%s' "$2" > "${FILENAME}"
+    fi
+  fi
+}
+
+
+updatefile "$1" "$2"
+

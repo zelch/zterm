@@ -12,13 +12,19 @@ else ifeq (${UNAME_S},Linux)
 	CFLAGS += -D LINUX
 endif
 
-all: zterm .syntastic_c_config ${EXTRA} tags
 
-debug : CFLAGS += -DDEBUG
+FILES = zterm.o menus.o config.o
+
+all: update_cflags zterm .syntastic_c_config ${EXTRA} tags
+
+debug : CFLAGS += -D DEBUG
 debug : all
 
-zterm: zterm.o menus.o config.o
+zterm: $(FILES)
 	$(CC) -o $@ $^ $(LDFLAGS)
+
+$(FILES): %.o: %.c .cflags
+	$(CC) -c $(CFLAGS) -o $@ $<
 
 tags: *.c
 	ctags *.c
@@ -36,7 +42,11 @@ zterm.app: zterm Info.plist PkgInfo Linux_terminal.svg Makefile Linux_terminal.i
 	cp Linux_terminal.icns zterm.app/Contents/Resources/
 
 clean:
-	rm -rf *.o zterm zterm.app
+	rm -rf *.o zterm zterm.app .cflags
+
+.PHONY: update_cflags
+update_cflags:
+	@bash ./maybe_update .cflags "$(CFLAGS)"
 
 .syntastic_c_config: *.c *.h
 	echo "${CFLAGS}" | sed 's/ /\n/g' > .syntastic_c_config
