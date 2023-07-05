@@ -168,9 +168,7 @@ prune_windows (void)
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
-	int status, n = -1, window_i = -1;
-
-	printf("Term died...\n");
+	int status = -1, n = -1, window_i = -1;
 
 	waitpid (-1, &status, WNOHANG);
 
@@ -181,18 +179,28 @@ term_died (VteTerminal *term, gpointer user_data)
 			break;
 		}
 	}
+
+	debugf("Term %d died: %d", n, status);
+
+	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
-		printf ("Unable to find term that died.\n");
+		debugf("Unable to find term that died. (%d / %p / %p), terms.active[0].term: %p", user_data, term, GTK_WIDGET(term), terms.active[0].term);
+		prune_windows ();
+		debugf("");
 		return FALSE;
 	}
 
 	debugf ("Removing dead term %d from window %d.", n, window_i);
-	gtk_notebook_prev_page (windows[window_i].notebook);
-	gtk_widget_set_visible(GTK_WIDGET(term), false);
 	int i = gtk_notebook_page_num(windows[window_i].notebook, GTK_WIDGET(term));
-	debugf("About to remove notebook page %d", i);
-	gtk_notebook_remove_page(windows[window_i].notebook, i);
-	debugf("");
+	if (gtk_notebook_get_current_page(windows[window_i].notebook) == i) {
+		gtk_notebook_prev_page (windows[window_i].notebook);
+	}
+	gtk_widget_set_visible(GTK_WIDGET(term), false);
+	if (i != -1) {
+		debugf("About to remove notebook page %d", i);
+		gtk_notebook_remove_page(windows[window_i].notebook, i);
+		debugf("");
+	}
 
 	prune_windows ();
 	debugf("");
