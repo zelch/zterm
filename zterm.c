@@ -65,8 +65,10 @@ window_t windows[MAX_WINDOWS];
 GtkApplication *app;
 
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
+static gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
 int new_window (void);
 void destroy_window (int i);
+void add_button(GtkWidget *widget, long int term_n, int window_i);
 
 static void
 temu_reorder (void)
@@ -362,6 +364,8 @@ term_spawn (gpointer data)
 
 		terms.active[n].spawned++;
 
+		add_button(GTK_WIDGET(terms.active[n].term), n, -1);
+
 		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_ON);
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_OFF);
@@ -524,8 +528,17 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	return FALSE;
 }
 
+static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
+{
+	long int n = (long int) user_data;
+
+	window_t *window = &windows[terms.active[n].window];
+
+	return window_button_event(gesture, sequence, window);
+}
+
 static
-gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
+gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
 {
 	window_t *window = (window_t *) user_data;
 
@@ -561,6 +574,18 @@ gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpo
 	}
 
 	return FALSE;
+}
+
+void add_button(GtkWidget *widget, long int term_n, int window_i)
+{
+	GtkGesture *gesture = gtk_gesture_click_new();
+	if (term_n >= 0) {
+		g_signal_connect(gesture, "begin", G_CALLBACK(term_button_event), (void *) term_n);
+	} else {
+		g_signal_connect(gesture, "begin", G_CALLBACK(window_button_event), (void *) &windows[window_i]);
+	}
+	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE(gesture), 0);
+	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(gesture));
 }
 
 int new_window (void)
@@ -608,10 +633,8 @@ int new_window (void)
 	gtk_event_controller_set_propagation_phase(windows[i].key_controller, GTK_PHASE_CAPTURE);
 	g_signal_connect (windows[i].key_controller, "key-pressed", G_CALLBACK (term_key_event), &windows[i]);
 
-	GtkGesture *gesture = gtk_gesture_click_new();
-	g_signal_connect(gesture, "begin", G_CALLBACK(term_button_event), (void *) &windows[i]);
-	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE(gesture), 0);
-	gtk_widget_add_controller(GTK_WIDGET(windows[i].window), GTK_EVENT_CONTROLLER(gesture));
+	add_button(GTK_WIDGET(windows[i].window), -1, i);
+	add_button(GTK_WIDGET(windows[i].notebook), -1, i);
 
 	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK(notebook));
 
