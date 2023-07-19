@@ -83,5 +83,6 @@ font_scale: 1
 #
 env:	TERM=xterm-256color
 env:	TERM_PROGRAM=zterm
+env:	SHELL=/bin/zsh
 
 scrollback_lines: 2048
