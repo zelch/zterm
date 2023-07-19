@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS := -g -Wall -Werror -O2 -fPIC $(shell pkg-config gtk4 vte-2.91-gtk4 --cflags)
+CFLAGS := -g -Wall -Werror -O2 $(shell pkg-config gtk4 vte-2.91-gtk4 --cflags)
 LDFLAGS := $(shell pkg-config gtk4 vte-2.91-gtk4 --libs) $(shell pkg-config --exists libbsd && pkg-config --libs libbsd) -lutil -g
 UNAME_S := $(shell uname -s)
 CFLAGS += $(shell pkg-config --exists libbsd && echo -D HAVE_LIBBSD)
