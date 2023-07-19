@@ -10,6 +10,7 @@ ifeq (${UNAME_S},Darwin)
 	EXTRA = zterm.app
 else ifeq (${UNAME_S},Linux)
 	CFLAGS += -D LINUX
+	LDFLAGS += -lm
 endif
 
 
