@@ -71,6 +71,9 @@ int _fnullf(FILE *io, const char *fmt, ...)
 int start_width = 1024;
 int start_height = 768;
 
+int char_width = 0;
+int char_height = 0;
+
 unsigned int bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^ (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);;
 
 terms_t terms;
@@ -83,6 +86,24 @@ static gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequ
 int new_window (void);
 void destroy_window (int i);
 void add_button(GtkWidget *widget, long int term_n, int window_i);
+
+#if 0
+static void
+print_widget_size(GtkWidget *widget, const char *name)
+{
+	int x, y;
+	GtkRequisition minimum, natural;
+
+	debugf("%s %d %s: %s realized: %d, scale factor: %d\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
+	gtk_widget_get_preferred_size(widget, &minimum, &natural);
+	debugf("%s %d %s: %s preferred minimum width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, minimum.width, minimum.height);
+	debugf("%s %d %s: %s preferred natural width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, natural.width, natural.height);
+	gtk_widget_get_size_request(widget, &x, &y);
+	debugf("%s %d %s: %s size request width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, x, y);
+	debugf("%s %d %s: %s allocated width x height: %d x %d (%x x %x)\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
+}
+#endif
+
 
 static void
 temu_reorder (void)
@@ -342,6 +363,9 @@ term_config (GtkWidget *term, int window_i)
 	} else {
 		vte_terminal_set_colors (VTE_TERMINAL (term), NULL, NULL, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 	}
+
+	char_width = vte_terminal_get_char_width(VTE_TERMINAL (term));
+	char_height = vte_terminal_get_char_height(VTE_TERMINAL (term));
 }
 
 static gboolean
@@ -416,6 +440,7 @@ term_map (GtkWidget *widget, void *data)
 	int n = (long int) data;
 
 	debugf("For terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+	// print_widget_size(GTK_WIDGET(widget), "term");
 }
 
 
@@ -603,6 +628,41 @@ void add_button(GtkWidget *widget, long int term_n, int window_i)
 	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(gesture));
 }
 
+// Attempt to ensure that our window size is correct for our font.
+// This is definitely inferior to geometry hints, but geometry hints no longer
+// exist for GTK4.
+void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer user_data)
+{
+	int bounds_width, bounds_height;
+	int width, height;
+	int target_width, target_height;
+
+#define EXTRA_WIDTH		2
+#define EXTRA_HEIGHT	2
+
+	gdk_toplevel_size_get_bounds(size, &bounds_width, &bounds_height);
+	width = gdk_surface_get_width(GDK_SURFACE(self));
+	height = gdk_surface_get_height(GDK_SURFACE(self));
+	target_width = width;
+	target_height = height;
+
+	if (char_width != 0 && char_height != 0) {
+		// debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height / char_height, height % char_height);
+		if (target_width % char_width != EXTRA_WIDTH) {
+			target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
+		}
+		if (target_height % char_height != EXTRA_HEIGHT) {
+			target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
+		}
+
+		if (target_width != width || target_height != height) {
+			debugf("Compute size: bounds: %dx%d, window: %dx%d, char: %dx%d, target: %dx%d", bounds_width, bounds_height, width, height, char_width, char_height, target_width, target_height);
+
+			gdk_toplevel_size_set_size(size, target_width, target_height);
+		}
+	}
+}
+
 int new_window (void)
 {
 	GtkWidget *window, *notebook;
@@ -658,6 +718,10 @@ int new_window (void)
 	gtk_window_present_with_time (GTK_WINDOW(window), time(NULL));
 
 	debugf("Window should be visible...");
+
+	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window)));
+	GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
+	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), &windows[i]);
 
 	return i;
 }
