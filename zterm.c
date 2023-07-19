@@ -59,6 +59,8 @@ int _fdebugf(FILE *io, const char *fmt, ...)
 int start_width = 1024;
 int start_height = 768;
 
+unsigned int bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^ (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);;
+
 terms_t terms;
 window_t windows[MAX_WINDOWS];
 
@@ -480,7 +482,6 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	GtkWidget *widget;
 
 	//state &= 0xED;
-	state &= GDK_MODIFIER_MASK ^ (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
 #if DEBUG
 	gchar *name = gtk_accelerator_name(keyval, state);
 	debugf ("keyval: %d (%s), state: 0x%x, %d, '%s'", keyval, gdk_keyval_name(keyval), state, state, name);
@@ -490,7 +491,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	for (cur = terms.keys; cur; cur = cur->next) {
 		//fprintf (stderr, "key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)\n", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, gtk_accelerator_name(0, cur->state));
 		if ((keyval >= cur->key_min) && (keyval <= cur->key_max)) {
-			if (state == cur->state) {
+			if ((state & bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
 						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, window - &windows[0]);

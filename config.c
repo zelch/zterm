@@ -91,6 +91,23 @@ temu_parse_bind_action (char **subs)
 }
 
 static void
+temu_parse_bind_ignore (char **subs)
+{
+	guint key, state;
+
+	gtk_accelerator_parse(subs[0], &key, &state);
+
+	debugf("Parsing '%s' as accelerator, result: state: 0x%x, keyval: 0x%x", subs[0], state, key);
+
+	if (key != 0 || state == 0) {
+		fprintf (stderr, "Error: ignore value must only be states.\n");
+		exit(1);
+	}
+
+	bind_mask &= ~state;
+}
+
+static void
 temu_free_keys (void)
 {
 	while (terms.keys != NULL) {
@@ -169,7 +186,7 @@ void
 temu_parse_config (void)
 {
 #define MATCHES	16
-	regex_t bind_action, bind_switch, color, color_scheme, font, size, env, other;
+	regex_t bind_action, bind_switch, bind_ignore, color, color_scheme, font, size, env, other;
 	regmatch_t regexp_matches[MATCHES];
 	char *subs[MATCHES] = { 0 };
 	FILE *f;
@@ -193,6 +210,13 @@ temu_parse_config (void)
 		char errbuf[128] = { 0 };
 
 		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
+		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
+	}
+	ret = regcomp (&bind_ignore, "^ignore_mod:[ \t]+([^ \t]+)$", REG_ENHANCED | REG_EXTENDED);
+	if (ret) {
+		char errbuf[128] = { 0 };
+
+		regerror(ret, &bind_ignore, errbuf, sizeof(errbuf) - 1);
 		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
 	}
 	ret = regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
@@ -280,6 +304,16 @@ temu_parse_config (void)
 			if (!ret) {
 				gen_subs (t1, subs, regexp_matches, MATCHES);
 				temu_parse_bind_switch (subs, BIND_ACT_SWITCH);
+				free_subs (subs, MATCHES);
+				j++;
+			}
+		}
+
+		if (!j) {
+			ret = regexec (&bind_ignore, t1, MATCHES, regexp_matches, 0);
+			if (!ret) {
+				gen_subs (t1, subs, regexp_matches, MATCHES);
+				temu_parse_bind_ignore (subs);
 				free_subs (subs, MATCHES);
 				j++;
 			}
@@ -374,8 +408,9 @@ temu_parse_config (void)
 			}
 		}
 
-		if (!j)
+		if (!j) {
 			fprintf (stderr, "Unable to parse line in config: '%s'\n", t1);
+		}
 
 		t1 = t2;
 	}

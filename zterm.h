@@ -85,6 +85,7 @@ extern GtkApplication *app;
 extern int start_width;
 extern int start_height;
 
+extern unsigned int bind_mask;
 
 #define debugf(format, ...)		_fdebugf(stderr, "%s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
 int _fdebugf(FILE *io, const char *fmt, ...);
