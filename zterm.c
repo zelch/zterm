@@ -410,8 +410,10 @@ term_map (GtkWidget *widget, void *data)
 void
 term_switch (long n, char *cmd, int window_i)
 {
-	if (n > terms.n_active)
+	if (n >= terms.n_active) {
+		fprintf(stderr, "ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.\n", n, terms.n_active);
 		return;
+	}
 
 	if (!terms.active[n].term) {
 		GtkWidget *term;
