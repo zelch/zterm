@@ -24,10 +24,8 @@ GdkRGBA colors[256] = {
 #include "256colors.h"
 };
 
-int _fdebugf(FILE *io, const char *fmt, ...)
+int _vfprintf(FILE *io, const char *fmt, va_list args)
 {
-#ifdef DEBUG
-	va_list args;
 	char buf[32] = { 0 }; // With some extra space, because.
 	int millisec;
 	struct tm *tm_info;
@@ -46,14 +44,28 @@ int _fdebugf(FILE *io, const char *fmt, ...)
 	strftime(buf, sizeof(buf) - 1, "%Y:%m:%d %H:%M:%S", tm_info);
 	fprintf(io, "%s.%03d: ", buf, millisec);
 
-	va_start (args, fmt);
-
 	int ret = vfprintf(io, fmt, args);
 	fflush(io);
 	return ret;
-#else
+}
+
+int _fprintf(FILE *io, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start (args, fmt);
+
+	int ret = _vfprintf(io, fmt, args);
+
+	va_end(args);
+
+	return ret;
+}
+
+// This exists just to ensure that the arguments are always evaluated.
+int _fnullf(FILE *io, const char *fmt, ...)
+{
 	return 0;
-#endif
 }
 
 int start_width = 1024;

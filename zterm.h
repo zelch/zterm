@@ -87,8 +87,15 @@ extern int start_height;
 
 extern unsigned int bind_mask;
 
-#define debugf(format, ...)		_fdebugf(stderr, "%s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
-int _fdebugf(FILE *io, const char *fmt, ...);
+int _fprintf(FILE *io, const char *fmt, ...);
+#define errorf(format, ...)		_ferrorf(stderr, "ERROR: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
+int _fprintf(FILE *io, const char *fmt, ...);
+#if DEBUG
+#define debugf(format, ...)		_fprintf(stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
+#else
+#define debugf(format, ...)		_fnullf(stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
+#endif
+int _fnullf(FILE *io, const char *fmt, ...);
 void do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 void term_set_window (int n, int window_i);
 void term_switch (long n, char *cmd, int window_i);
