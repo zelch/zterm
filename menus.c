@@ -303,3 +303,5 @@ rebuild_menus(void)
 		}
 	}
 }
+
+// vim: set ts=4 sw=4 noexpandtab :

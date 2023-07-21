@@ -104,3 +104,5 @@ void term_config (GtkWidget *term, int window_i);
 void rebuild_menus(void);
 
 #endif // _ZTERM_H
+
+// vim: set ts=4 sw=4 noexpandtab :

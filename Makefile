@@ -51,3 +51,5 @@ update_cflags:
 
 .syntastic_c_config: *.c *.h
 	echo "${CFLAGS}" | sed 's/ /\n/g' > .syntastic_c_config
+
+# vim: set ts=8 sw=8:
