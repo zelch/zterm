@@ -91,22 +91,20 @@ int new_window (void);
 void destroy_window (int i);
 void add_button(GtkWidget *widget, long int term_n, int window_i);
 
-#if 0
 static void
 print_widget_size(GtkWidget *widget, const char *name)
 {
 	int x, y;
 	GtkRequisition minimum, natural;
 
-	debugf("%s %d %s: %s realized: %d, scale factor: %d\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
+	debugf("%s realized: %d, scale factor: %d\n", name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
 	gtk_widget_get_preferred_size(widget, &minimum, &natural);
-	debugf("%s %d %s: %s preferred minimum width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, minimum.width, minimum.height);
-	debugf("%s %d %s: %s preferred natural width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, natural.width, natural.height);
+	debugf("%s preferred minimum width x height: %d x %d\n", name, minimum.width, minimum.height);
+	debugf("%s preferred natural width x height: %d x %d\n", name, natural.width, natural.height);
 	gtk_widget_get_size_request(widget, &x, &y);
-	debugf("%s %d %s: %s size request width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, x, y);
-	debugf("%s %d %s: %s allocated width x height: %d x %d (%x x %x)\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
+	debugf("%s size request width x height: %d x %d\n", name, x, y);
+	debugf("%s allocated width x height: %d x %d (%x x %x)\n", name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
 }
-#endif
 
 
 static void
