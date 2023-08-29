@@ -370,6 +370,9 @@ term_config (GtkWidget *term, int window_i)
 
 	char_width = vte_terminal_get_char_width(VTE_TERMINAL (term));
 	char_height = vte_terminal_get_char_height(VTE_TERMINAL (term));
+
+	debugf("setting size request: %d x %d", char_width * 2, char_height * 2);
+	gtk_widget_set_size_request (windows[window_i].window, char_width * 2, char_height * 2);
 }
 
 static gboolean
@@ -640,28 +643,52 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 	int bounds_width, bounds_height;
 	int width, height;
 	int target_width, target_height;
+	int min_width, min_height;
+
 
 #define EXTRA_WIDTH		2
 #define EXTRA_HEIGHT	2
 
 	gdk_toplevel_size_get_bounds(size, &bounds_width, &bounds_height);
-	width = gdk_surface_get_width(GDK_SURFACE(self));
-	height = gdk_surface_get_height(GDK_SURFACE(self));
+
+	gtk_window_get_default_size (GTK_WINDOW(user_data), &width, &height);
 	target_width = width;
 	target_height = height;
 
 	if (char_width != 0 && char_height != 0) {
-		// debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height / char_height, height % char_height);
-		if (target_width % char_width != EXTRA_WIDTH) {
-			target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
+		// The minimum window size is 4 characters in a square, plus the 'extra' width and height.
+		// The extra width and extra height exist to make it easier to see stuff at the edge of the window.
+		min_width = (char_width * 4) + EXTRA_WIDTH;
+		min_height = (char_height * 4) + EXTRA_HEIGHT;
+
+		//debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height / char_height, height % char_height);
+
+		// These round down to the nearest character size.
+		// The commented out versions round up instead.
+		if ((target_width % char_width) != EXTRA_WIDTH) {
+			//target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
+			target_width -= (target_width % char_width) - EXTRA_WIDTH;
 		}
-		if (target_height % char_height != EXTRA_HEIGHT) {
-			target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
+		if ((target_height % char_height) != EXTRA_HEIGHT) {
+			//target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
+			target_height -= (target_height % char_height) - EXTRA_HEIGHT;
 		}
+
+		// Set the minimum size.
+		gdk_toplevel_size_set_min_size(size, min_width, min_height);
+
+		// Ensure that the target size is within the minimum and maximum sizes.
+		target_width = MAX(min_width, MIN(target_width, bounds_width));
+		target_height = MAX(min_height, MIN(target_height, bounds_height));
 
 		if (target_width != width || target_height != height) {
-			debugf("Compute size: bounds: %dx%d, window: %dx%d, char: %dx%d, target: %dx%d", bounds_width, bounds_height, width, height, char_width, char_height, target_width, target_height);
+			//debugf("Compute size: current: %dx%d, target: %dx%d, char: %dx%d, bounds: %dx%d", width, height, target_width, target_height, char_width, char_height, bounds_width, bounds_height);
 
+			// Set both the window 'default' size, and the toplevel size.
+			// Without the default size being set, there are problems on x11
+			// with the correct size not getting set, which causes some very
+			// odd loops, resulting in monitor sized windows.
+			gtk_window_set_default_size (GTK_WINDOW(user_data), target_width, target_height);
 			gdk_toplevel_size_set_size(size, target_width, target_height);
 		}
 	}
@@ -686,7 +713,8 @@ int new_window (void)
 	debugf("Building a new window...");
 
 	window = gtk_application_window_new(app);
-	debugf("");
+
+	debugf("setting default size: %d x %d", start_width, start_height);
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 
 	debugf("");
@@ -719,13 +747,14 @@ int new_window (void)
 
 	rebuild_menus();
 
-	gtk_window_present_with_time (GTK_WINDOW(window), time(NULL));
+	gtk_window_present_with_time (GTK_WINDOW(window), GDK_CURRENT_TIME);
 
 	debugf("Window should be visible...");
 
 	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window)));
 	GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
-	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), &windows[i]);
+	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), window);
+	debugf("compute-size attached to toplevel");
 
 	return i;
 }
