@@ -761,6 +761,11 @@ int new_window (void)
 
 	debugf("Window should be visible...");
 
+	debugf("Old window present location...");
+
+	print_widget_size(GTK_WIDGET(window), "window");
+
+
 	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window)));
 	GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
 	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), window);
