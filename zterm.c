@@ -528,6 +528,8 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 #undef FUNC_DEBUG
 #define FUNC_DEBUG true
 
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 static gboolean
 term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data)
 {
@@ -535,12 +537,9 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	bind_t	*cur;
 	GtkWidget *widget;
 
-	//state &= 0xED;
-#if DEBUG
 	gchar *name = gtk_accelerator_name(keyval, state);
 	debugf ("keyval: %d (%s), state: 0x%x, %d, '%s'", keyval, gdk_keyval_name(keyval), state, state, name);
 	g_free(name);
-#endif
 
 	for (cur = terms.keys; cur; cur = cur->next) {
 		//fprintf (stderr, "key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)\n", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, gtk_accelerator_name(0, cur->state));
@@ -582,6 +581,8 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 
 	return FALSE;
 }
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
 {
