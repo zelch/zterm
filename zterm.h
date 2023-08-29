@@ -87,11 +87,11 @@ extern int start_height;
 
 extern unsigned int bind_mask;
 
-int _fprintf(FILE *io, const char *fmt, ...);
-#define errorf(format, ...)		_ferrorf(stderr, "ERROR: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
-int _fprintf(FILE *io, const char *fmt, ...);
+int _fprintf(bool print, FILE *io, const char *fmt, ...);
+#define errorf(format, ...)		_fprintf(true, stderr, "ERROR: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
 #if DEBUG
-#define debugf(format, ...)		_fprintf(stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
+#define FUNC_DEBUG	true
+#define debugf(format, ...)		_fprintf(FUNC_DEBUG, stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define debugf(format, ...)		_fnullf(stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__)
 #endif

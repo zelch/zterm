@@ -49,9 +49,13 @@ int _vfprintf(FILE *io, const char *fmt, va_list args)
 	return ret;
 }
 
-int _fprintf(FILE *io, const char *fmt, ...)
+int _fprintf(bool print, FILE *io, const char *fmt, ...)
 {
 	va_list args;
+
+	if (!print) {
+		return 0;
+	}
 
 	va_start (args, fmt);
 
