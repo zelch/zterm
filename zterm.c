@@ -501,6 +501,8 @@ term_switch (long n, char *cmd, int window_i)
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n].term));
 }
 
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 static void
 term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointer user_data)
 {
@@ -509,10 +511,8 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 
 	term = VTE_TERMINAL(gtk_notebook_get_nth_page (notebook, page_num));
 
-#if 0
-	fprintf (stderr, "page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p\n",
+	debugf("page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p",
 			page_num, gtk_notebook_get_current_page (notebook), page, term, notebook, user_data);
-#endif
 
 	for (n = 0; n < terms.n_active; n++) {
 		if (term == VTE_TERMINAL(terms.active[n].term)) {
@@ -525,6 +525,8 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 		gtk_widget_grab_focus (GTK_WIDGET(term));
 	}
 }
+#undef FUNC_DEBUG
+#define FUNC_DEBUG true
 
 static gboolean
 term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data)
