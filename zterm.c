@@ -528,6 +528,30 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 #undef FUNC_DEBUG
 #define FUNC_DEBUG true
 
+static void show_menu(window_t *window, double x, double y)
+{
+	GdkRectangle rect = { .width = 1, .height = 1 };
+
+	if (x == -1 && y == -1) {
+		GdkDisplay *display = gdk_display_get_default();
+		GdkSeat *seat = gdk_display_get_default_seat(display);
+		GdkDevice *pointer = gdk_seat_get_pointer(seat);
+		GdkModifierType mask;
+		GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window->window)));
+
+		gdk_surface_get_device_position(GDK_SURFACE(surface), pointer, &x, &y, &mask);
+	}
+
+	rect.x = x;
+	rect.y = y;
+
+	gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), TRUE);
+	gtk_widget_set_halign(window->menu, GTK_ALIGN_START);
+	gtk_widget_set_valign(window->menu, GTK_ALIGN_START);
+	gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), &rect);
+	gtk_popover_popup(GTK_POPOVER(window->menu));
+}
+
 #undef FUNC_DEBUG
 #define FUNC_DEBUG false
 static gboolean
@@ -560,11 +584,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						vte_terminal_paste_clipboard (VTE_TERMINAL(widget));
 						break;
 					case BIND_ACT_MENU:
-						gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), TRUE);
-						gtk_widget_set_halign(window->menu, GTK_ALIGN_CENTER);
-						gtk_widget_set_valign(window->menu, GTK_ALIGN_CENTER);
-						gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), NULL);
-						gtk_popover_popup(GTK_POPOVER(window->menu));
+						show_menu(window, -1, -1);
 						break;
 					case BIND_ACT_NEXT_TERM:
 						gtk_notebook_next_page(GTK_NOTEBOOK(window->notebook));
@@ -602,30 +622,11 @@ gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, g
 
 	GdkEvent *event = gtk_gesture_get_last_event (gesture, sequence);
 	if (gdk_event_triggers_context_menu(event)) {
-		GdkRectangle rect = { .width = 1, .height = 1 };
 		double x, y;
 
 		gtk_gesture_get_point(gesture, sequence, &x, &y);
 
-		rect.x = x;
-		rect.y = y;
-		rect.height = 1;
-		rect.width = 1;
-
-		debugf ("Event should trigger context menu, x: %f / %d, y: %f / %d", x, rect.x, y, rect.y);
-
-		gtk_widget_set_halign(window->menu, GTK_ALIGN_CENTER);
-		gtk_widget_set_valign(window->menu, GTK_ALIGN_CENTER);
-		gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), FALSE);
-		gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), &rect);
-		debugf("");
-		gtk_popover_set_position(GTK_POPOVER(window->menu), GTK_POS_BOTTOM);
-		debugf("");
-		gtk_widget_realize(window->menu);
-		debugf("window->menu: %p", window->menu);
-		gtk_popover_popup(GTK_POPOVER(window->menu));
-		int ret = gtk_widget_grab_focus(window->menu);
-		debugf("grab_focus: %d", ret);
+		show_menu(window, x, y);
 		return TRUE;
 	}
 
