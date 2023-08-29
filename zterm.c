@@ -207,9 +207,9 @@ prune_windows (void)
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
-	int status = -1, n = -1, window_i = -1;
+	int status = 0, n = -1, window_i = -1;
 
-	waitpid (-1, &status, WNOHANG);
+	int pid = waitpid (-1, &status, 0);
 
 	for (int i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term == GTK_WIDGET(term)) {
@@ -219,7 +219,7 @@ term_died (VteTerminal *term, gpointer user_data)
 		}
 	}
 
-	debugf("Term %d died: %d", n, status);
+	debugf("Term %d died: %d, pid %d, errno %d, strerror %s", n, status, pid, errno, strerror(errno));
 
 	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
@@ -373,6 +373,11 @@ term_config (GtkWidget *term, int window_i)
 	gtk_widget_set_size_request (windows[window_i].window, char_width * 2, char_height * 2);
 }
 
+static void spawn_callback (VteTerminal *term, GPid pid, GError *error, gpointer user_data)
+{
+	debugf("term: %p, pid: %d, error: %p, user_data: %p", term, pid, error, user_data);
+}
+
 static gboolean
 term_spawn (gpointer data)
 {
@@ -402,7 +407,8 @@ term_spawn (gpointer data)
 				"--login",
 				NULL
 			};
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, NULL, NULL);
+			debugf("term: %p, shell: '%s'", VTE_TERMINAL (terms.active[n].term), pass->pw_shell);
+			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, 5000, NULL, spawn_callback, NULL);
 		}
 
 		terms.active[n].spawned++;
