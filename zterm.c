@@ -207,9 +207,7 @@ prune_windows (void)
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
-	int status = 0, n = -1, window_i = -1;
-
-	int pid = waitpid (-1, &status, 0);
+	int n = -1, window_i = -1;
 
 	for (int i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term == GTK_WIDGET(term)) {
@@ -219,7 +217,7 @@ term_died (VteTerminal *term, gpointer user_data)
 		}
 	}
 
-	debugf("Term %d died: %d, pid %d, errno %d, strerror %s", n, status, pid, errno, strerror(errno));
+	debugf("Term %d died: errno %d, strerror %s", n, errno, strerror(errno));
 
 	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
