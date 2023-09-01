@@ -49,9 +49,13 @@ int _vfprintf(FILE *io, const char *fmt, va_list args)
 	return ret;
 }
 
-int _fprintf(FILE *io, const char *fmt, ...)
+int _fprintf(bool print, FILE *io, const char *fmt, ...)
 {
 	va_list args;
+
+	if (!print) {
+		return 0;
+	}
 
 	va_start (args, fmt);
 
@@ -87,22 +91,20 @@ int new_window (void);
 void destroy_window (int i);
 void add_button(GtkWidget *widget, long int term_n, int window_i);
 
-#if 0
 static void
 print_widget_size(GtkWidget *widget, const char *name)
 {
 	int x, y;
 	GtkRequisition minimum, natural;
 
-	debugf("%s %d %s: %s realized: %d, scale factor: %d\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
+	debugf("%s realized: %d, scale factor: %d\n", name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
 	gtk_widget_get_preferred_size(widget, &minimum, &natural);
-	debugf("%s %d %s: %s preferred minimum width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, minimum.width, minimum.height);
-	debugf("%s %d %s: %s preferred natural width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, natural.width, natural.height);
+	debugf("%s preferred minimum width x height: %d x %d\n", name, minimum.width, minimum.height);
+	debugf("%s preferred natural width x height: %d x %d\n", name, natural.width, natural.height);
 	gtk_widget_get_size_request(widget, &x, &y);
-	debugf("%s %d %s: %s size request width x height: %d x %d\n", __FILE__, __LINE__, __func__, name, x, y);
-	debugf("%s %d %s: %s allocated width x height: %d x %d (%x x %x)\n", __FILE__, __LINE__, __func__, name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
+	debugf("%s size request width x height: %d x %d\n", name, x, y);
+	debugf("%s allocated width x height: %d x %d (%x x %x)\n", name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
 }
-#endif
 
 
 static void
@@ -205,9 +207,9 @@ prune_windows (void)
 static gboolean
 term_died (VteTerminal *term, gpointer user_data)
 {
-	int status = -1, n = -1, window_i = -1;
+	int status = 0, n = -1, window_i = -1;
 
-	waitpid (-1, &status, WNOHANG);
+	int pid = waitpid (-1, &status, 0);
 
 	for (int i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term == GTK_WIDGET(term)) {
@@ -217,7 +219,7 @@ term_died (VteTerminal *term, gpointer user_data)
 		}
 	}
 
-	debugf("Term %d died: %d", n, status);
+	debugf("Term %d died: %d, pid %d, errno %d, strerror %s", n, status, pid, errno, strerror(errno));
 
 	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
@@ -366,6 +368,14 @@ term_config (GtkWidget *term, int window_i)
 
 	char_width = vte_terminal_get_char_width(VTE_TERMINAL (term));
 	char_height = vte_terminal_get_char_height(VTE_TERMINAL (term));
+
+	debugf("setting size request: %d x %d", char_width * 2, char_height * 2);
+	gtk_widget_set_size_request (windows[window_i].window, char_width * 2, char_height * 2);
+}
+
+static void spawn_callback (VteTerminal *term, GPid pid, GError *error, gpointer user_data)
+{
+	debugf("term: %p, pid: %d, error: %p, user_data: %p", term, pid, error, user_data);
 }
 
 static gboolean
@@ -397,7 +407,8 @@ term_spawn (gpointer data)
 				"--login",
 				NULL
 			};
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, NULL, NULL);
+			debugf("term: %p, shell: '%s'", VTE_TERMINAL (terms.active[n].term), pass->pw_shell);
+			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, 5000, NULL, spawn_callback, NULL);
 		}
 
 		terms.active[n].spawned++;
@@ -476,6 +487,8 @@ term_switch (long n, char *cmd, int window_i)
 		term_set_window (n, window_i);
 
 		term_config(term, window_i);
+
+		gtk_window_present_with_time (GTK_WINDOW(windows[window_i].window), GDK_CURRENT_TIME);
 	}
 
 	if (window_i != terms.active[n].window) {
@@ -488,6 +501,8 @@ term_switch (long n, char *cmd, int window_i)
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n].term));
 }
 
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 static void
 term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointer user_data)
 {
@@ -496,10 +511,8 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 
 	term = VTE_TERMINAL(gtk_notebook_get_nth_page (notebook, page_num));
 
-#if 0
-	fprintf (stderr, "page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p\n",
+	debugf("page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p",
 			page_num, gtk_notebook_get_current_page (notebook), page, term, notebook, user_data);
-#endif
 
 	for (n = 0; n < terms.n_active; n++) {
 		if (term == VTE_TERMINAL(terms.active[n].term)) {
@@ -512,7 +525,35 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 		gtk_widget_grab_focus (GTK_WIDGET(term));
 	}
 }
+#undef FUNC_DEBUG
+#define FUNC_DEBUG true
 
+static void show_menu(window_t *window, double x, double y)
+{
+	GdkRectangle rect = { .width = 1, .height = 1 };
+
+	if (x == -1 && y == -1) {
+		GdkDisplay *display = gdk_display_get_default();
+		GdkSeat *seat = gdk_display_get_default_seat(display);
+		GdkDevice *pointer = gdk_seat_get_pointer(seat);
+		GdkModifierType mask;
+		GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window->window)));
+
+		gdk_surface_get_device_position(GDK_SURFACE(surface), pointer, &x, &y, &mask);
+	}
+
+	rect.x = x;
+	rect.y = y;
+
+	gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), TRUE);
+	gtk_widget_set_halign(window->menu, GTK_ALIGN_START);
+	gtk_widget_set_valign(window->menu, GTK_ALIGN_START);
+	gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), &rect);
+	gtk_popover_popup(GTK_POPOVER(window->menu));
+}
+
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 static gboolean
 term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data)
 {
@@ -520,12 +561,9 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	bind_t	*cur;
 	GtkWidget *widget;
 
-	//state &= 0xED;
-#if DEBUG
 	gchar *name = gtk_accelerator_name(keyval, state);
 	debugf ("keyval: %d (%s), state: 0x%x, %d, '%s'", keyval, gdk_keyval_name(keyval), state, state, name);
 	g_free(name);
-#endif
 
 	for (cur = terms.keys; cur; cur = cur->next) {
 		//fprintf (stderr, "key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)\n", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, gtk_accelerator_name(0, cur->state));
@@ -546,11 +584,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						vte_terminal_paste_clipboard (VTE_TERMINAL(widget));
 						break;
 					case BIND_ACT_MENU:
-						gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), TRUE);
-						gtk_widget_set_halign(window->menu, GTK_ALIGN_CENTER);
-						gtk_widget_set_valign(window->menu, GTK_ALIGN_CENTER);
-						gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), NULL);
-						gtk_popover_popup(GTK_POPOVER(window->menu));
+						show_menu(window, -1, -1);
 						break;
 					case BIND_ACT_NEXT_TERM:
 						gtk_notebook_next_page(GTK_NOTEBOOK(window->notebook));
@@ -567,6 +601,8 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 
 	return FALSE;
 }
+#undef FUNC_DEBUG
+#define FUNC_DEBUG false
 
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
 {
@@ -586,30 +622,11 @@ gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, g
 
 	GdkEvent *event = gtk_gesture_get_last_event (gesture, sequence);
 	if (gdk_event_triggers_context_menu(event)) {
-		GdkRectangle rect = { .width = 1, .height = 1 };
 		double x, y;
 
 		gtk_gesture_get_point(gesture, sequence, &x, &y);
 
-		rect.x = x;
-		rect.y = y;
-		rect.height = 1;
-		rect.width = 1;
-
-		debugf ("Event should trigger context menu, x: %f / %d, y: %f / %d", x, rect.x, y, rect.y);
-
-		gtk_widget_set_halign(window->menu, GTK_ALIGN_CENTER);
-		gtk_widget_set_valign(window->menu, GTK_ALIGN_CENTER);
-		gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), FALSE);
-		gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), &rect);
-		debugf("");
-		gtk_popover_set_position(GTK_POPOVER(window->menu), GTK_POS_BOTTOM);
-		debugf("");
-		gtk_widget_realize(window->menu);
-		debugf("window->menu: %p", window->menu);
-		gtk_popover_popup(GTK_POPOVER(window->menu));
-		int ret = gtk_widget_grab_focus(window->menu);
-		debugf("grab_focus: %d", ret);
+		show_menu(window, x, y);
 		return TRUE;
 	}
 
@@ -636,28 +653,52 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 	int bounds_width, bounds_height;
 	int width, height;
 	int target_width, target_height;
+	int min_width, min_height;
+
 
 #define EXTRA_WIDTH		2
 #define EXTRA_HEIGHT	2
 
 	gdk_toplevel_size_get_bounds(size, &bounds_width, &bounds_height);
-	width = gdk_surface_get_width(GDK_SURFACE(self));
-	height = gdk_surface_get_height(GDK_SURFACE(self));
+
+	gtk_window_get_default_size (GTK_WINDOW(user_data), &width, &height);
 	target_width = width;
 	target_height = height;
 
 	if (char_width != 0 && char_height != 0) {
-		// debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height / char_height, height % char_height);
-		if (target_width % char_width != EXTRA_WIDTH) {
-			target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
+		// The minimum window size is 4 characters in a square, plus the 'extra' width and height.
+		// The extra width and extra height exist to make it easier to see stuff at the edge of the window.
+		min_width = (char_width * 4) + EXTRA_WIDTH;
+		min_height = (char_height * 4) + EXTRA_HEIGHT;
+
+		//debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height / char_height, height % char_height);
+
+		// These round down to the nearest character size.
+		// The commented out versions round up instead.
+		if ((target_width % char_width) != EXTRA_WIDTH) {
+			//target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
+			target_width -= (target_width % char_width) - EXTRA_WIDTH;
 		}
-		if (target_height % char_height != EXTRA_HEIGHT) {
-			target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
+		if ((target_height % char_height) != EXTRA_HEIGHT) {
+			//target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
+			target_height -= (target_height % char_height) - EXTRA_HEIGHT;
 		}
+
+		// Set the minimum size.
+		gdk_toplevel_size_set_min_size(size, min_width, min_height);
+
+		// Ensure that the target size is within the minimum and maximum sizes.
+		target_width = MAX(min_width, MIN(target_width, bounds_width));
+		target_height = MAX(min_height, MIN(target_height, bounds_height));
 
 		if (target_width != width || target_height != height) {
-			debugf("Compute size: bounds: %dx%d, window: %dx%d, char: %dx%d, target: %dx%d", bounds_width, bounds_height, width, height, char_width, char_height, target_width, target_height);
+			//debugf("Compute size: current: %dx%d, target: %dx%d, char: %dx%d, bounds: %dx%d", width, height, target_width, target_height, char_width, char_height, bounds_width, bounds_height);
 
+			// Set both the window 'default' size, and the toplevel size.
+			// Without the default size being set, there are problems on x11
+			// with the correct size not getting set, which causes some very
+			// odd loops, resulting in monitor sized windows.
+			gtk_window_set_default_size (GTK_WINDOW(user_data), target_width, target_height);
 			gdk_toplevel_size_set_size(size, target_width, target_height);
 		}
 	}
@@ -682,7 +723,8 @@ int new_window (void)
 	debugf("Building a new window...");
 
 	window = gtk_application_window_new(app);
-	debugf("");
+
+	debugf("setting default size: %d x %d", start_width, start_height);
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 
 	debugf("");
@@ -715,13 +757,19 @@ int new_window (void)
 
 	rebuild_menus();
 
-	gtk_window_present_with_time (GTK_WINDOW(window), time(NULL));
+	gtk_window_present_with_time (GTK_WINDOW(window), GDK_CURRENT_TIME);
 
 	debugf("Window should be visible...");
 
+	debugf("Old window present location...");
+
+	print_widget_size(GTK_WIDGET(window), "window");
+
+
 	GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window)));
 	GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
-	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), &windows[i]);
+	g_signal_connect (toplevel, "compute-size", G_CALLBACK (window_compute_size), window);
+	debugf("compute-size attached to toplevel");
 
 	return i;
 }
