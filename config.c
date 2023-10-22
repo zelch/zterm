@@ -5,6 +5,19 @@
 #  include <bsd/string.h>
 #endif
 
+static int zregcomp(regex_t *restrict preg, const char *restrict regex, int cflags)
+{
+	int ret = regcomp (preg, regex, cflags);
+	if (ret) {
+		char errbuf[128] = { 0 };
+
+		regerror(ret, preg, errbuf, sizeof(errbuf) - 1);
+		errorf("recomp failed: %d (%s) for regex '%s'",  ret, errbuf, regex);
+	}
+
+	return ret;
+}
+
 static void
 temu_parse_bind_switch (char **subs, bind_actions_t action)
 {
@@ -198,69 +211,16 @@ temu_parse_config (void)
 	size_t read;
 	int n_color_scheme = 0;
 
-	ret = regcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
+	zregcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
 
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&bind_ignore, "^ignore_mod:[ \t]+([^ \t]+)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_ignore, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&color_scheme, "^color_scheme:[ \t]+([-a-zA-Z0-9_ ]*?)[ \t]+(#[0-9a-fA-F]+)[ \t]+(#[0-9a-fA-F]+)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&font, "^font:[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&env, "^env:[ \t]+([^=]*?)=(.*?)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
-	ret = regcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
-	if (ret) {
-		char errbuf[128] = { 0 };
-
-		regerror(ret, &bind_action, errbuf, sizeof(errbuf) - 1);
-		fprintf(stderr, "%s %d (%s): recomp failed: %d (%s)\n", __FILE__, __LINE__, __func__, ret, errbuf);
-	}
+	zregcomp (&bind_ignore, "^ignore_mod:[ \t]+([^ \t]+)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&color, "^color:[ \t]+([0-9]+)[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&color_scheme, "^color_scheme:[ \t]+([-a-zA-Z0-9_ ]*?)[ \t]+(#[0-9a-fA-F]+)[ \t]+(#[0-9a-fA-F]+)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&font, "^font:[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&size, "^size:[ \t]+([0-9]+)x([0-9]+)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&env, "^env:[ \t]+([^=]*?)=(.*?)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
 
 	temu_free_keys();
 	// FIXME: We need to correctly handle the case where this number changes with a reload, it's going to be a bit rough.
