@@ -97,13 +97,13 @@ print_widget_size(GtkWidget *widget, const char *name)
 	int x, y;
 	GtkRequisition minimum, natural;
 
-	debugf("%s realized: %d, scale factor: %d\n", name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
+	debugf("%s realized: %d, scale factor: %d", name, gtk_widget_get_realized(widget), gtk_widget_get_scale_factor(widget));
 	gtk_widget_get_preferred_size(widget, &minimum, &natural);
-	debugf("%s preferred minimum width x height: %d x %d\n", name, minimum.width, minimum.height);
-	debugf("%s preferred natural width x height: %d x %d\n", name, natural.width, natural.height);
+	debugf("%s preferred minimum width x height: %dx%d", name, minimum.width, minimum.height);
+	debugf("%s preferred natural width x height: %dx%d", name, natural.width, natural.height);
 	gtk_widget_get_size_request(widget, &x, &y);
-	debugf("%s size request width x height: %d x %d\n", name, x, y);
-	debugf("%s allocated width x height: %d x %d (%x x %x)\n", name, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget), gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
+	debugf("%s size request width x height: %dx%d", name, x, y);
+	debugf("%s allocated width x height: %dx%d (%x x %x)", name, gtk_widget_get_width(widget), gtk_widget_get_height(widget), gtk_widget_get_width(widget), gtk_widget_get_height(widget));
 }
 
 
@@ -188,7 +188,7 @@ prune_windows (void)
 	}
 
 	if (active != terms.alive) {
-		fprintf (stderr, "Found %d active tabs, but %d terms alive.\n", active, terms.alive);
+		errorf("Found %d active tabs, but %d terms alive.", active, terms.alive);
 	}
 
 	if (active <= 0) {
@@ -342,7 +342,7 @@ term_config (GtkWidget *term, int window_i)
 			vte_terminal_set_font (VTE_TERMINAL (term), font);
 			pango_font_description_free (font);
 		} else {
-			fprintf (stderr, "Unable to load font '%s'\n", terms.font);
+			errorf("Unable to load font '%s'", terms.font);
 		}
 	}
 	vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
@@ -457,7 +457,7 @@ void
 term_switch (long n, char *cmd, int window_i)
 {
 	if (n >= terms.n_active) {
-		fprintf(stderr, "ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.\n", n, terms.n_active);
+		errorf("ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.", n, terms.n_active);
 		return;
 	}
 
@@ -714,7 +714,7 @@ int new_window (void)
 	}
 
 	if (i == MAX_WINDOWS) {
-		fprintf (stderr, "ERROR: Unable to allocate new window.\n");
+		errorf("ERROR: Unable to allocate new window.");
 		return -1;
 	}
 
@@ -796,7 +796,7 @@ static void activate (GtkApplication *app, gpointer user_data)
 
 	temu_parse_config ();
 	if (!terms.n_active) {
-		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
+		errorf("Unable to read config file, or no terminals defined.");
 		exit (0);
 	}
 	terms.active = calloc(terms.n_active, sizeof(*terms.active));

@@ -8,14 +8,14 @@ do_reload_config (GSimpleAction *self, GVariant *parameter, gpointer user_data)
 
 	temu_parse_config();
 	if (!terms.n_active) {
-		fprintf (stderr, "Unable to read config file, or no terminals defined.\n");
+		errorf("Unable to read config file, or no terminals defined.");
 		return;
 	}
 
 	// We actively don't want to worry about the number shrinking.  That just makes too much pain.
 	// But we absolutely have to handle it growing.
 	if (terms.n_active > old_n_active) {
-		fprintf(stderr, "%s %d (%s): old_n_active: %d, terms.n_active: %d\n", __FILE__, __LINE__, __func__, old_n_active, terms.n_active);
+		debugf("old_n_active: %d, terms.n_active: %d",  old_n_active, terms.n_active);
 		terms.active = realloc(terms.active, terms.n_active * sizeof(*terms.active));
 		memset(&terms.active[old_n_active], 0, (terms.n_active - old_n_active) * sizeof(*terms.active));
 	}

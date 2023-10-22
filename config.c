@@ -34,7 +34,7 @@ temu_parse_bind_switch (char **subs, bind_actions_t action)
 		if (bind->state) {
 			debugf("Parsing '%s' as accelerator, result: 0x%x", subs[1], bind->state);
 		} else {
-			fprintf(stderr, "Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s-%s %s\n", subs[1], subs[0], subs[1], subs[2], subs[4], subs[6]);
+			errorf("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s-%s %s", subs[1], subs[0], subs[1], subs[2], subs[4], subs[6]);
 			return;
 		}
 	}
@@ -72,7 +72,7 @@ temu_parse_bind_action (char **subs)
 	} else if (!strcasecmp(subs[0], "PREV_TERM")) {
 		bind->action = BIND_ACT_PREV_TERM;
 	} else {
-		fprintf(stderr, "Unknown bind action '%s'.\n", subs[0]);
+		errorf("Unknown bind action '%s'.", subs[0]);
 		free(bind);
 		return;
 	}
@@ -92,10 +92,10 @@ temu_parse_bind_action (char **subs)
 		bind->key_min = bind->key_max = strtol(subs[2], NULL, 0);
 		debugf("Parsing '%s' as partial accelerator, result: state: 0x%x, keyval: 0x%x, ret: %d", bind_str, bind->state, bind->key_max, ret);
 		if (!ret) {
-			fprintf(stderr, "Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s\n", subs[1], subs[0], subs[1], subs[2]);
+			errorf("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1], subs[2]);
 			return;
 		} else if (!bind->key_max) {
-			fprintf(stderr, "Error: Unable to parse '%s' as key, skipping bind: %s %s %s\n", subs[2], subs[0], subs[1], subs[2]);
+			errorf("Error: Unable to parse '%s' as key, skipping bind: %s %s %s", subs[2], subs[0], subs[1], subs[2]);
 			return;
 		}
 	}
@@ -113,7 +113,7 @@ temu_parse_bind_ignore (char **subs)
 	debugf("Parsing '%s' as accelerator, result: state: 0x%x, keyval: 0x%x", subs[0], state, key);
 
 	if (key != 0 || state == 0) {
-		fprintf (stderr, "Error: ignore value must only be states.\n");
+		errorf("Error: ignore value must only be states.");
 		exit(1);
 	}
 
@@ -350,7 +350,7 @@ temu_parse_config (void)
 				} else if (!strcmp(subs[0], "rewrap_on_resize")) {
 					terms.rewrap_on_resize = atoi(subs[1]);
 					if (!terms.rewrap_on_resize) {
-						fprintf(stderr, "NOT SUPPORTED: rewrap_on_resize = 0\n");
+						errorf("NOT SUPPORTED: rewrap_on_resize = 0");
 					}
 				} else if (!strcmp(subs[0], "scrollback_lines")) {
 					terms.scrollback_lines = atoi(subs[1]);
@@ -361,7 +361,7 @@ temu_parse_config (void)
 				} else if (!strcmp(subs[0], "mouse_autohide")) {
 					terms.mouse_autohide = atoi(subs[1]);
 				} else {
-					fprintf (stderr, "Unable to parse line in config: '%s' (%s)\n", t1, subs[0]);
+					errorf("Unable to parse line in config: '%s' (%s)", t1, subs[0]);
 				}
 				free_subs (subs, MATCHES);
 				j++;
@@ -369,7 +369,7 @@ temu_parse_config (void)
 		}
 
 		if (!j) {
-			fprintf (stderr, "Unable to parse line in config: '%s'\n", t1);
+			errorf("Unable to parse line in config: '%s'", t1);
 		}
 
 		t1 = t2;
