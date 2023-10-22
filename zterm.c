@@ -499,8 +499,10 @@ term_switch (long n, char *cmd, int window_i)
 	gtk_widget_grab_focus (GTK_WIDGET(terms.active[n].term));
 }
 
+/*
 #undef FUNC_DEBUG
 #define FUNC_DEBUG false
+*/
 static void
 term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointer user_data)
 {
@@ -523,8 +525,10 @@ term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointe
 		gtk_widget_grab_focus (GTK_WIDGET(term));
 	}
 }
+/*
 #undef FUNC_DEBUG
 #define FUNC_DEBUG true
+*/
 
 static void show_menu(window_t *window, double x, double y)
 {
@@ -600,7 +604,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	return FALSE;
 }
 #undef FUNC_DEBUG
-#define FUNC_DEBUG false
+#define FUNC_DEBUG true
 
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
 {
@@ -643,6 +647,8 @@ void add_button(GtkWidget *widget, long int term_n, int window_i)
 	gtk_widget_add_controller(widget, GTK_EVENT_CONTROLLER(gesture));
 }
 
+#undef FUNC_DEBUG
+#define FUNC_DEBUG true
 // Attempt to ensure that our window size is correct for our font.
 // This is definitely inferior to geometry hints, but geometry hints no longer
 // exist for GTK4.
@@ -662,6 +668,8 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 	gtk_window_get_default_size (GTK_WINDOW(user_data), &width, &height);
 	target_width = width;
 	target_height = height;
+
+	debugf("bounds: %dx%d, target: %dx%d, char: %dx%d", bounds_width, bounds_height, width, height, char_width, char_height);
 
 	if (char_width != 0 && char_height != 0) {
 		// The minimum window size is 4 characters in a square, plus the 'extra' width and height.
@@ -688,9 +696,12 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 		// Ensure that the target size is within the minimum and maximum sizes.
 		target_width = MAX(min_width, MIN(target_width, bounds_width));
 		target_height = MAX(min_height, MIN(target_height, bounds_height));
+		debugf("Compute size: current: %dx%d, target: %dx%d, char: %dx%d, bounds: %dx%d", width, height, target_width, target_height, char_width, char_height, bounds_width, bounds_height);
+#if FUNC_DEBUG
+		print_widget_size(GTK_WIDGET(user_data), "window");
+#endif
 
 		if (target_width != width || target_height != height) {
-			//debugf("Compute size: current: %dx%d, target: %dx%d, char: %dx%d, bounds: %dx%d", width, height, target_width, target_height, char_width, char_height, bounds_width, bounds_height);
 
 			// Set both the window 'default' size, and the toplevel size.
 			// Without the default size being set, there are problems on x11
@@ -701,11 +712,15 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 		}
 	}
 }
+#undef FUNC_DEBUG
+#define FUNC_DEBUG true
 
 int new_window (void)
 {
 	GtkWidget *window, *notebook;
 	long int i;
+
+	debugf("in new_window...");
 
 	for (i = 0; i < MAX_WINDOWS; i++) {
 		if (!windows[i].window) {
@@ -722,7 +737,7 @@ int new_window (void)
 
 	window = gtk_application_window_new(app);
 
-	debugf("setting default size: %d x %d", start_width, start_height);
+	debugf("setting default size: %dx%d", start_width, start_height);
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 
 	debugf("");
