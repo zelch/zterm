@@ -763,6 +763,9 @@ int new_window (void)
 	debugf("setting default size: %dx%d", start_width, start_height);
 	gtk_window_set_default_size (GTK_WINDOW(window), start_width, start_height);
 
+	debugf("Setting size request: 24x24");
+	gtk_widget_set_size_request (GTK_WIDGET(window), 24, 24);
+
 	debugf("");
 	notebook = gtk_notebook_new();
 	debugf("");
