@@ -389,6 +389,11 @@ term_spawn (gpointer data)
 	}
 
 	if (!terms.active[n].spawned) {
+		char **env = environ;
+		if (terms.active[n].env != NULL) {
+			env = terms.active[n].env;
+		}
+
 		if (terms.active[n].cmd) {
 			char *argv[] = {
 				"/bin/sh",
@@ -396,7 +401,15 @@ term_spawn (gpointer data)
 				terms.active[n].cmd,
 				NULL
 			};
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, NULL, NULL);
+			debugf("Spawning with args: %s %s %s %s", argv[0], argv[1], argv[2], argv[3]);
+			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
+		} else if (terms.active[n].argv != NULL && terms.active[n].argv[0] != NULL) {
+			debugf("Spawning with: %p '%s'", terms.active[n].argv, terms.active[n].argv[0]);
+			for (int i = 0; terms.active[n].argv[i] != NULL; i++) {
+				debugf("argv[%d]: '%s'", i, terms.active[n].argv[i]);
+			}
+			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, terms.active[n].argv, env, G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
+
 		} else {
 			struct passwd *pass = getpwuid(getuid());
 
@@ -406,7 +419,8 @@ term_spawn (gpointer data)
 				NULL
 			};
 			debugf("term: %p, shell: '%s'", VTE_TERMINAL (terms.active[n].term), pass->pw_shell);
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, environ, G_SPAWN_DEFAULT, NULL, NULL, NULL, 5000, NULL, spawn_callback, NULL);
+			debugf("Spawning with args: %s %s", argv[0], argv[1]);
+			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL, NULL, 5000, NULL, spawn_callback, NULL);
 		}
 
 		terms.active[n].spawned++;
@@ -454,7 +468,7 @@ term_map (GtkWidget *widget, void *data)
 
 
 void
-term_switch (long n, char *cmd, int window_i)
+term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 {
 	if (n >= terms.n_active) {
 		errorf("ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.", n, terms.n_active);
@@ -479,6 +493,8 @@ term_switch (long n, char *cmd, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "map", G_CALLBACK (term_map), (void *) n);
 
 		terms.active[n].cmd = cmd;
+		terms.active[n].argv = argv;
+		terms.active[n].env = env;
 		terms.active[n].term = term;
 		terms.alive++;
 
@@ -573,7 +589,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 			if ((state & bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, window - &windows[0]);
+						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, cur->argv, cur->env, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
 						debugf("Cut?");
@@ -807,7 +823,7 @@ void destroy_window (int i)
 static void activate (GtkApplication *app, gpointer user_data)
 {
 	bind_t *cur;
-	char *cmd = NULL;
+	exec_t *exec = (exec_t *) user_data;
 
 	temu_parse_config ();
 	if (!terms.n_active) {
@@ -816,18 +832,27 @@ static void activate (GtkApplication *app, gpointer user_data)
 	}
 	terms.active = calloc(terms.n_active, sizeof(*terms.active));
 
-	for (cur = terms.keys; cur; cur = cur->next) {
-		if (cur->base == 0) {
-			cmd = cur->cmd;
-			break;
+	if (exec->cmd || exec->argv) {
+		term_switch (0, exec->cmd, exec->argv, exec->env, 0);
+	} else {
+		for (cur = terms.keys; cur; cur = cur->next) {
+			if (cur->base == 0) {
+				break;
+			}
 		}
-	}
 
-	term_switch (0, cmd, 0);
+		if (cur != NULL) {
+			term_switch (0, cur->cmd, cur->argv, cur->env, 0);
+		} else {
+			term_switch (0, NULL, NULL, NULL, 0);
+		}
+
+	}
 }
 
 int main(int argc, char *argv[], char *envp[])
 {
+	exec_t exec = { NULL };
 	int i;
 
 	g_set_application_name("zterm");
@@ -851,9 +876,18 @@ int main(int argc, char *argv[], char *envp[])
 
 	chdir(getenv("HOME"));
 
-	g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
+	if (argc > 1) {
+		debugf("argc: %d", argc);
+		exec.argv = calloc(argc + 1, sizeof (char *));
+		for (int i = 0; i < argc; i++) {
+			exec.argv[i] = argv[i + 1];
+		}
+		exec.env = envp;
+	}
 
-	g_application_run(G_APPLICATION (app), argc, argv);
+	g_signal_connect (app, "activate", G_CALLBACK (activate), &exec);
+
+	g_application_run(G_APPLICATION (app), 0, NULL);
 
 	debugf("Exiting, can free here. (%d)", terms.n_active);
 	for (i = 0; i < terms.n_active; i++) {

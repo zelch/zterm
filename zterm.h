@@ -28,8 +28,16 @@ typedef struct bind_s {
 	guint base;
 	struct bind_s *next;
 	char *cmd;
+	char **argv;
+	char **env;
 	bind_actions_t action;
 } bind_t;
+
+typedef struct {
+	char *cmd;
+	char **argv;
+	char **env;
+} exec_t;
 
 typedef struct color_scheme_s {
 	GdkRGBA foreground;
@@ -52,6 +60,8 @@ typedef struct terms_s {
 		int moving;
 		int window;
 		char *cmd;
+		char **argv; // NULL terminated, only evaluated if cmd is NULL.
+		char **env; // If this term has a unique environment.
 		GtkWidget *term;
 	} *active;
 	gint n_active; // Total number of configured terms.
@@ -98,7 +108,7 @@ int _fprintf(bool print, FILE *io, const char *fmt, ...);
 int _fnullf(FILE *io, const char *fmt, ...);
 void do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 void term_set_window (int n, int window_i);
-void term_switch (long n, char *cmd, int window_i);
+void term_switch (long n, char *cmd, char **argv, char **env, int window_i);
 void temu_parse_config (void);
 void term_config (GtkWidget *term, int window_i);
 void rebuild_menus(void);
