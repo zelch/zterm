@@ -863,7 +863,6 @@ int main(int argc, char *argv[], char *envp[])
 	int i;
 
 	g_set_application_name("zterm");
-	//gtk_init(&argc, &argv);
 	app = gtk_application_new ("org.aehallh.zterm", 0);
 	g_application_set_application_id (G_APPLICATION(app), "com.aehallh.zterm");
 	g_application_set_flags (G_APPLICATION(app), G_APPLICATION_NON_UNIQUE);
