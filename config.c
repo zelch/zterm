@@ -283,25 +283,6 @@ temu_parse_config (void)
 			}
 		}
 
-		if (!j) {
-			ret = regexec (&font, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_font (subs);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
-
-		if (!j) {
-			ret = regexec (&size, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_size (subs);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
 
 		if (!j) {
 			ret = regexec (&env, t1, MATCHES, regexp_matches, 0);
