@@ -671,7 +671,7 @@ void add_button(GtkWidget *widget, long int term_n, int window_i)
 }
 
 #undef FUNC_DEBUG
-#define FUNC_DEBUG true
+#define FUNC_DEBUG false
 // Attempt to ensure that our window size is correct for our font.
 // This is definitely inferior to geometry hints, but geometry hints no longer
 // exist for GTK4.
