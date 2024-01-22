@@ -19,13 +19,13 @@ static int zregcomp(regex_t *restrict preg, const char *restrict regex, int cfla
 }
 
 static void
-temu_parse_bind_switch (char **subs, bind_actions_t action)
+temu_parse_bind_switch (char **subs)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
 	bind->next = terms.keys;
 	terms.keys = bind;
 
-	bind->action = action;
+	bind->action = BIND_ACT_SWITCH;
 	bind->base = strtol(subs[0], NULL, 0);
 	bind->state = strtol(subs[1], NULL, 0);
 	// The new style is actually a GTK accelerator string, but with only the modifier component.
@@ -249,45 +249,25 @@ temu_parse_config (void)
 			j = t1[0] == '\0' ? 1 : 0;
 		}
 
-		if (!j) {
-			ret = regexec (&bind_action, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_bind_action (subs);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
+#define add_regex(name)		do { \
+	if (!j) { \
+		ret = regexec (&name, t1, MATCHES, regexp_matches, 0); \
+		if (!ret) { \
+			debugf(); \
+			gen_subs (t1, subs, regexp_matches, MATCHES); \
+			temu_parse_##name (subs); \
+			free_subs (subs, MATCHES); \
+			j++; \
+		} \
+	} \
+} while(0)
 
-		if (!j) {
-			ret = regexec (&bind_switch, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_bind_switch (subs, BIND_ACT_SWITCH);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
-
-		if (!j) {
-			ret = regexec (&bind_ignore, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_bind_ignore (subs);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
-
-		if (!j) {
-			ret = regexec (&color, t1, MATCHES, regexp_matches, 0);
-			if (!ret) {
-				gen_subs (t1, subs, regexp_matches, MATCHES);
-				temu_parse_color (subs);
-				free_subs (subs, MATCHES);
-				j++;
-			}
-		}
+		add_regex(bind_action);
+		add_regex(bind_switch);
+		add_regex(bind_ignore);
+		add_regex(color);
+		add_regex(font);
+		add_regex(size);
 
 		if (!j && n_color_scheme < (sizeof (terms.color_schemes) / sizeof (terms.color_schemes[0]))) {
 			ret = regexec (&color_scheme, t1, MATCHES, regexp_matches, 0);
