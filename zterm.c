@@ -374,6 +374,10 @@ term_config (GtkWidget *term, int window_i)
 static void spawn_callback (VteTerminal *term, GPid pid, GError *error, gpointer user_data)
 {
 	debugf("term: %p, pid: %d, error: %p, user_data: %p", term, pid, error, user_data);
+	if (error != NULL) {
+		errorf("error: domain: 0x%x, code: 0x%x, message: %s", error->domain, error->code, error->message);
+		term_died(term, -1); // This is a horrible hack.
+	}
 }
 
 static gboolean
