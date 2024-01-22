@@ -614,6 +614,9 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 					case BIND_ACT_PREV_TERM:
 						gtk_notebook_prev_page(GTK_NOTEBOOK(window->notebook));
 						break;
+					default:
+						debugf("Fell into impossible key binding case.");
+						return FALSE;
 				}
 				debugf("action: %d", cur->action);
 				return TRUE;
