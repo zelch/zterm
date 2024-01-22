@@ -367,7 +367,7 @@ term_config (GtkWidget *term, int window_i)
 	char_width = vte_terminal_get_char_width(VTE_TERMINAL (term));
 	char_height = vte_terminal_get_char_height(VTE_TERMINAL (term));
 
-	debugf("setting size request: %d x %d", char_width * 2, char_height * 2);
+	debugf("setting size request: %dx%d", char_width * 2, char_height * 2);
 	gtk_widget_set_size_request (windows[window_i].window, char_width * 2, char_height * 2);
 }
 
