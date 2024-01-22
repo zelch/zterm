@@ -20,6 +20,7 @@ typedef enum bind_actions {
 	BIND_ACT_MENU,
 	BIND_ACT_NEXT_TERM,
 	BIND_ACT_PREV_TERM,
+	BIND_ACT_OPEN_URI,
 } bind_actions_t;
 
 typedef struct bind_s {
@@ -38,6 +39,13 @@ typedef struct {
 	char **argv;
 	char **env;
 } exec_t;
+
+typedef struct bind_button_s {
+	guint state;
+	guint button;
+	struct bind_button_s *next;
+	bind_actions_t action;
+} bind_button_t;
 
 typedef struct color_scheme_s {
 	GdkRGBA foreground;
@@ -62,6 +70,7 @@ typedef struct terms_s {
 		char *cmd;
 		char **argv; // NULL terminated, only evaluated if cmd is NULL.
 		char **env; // If this term has a unique environment.
+		char *hyperlink_uri;
 		GtkWidget *term;
 	} *active;
 	gint n_active; // Total number of configured terms.
@@ -70,6 +79,7 @@ typedef struct terms_s {
 
 	/* Configuration options. */
 	bind_t	*keys;
+	bind_button_t *buttons;
 	char	*font;
 	gboolean audible_bell;
 	char     word_char_exceptions[64];

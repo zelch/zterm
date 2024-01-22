@@ -104,6 +104,35 @@ temu_parse_bind_action (char **subs)
 }
 
 static void
+temu_parse_bind_button (char **subs)
+{
+	bind_button_t *bind = calloc (1, sizeof (bind_button_t));
+
+	debugf();
+	if (!strcasecmp(subs[0], "OPEN_URI")) {
+		bind->action = BIND_ACT_OPEN_URI;
+	} else {
+		errorf("Unknown bind action '%s'.", subs[0]);
+		free(bind);
+		return;
+	}
+
+	bind->button = strtol(subs[2], NULL, 0);
+
+	bind->next = terms.buttons;
+	terms.buttons = bind;
+
+	int ret = gtk_accelerator_parse(subs[1], NULL, &bind->state);
+	debugf("Parsing '%s' as partial accelerator, result: state: 0x%x, button: %d, ret: %d", subs[1], bind->state, bind->button, ret);
+	if (!ret) {
+		errorf("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1], subs[2]);
+		return;
+	}
+
+	debugf ("Binding: button: %d, state: 0x%x, action: %d (%s %s %s)", bind->button, bind->state, bind->action, subs[0], subs[1], subs[2]);
+}
+
+static void
 temu_parse_bind_ignore (char **subs)
 {
 	guint key, state;
@@ -199,7 +228,7 @@ void
 temu_parse_config (void)
 {
 #define MATCHES	16
-	regex_t bind_action, bind_switch, bind_ignore, color, color_scheme, font, size, env, other;
+	regex_t bind_action, bind_button, bind_switch, bind_ignore, color, color_scheme, font, size, env, other;
 	regmatch_t regexp_matches[MATCHES];
 	char *subs[MATCHES] = { 0 };
 	FILE *f;
@@ -212,6 +241,7 @@ temu_parse_config (void)
 	int n_color_scheme = 0;
 
 	zregcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
+	zregcomp (&bind_button, "^bind_button:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
 	zregcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$", REG_ENHANCED | REG_EXTENDED);
 
 	zregcomp (&bind_ignore, "^ignore_mod:[ \t]+([^ \t]+)$", REG_ENHANCED | REG_EXTENDED);
@@ -265,6 +295,7 @@ temu_parse_config (void)
 		add_regex(bind_action);
 		add_regex(bind_switch);
 		add_regex(bind_ignore);
+		add_regex(bind_button);
 		add_regex(color);
 		add_regex(font);
 		add_regex(size);

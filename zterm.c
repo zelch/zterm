@@ -14,6 +14,8 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <sys/time.h>
+#define PCRE2_CODE_UNIT_WIDTH 0
+#include <pcre2.h>
 
 extern char **environ;
 #ifdef HAVE_LIBBSD
@@ -85,6 +87,7 @@ window_t windows[MAX_WINDOWS];
 
 GtkApplication *app;
 
+static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, int64_t term_n, window_t *window);
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
 static gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
 int new_window (void);
@@ -358,6 +361,16 @@ term_config (GtkWidget *term, int window_i)
 	vte_terminal_set_enable_sixel (VTE_TERMINAL (term), true);
 	vte_terminal_set_allow_hyperlink (VTE_TERMINAL (term), true);
 
+	// FIXME: Should this be in the config?
+	VteRegex *regex;
+	regex = vte_regex_new_for_match("([a-z]+://(\\w+(:\\w+)@)?[^\\s]*)", -1, PCRE2_NEVER_BACKSLASH_C | PCRE2_UTF | PCRE2_MULTILINE | PCRE2_CASELESS, NULL);
+	if (regex) {
+		int ret = vte_terminal_match_add_regex(VTE_TERMINAL (term), regex, 0);
+		debugf("regex: %p, ret: %d", regex, ret);
+	} else {
+		debugf("regex failed to compile, we should add error handling.");
+	}
+
 	if (terms.color_schemes[windows[window_i].color_scheme].name[0]) {
 		vte_terminal_set_colors (VTE_TERMINAL (term), &terms.color_schemes[windows[window_i].color_scheme].foreground, &terms.color_schemes[windows[window_i].color_scheme].background, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 	} else {
@@ -471,6 +484,22 @@ term_map (GtkWidget *widget, void *data)
 }
 
 
+static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle *bbox, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+
+	// debugf("uri: %s, n: %ld", uri, n);
+
+	if (terms.active[n].hyperlink_uri != NULL) {
+		free(terms.active[n].hyperlink_uri);
+		terms.active[n].hyperlink_uri = NULL;
+	}
+
+	if (uri != NULL) {
+		terms.active[n].hyperlink_uri = strdup(uri);
+	}
+}
+
 void
 term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 {
@@ -495,6 +524,7 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "realize", G_CALLBACK (term_realized), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "show", G_CALLBACK (term_show), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "map", G_CALLBACK (term_map), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "hyperlink_hover_uri_changed", G_CALLBACK (term_hover_uri_changed), (void *) n);
 
 		terms.active[n].cmd = cmd;
 		terms.active[n].argv = argv;
@@ -635,7 +665,9 @@ static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequen
 
 	window_t *window = &windows[terms.active[n].window];
 
-	return window_button_event(gesture, sequence, window);
+	// debugf("Got button: %d, n: %ld", gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)), n);
+
+	return button_event(gesture, sequence, n, window);
 }
 
 static
@@ -643,16 +675,108 @@ gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, g
 {
 	window_t *window = (window_t *) user_data;
 
-	debugf("Got button: %d", gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
+	debugf("Got window button: %d", gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)));
 
+	return button_event (gesture, sequence, -1, window);
+}
+
+static void file_launch_callback (GObject *source, GAsyncResult *result, gpointer data)
+{
+	GtkFileLauncher *launcher = (GtkFileLauncher *) data;
+	GError *error = NULL;
+
+	debugf();
+	bool ret = gtk_file_launcher_launch_finish(launcher, result, &error);
+	debugf("ret: %d, error: %p, result: %p", ret, error, result);
+	if (error) {
+		debugf("Error opening URI: domain: %x, code: %d, message: %s", error->domain, error->code, error->message);
+		g_free(error->message);
+		g_free(error);
+	}
+
+}
+
+static gboolean open_uri(int64_t term_n, window_t *window, double x, double y)
+{
+	GError *error = NULL;
+	const char *uri;
+
+	if (terms.active[term_n].hyperlink_uri) {
+		uri = terms.active[term_n].hyperlink_uri;
+	} else {
+		int tag = 0;
+
+		uri = vte_terminal_check_match_at (VTE_TERMINAL (terms.active[term_n].term), x, y, &tag);
+		debugf("Match URL: %s, tag: %d", uri, tag);
+	}
+
+	if (!uri) {
+		debugf("No URI found.");
+		return FALSE;
+	}
+
+	if (!g_uri_is_valid(uri, 0, &error)) {
+		debugf("Received invalid URI: %s, error: domain: 0x%x, code: 0x%x, message: %s", uri, error->domain, error->code, error->message);
+		g_error_free(error);
+		return FALSE;
+	}
+
+	GFile *file = g_file_new_for_uri(uri);
+
+	if (!file) {
+		debugf("uri: %s, file: %p", uri, file);
+		return FALSE;
+	}
+
+#if 0
+	debugf("path: %s", g_file_get_path(file));
+	debugf("parse_name: %s", g_file_get_parse_name(file));
+	debugf("uri: %s", g_file_get_uri(file));
+	debugf("uri_scheme: %s", g_file_get_uri_scheme(file));
+	debugf("basename: %s", g_file_get_basename(file));
+#endif
+
+	GtkFileLauncher *launcher = gtk_file_launcher_new(file);
+
+	if (!launcher) {
+		return FALSE;
+	}
+
+	debugf("launcher: %p", launcher);
+	debugf("window: %p, GTK_WINDOW(window): %p", window->window, GTK_WINDOW(window->window));
+	gtk_file_launcher_launch(launcher, GTK_WINDOW(window->window), NULL, file_launch_callback, launcher);
+
+	return TRUE;
+}
+
+static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, int64_t term_n, window_t *window)
+{
 	GdkEvent *event = gtk_gesture_get_last_event (gesture, sequence);
+
+	double x, y;
+
+	gtk_gesture_get_point(gesture, sequence, &x, &y);
+
 	if (gdk_event_triggers_context_menu(event)) {
-		double x, y;
-
-		gtk_gesture_get_point(gesture, sequence, &x, &y);
-
 		show_menu(window, x, y);
 		return TRUE;
+	} else if (term_n >= 0) {
+		GdkModifierType state = gdk_event_get_modifier_state(event);
+		int button = gdk_button_event_get_button(event);
+
+		for (bind_button_t *cur = terms.buttons; cur; cur = cur->next) {
+			if (cur->button == button) {
+				if ((state & bind_mask) == cur->state) {
+					switch (cur->action) {
+						case BIND_ACT_OPEN_URI:
+							return open_uri(term_n, window, x, y);
+						default:
+							debugf("Got impossible button binding action.");
+							return FALSE;
+					}
+				}
+			}
+		}
 	}
 
 	return FALSE;

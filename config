@@ -23,6 +23,7 @@ bind:	24	<Shift>	F1-F12
 #bind:	12	<Primary><Mod2>	F1-F12
 bind:	12	<Meta>	F1-F12
 bind:	0	<Alt>	F1-F12
+bind_button:	OPEN_URI	<Meta><Control>	1
 #
 # What font to use, you can usually put the font size last in the string.
 #
