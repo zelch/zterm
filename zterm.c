@@ -205,7 +205,7 @@ prune_windows (void)
 }
 
 static gboolean
-term_died (VteTerminal *term, gpointer user_data)
+term_died (VteTerminal *term, int status)
 {
 	int n = -1, window_i = -1;
 
@@ -217,11 +217,11 @@ term_died (VteTerminal *term, gpointer user_data)
 		}
 	}
 
-	debugf("Term %d died: errno %d, strerror %s", n, errno, strerror(errno));
+	infof("Term %d died.  Status: %d", n, status);
 
 	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
-		debugf("Unable to find term that died. (%d / %p / %p), terms.active[0].term: %p", user_data, term, GTK_WIDGET(term), terms.active[0].term);
+		debugf("Unable to find term that died. (%d / %p / %p), terms.active[0].term: %p", status, term, GTK_WIDGET(term), terms.active[0].term);
 		prune_windows ();
 		debugf("");
 		return FALSE;
