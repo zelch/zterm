@@ -793,7 +793,7 @@ int new_window (void)
 
 	rebuild_menus();
 
-	gtk_window_present_with_time (GTK_WINDOW(window), GDK_CURRENT_TIME);
+	gtk_window_present (GTK_WINDOW(window));
 
 	debugf("Window should be visible...");
 
