@@ -41,7 +41,7 @@ int _vfprintf(FILE *io, const char *fmt, va_list args)
 
 	tm_info = localtime(&tv.tv_sec);
 
-	strftime(buf, sizeof(buf) - 1, "%Y:%m:%d %H:%M:%S", tm_info);
+	strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", tm_info);
 	fprintf(io, "%s.%03d: ", buf, millisec);
 
 	int ret = vfprintf(io, fmt, args);
