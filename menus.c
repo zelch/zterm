@@ -133,7 +133,7 @@ do_move_to_window (GSimpleAction *self, GVariant *parameter, gpointer data)
 	for (i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term == widget) {
 			term_set_window (i, new_window_i);
-			term_switch (i, NULL, window_i);
+			term_switch (i, NULL, NULL, NULL, window_i);
 			break;
 		}
 	}
