@@ -1,5 +1,5 @@
 #! /usr/bin/perl
-# Author: Zephaniah E. Hull.
+# Author: Elizabeth Loss-Cutler-Hull.
 
 # Based heavily on 256colors.pl in the xorg tree, which was based on 256colors2.pl.
 # Also based on 256colors2.pl directly.
@@ -9,8 +9,12 @@
 # Mode 2 outputs the colors for the temuterm config file.
 # Mode 3 just shows all the colors.
 
-$mode = 0;
-$scale = 1;
+use strict;
+use warnings;
+
+my $mode = 0;
+my $scale = 1;
+my ($line, $div, $code, $red, $green, $blue, $gray, $level, $color);
 
 $mode = $ARGV[0] if (defined($ARGV[0]));
 
@@ -28,6 +32,10 @@ if ($mode == 0) {
     $line = "color:\t%d\t#%4.4x%4.4x%4.4x\n";
     $scale = 257;
     $div = 1;
+} elsif ($mode == 3) {
+    $line = ":%%s/\\(\\<cterm\\(\\w*\\)=%d\\>\\)/XX\\1 gui\\2=#%2.2x%2.2x%2.2x/g\n";
+    $scale = 1;
+    $div = 1;
 }
 
 if ($mode == 0) {
@@ -39,7 +47,7 @@ if ($mode == 0) {
 EOF
 
 }
-if ($mode < 3) {
+if ($mode < 4) {
     for ($code = 0; $code < 16; $code ++) {
 	$blue = ($code & 4) ? 170 : 0;
 	$green = ($code & 2) ? 170 : 0;
@@ -79,7 +87,7 @@ if ($mode < 3) {
     }
 }
 
-if ($mode == 3) {
+if ($mode == 4) {
     # display the colors
 
     # first the system ones:
