@@ -28,23 +28,26 @@ GdkRGBA colors[256] = {
 
 int _vfprintf(FILE *io, const char *fmt, va_list args)
 {
-	char buf[32] = { 0 }; // With some extra space, because.
-	int millisec;
-	struct tm *tm_info;
-	struct timeval tv;
+	// Only bother with timestamps if STDIN is a tty, otherwise we're probably running in a context that ends up in syslog/the systemd journal with it's own timestamp.
+	if (isatty(0)) {
+		char buf[32] = { 0 }; // With some extra space, because.
+		int millisec;
+		struct tm *tm_info;
+		struct timeval tv;
 
-	gettimeofday(&tv, NULL);
+		gettimeofday(&tv, NULL);
 
-	millisec = lrint(tv.tv_usec/1000.0);
-	if (millisec >= 1000) {
-	    millisec -= 1000;
-	    tv.tv_sec++;
+		millisec = lrint(tv.tv_usec/1000.0);
+		if (millisec >= 1000) {
+			millisec -= 1000;
+			tv.tv_sec++;
+		}
+
+		tm_info = localtime(&tv.tv_sec);
+
+		strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", tm_info);
+		fprintf(io, "%s.%03d: ", buf, millisec);
 	}
-
-	tm_info = localtime(&tv.tv_sec);
-
-	strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", tm_info);
-	fprintf(io, "%s.%03d: ", buf, millisec);
 
 	int ret = vfprintf(io, fmt, args);
 	fflush(io);
