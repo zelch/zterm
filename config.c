@@ -63,6 +63,8 @@ temu_parse_bind_action (char **subs)
 
 	if (!strcasecmp(subs[0], "CUT")) {
 		bind->action = BIND_ACT_CUT;
+	} else if (!strcasecmp(subs[0], "CUT_HTML")) {
+		bind->action = BIND_ACT_CUT_HTML;
 	} else if (!strcasecmp(subs[0], "PASTE")) {
 		bind->action = BIND_ACT_PASTE;
 	} else if (!strcasecmp(subs[0], "MENU")) {

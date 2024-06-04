@@ -16,6 +16,7 @@
 typedef enum bind_actions {
 	BIND_ACT_SWITCH	= 0,
 	BIND_ACT_CUT,
+	BIND_ACT_CUT_HTML,
 	BIND_ACT_PASTE,
 	BIND_ACT_MENU,
 	BIND_ACT_NEXT_TERM,
