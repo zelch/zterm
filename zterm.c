@@ -635,7 +635,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, cur->argv, cur->env, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
-						debugf("Cut?");
+						debugf("Cut");
 						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
 						vte_terminal_copy_clipboard_format (VTE_TERMINAL(widget), VTE_FORMAT_TEXT);
 						break;
