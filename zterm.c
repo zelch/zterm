@@ -223,7 +223,13 @@ term_died (VteTerminal *term, int status)
 		}
 	}
 
-	infof("Term %d died.  Status: %d", n, status);
+	if (WIFEXITED(status)) {
+		infof("Term %d exited.  Exit code: %d", n, WEXITSTATUS(status));
+	} else if (WIFSIGNALED(status)) {
+		infof("Term %d killed.  Signal: %d", n, WTERMSIG(status));
+	} else {
+		infof("Term %d died.  Status: %d", n, status);
+	}
 
 	// If the user hits the close button for the window, the terminal may be unrealized before term_died is called.
 	if (n == -1 || window_i == -1) {
