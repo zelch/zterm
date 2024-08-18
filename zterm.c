@@ -131,6 +131,18 @@ temu_reorder (void)
 	}
 }
 
+static bool
+term_find (GtkWidget *term, int *i)
+{
+	for (*i = 0; *i < terms.n_active; *i = *i + 1) {
+		if (terms.active[*i].term == GTK_WIDGET(term)) {
+			return true;
+		}
+	}
+
+	return false; // Default to terminal 0.
+}
+
 static void
 temu_window_title_change (VteTerminal *terminal, long int n)
 {
@@ -216,13 +228,10 @@ term_died (VteTerminal *term, int status)
 {
 	int n = -1, window_i = -1;
 
-	for (int i = 0; i < terms.n_active; i++) {
-		if (terms.active[i].term == GTK_WIDGET(term)) {
-			n = i;
-			window_i = terms.active[n].window;
-			break;
-		}
+	if (!term_find(GTK_WIDGET(term), &n)) {
+		return false;
 	}
+	window_i = terms.active[n].window;
 
 	if (WIFEXITED(status)) {
 		infof("Term %d exited.  Exit code: %d", n, WEXITSTATUS(status));
@@ -582,20 +591,15 @@ static void
 term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_num, gpointer user_data)
 {
 	VteTerminal *term;
-	long n, found = 0;
+	int i;
 
 	term = VTE_TERMINAL(gtk_notebook_get_nth_page (notebook, page_num));
 
 	debugf("page_num: %d, current_page: %d, page: %p, term: %p, notebook: %p, user_data: %p",
 			page_num, gtk_notebook_get_current_page (notebook), page, term, notebook, user_data);
 
-	for (n = 0; n < terms.n_active; n++) {
-		if (term == VTE_TERMINAL(terms.active[n].term)) {
-			found = 1;
-			break;
-		}
-	}
-	if (found) {
+	if (term_find(GTK_WIDGET(term), &i)) {
+		long n = i;
 		temu_window_title_changed (term, (void *) n);
 		gtk_widget_grab_focus (GTK_WIDGET(term));
 	}
