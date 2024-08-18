@@ -272,10 +272,11 @@ rebuild_window_menu(long int window_n)
 	g_menu_append_section(main, "Window", G_MENU_MODEL(window));
 
 
+	windows[window_n].menu_model = G_MENU_MODEL(main);
 	GtkWidget *menu = gtk_popover_menu_new_from_model(G_MENU_MODEL(main));
 	gtk_popover_set_autohide (GTK_POPOVER(menu), TRUE);
 	gtk_popover_set_has_arrow (GTK_POPOVER(menu), FALSE);
-	gtk_popover_set_position(GTK_POPOVER(menu), GTK_POS_TOP);
+	gtk_popover_set_position(GTK_POPOVER(menu), GTK_POS_BOTTOM);
 	gtk_widget_set_halign(menu, GTK_ALIGN_START);
 	gtk_widget_set_valign(menu, GTK_ALIGN_END);
 

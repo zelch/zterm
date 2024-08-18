@@ -510,6 +510,20 @@ static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle 
 	}
 }
 
+static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *context, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+	window_t *window = &windows[terms.active[n].window];
+
+	debugf("context: %p, term %d", context, n);
+
+	vte_terminal_set_context_menu_model (term, window->menu_model);
+
+	debugf("Done.");
+
+	return true;
+}
+
 void
 term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 {
@@ -535,6 +549,7 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "show", G_CALLBACK (term_show), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "map", G_CALLBACK (term_map), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "hyperlink_hover_uri_changed", G_CALLBACK (term_hover_uri_changed), (void *) n);
+		g_signal_connect (G_OBJECT (term), "setup_context_menu", G_CALLBACK (term_setup_context_menu), (void *) n);
 
 		terms.active[n].cmd = cmd;
 		terms.active[n].argv = argv;
@@ -772,10 +787,7 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 
 	gtk_gesture_get_point(gesture, sequence, &x, &y);
 
-	if (gdk_event_triggers_context_menu(event)) {
-		show_menu(window, x, y);
-		return true;
-	} else if (term_n >= 0) {
+	if (term_n >= 0) {
 		GdkModifierType state = gdk_event_get_modifier_state(event);
 		int button = gdk_button_event_get_button(event);
 

@@ -59,6 +59,7 @@ typedef struct window_s {
 	GtkNotebook *notebook;
 	GtkWidget *window;
 	GtkWidget *menu;
+	GMenuModel *menu_model;
 	GtkEventController *key_controller;
 	int color_scheme;
 } window_t;
