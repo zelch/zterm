@@ -371,10 +371,15 @@ temu_parse_config (void)
 
 done:
 	regfree (&bind_action);
+	regfree (&bind_button);
 	regfree (&bind_switch);
+	regfree (&bind_ignore);
 	regfree (&color);
+	regfree (&color_scheme);
 	regfree (&font);
 	regfree (&size);
+	regfree (&env);
+	regfree (&other);
 	free (file);
 
 	return;
