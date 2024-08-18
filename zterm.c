@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <sys/time.h>
+#include <ctype.h>
 #define PCRE2_CODE_UNIT_WIDTH 0
 #include <pcre2.h>
 
@@ -236,7 +237,7 @@ term_died (VteTerminal *term, int status)
 		debugf("Unable to find term that died. (%d / %p / %p), terms.active[0].term: %p", status, term, GTK_WIDGET(term), terms.active[0].term);
 		prune_windows ();
 		debugf("");
-		return FALSE;
+		return false;
 	}
 
 	debugf ("Removing dead term %d from window %d.", n, window_i);
@@ -254,7 +255,7 @@ term_died (VteTerminal *term, int status)
 	prune_windows ();
 	debugf("");
 
-	return TRUE;
+	return true;
 }
 
 static gboolean
@@ -265,7 +266,7 @@ term_unrealized (VteTerminal *term, gpointer user_data)
 	debugf("Got unrealize for term %d.", n);
 	if (terms.active[n].moving) {
 		debugf("Not destroying term %d because we are moving it.", n);
-		return FALSE;
+		return false;
 	}
 
 	g_object_unref (G_OBJECT(term));
@@ -281,7 +282,7 @@ term_unrealized (VteTerminal *term, gpointer user_data)
 
 	debugf("");
 
-	return TRUE;
+	return true;
 }
 
 void
@@ -523,8 +524,8 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		term = vte_terminal_new();
 		g_object_ref (G_OBJECT(term));
 		gtk_widget_set_visible(term, true);
-		gtk_widget_set_hexpand (term, TRUE);
-		gtk_widget_set_vexpand (term, TRUE);
+		gtk_widget_set_hexpand (term, true);
+		gtk_widget_set_vexpand (term, true);
 
 
 		g_signal_connect_after (G_OBJECT (term), "child-exited", G_CALLBACK (term_died), (void *) n);
@@ -660,15 +661,15 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						break;
 					default:
 						debugf("Fell into impossible key binding case.");
-						return FALSE;
+						return false;
 				}
 				debugf("action: %d", cur->action);
-				return TRUE;
+				return true;
 			}
 		}
 	}
 
-	return FALSE;
+	return false;
 }
 #undef FUNC_DEBUG
 #define FUNC_DEBUG true
@@ -726,20 +727,20 @@ static gboolean open_uri(int64_t term_n, window_t *window, double x, double y)
 
 	if (!uri) {
 		debugf("No URI found.");
-		return FALSE;
+		return false;
 	}
 
 	if (!g_uri_is_valid(uri, 0, &error)) {
 		debugf("Received invalid URI: %s, error: domain: 0x%x, code: 0x%x, message: %s", uri, error->domain, error->code, error->message);
 		g_error_free(error);
-		return FALSE;
+		return false;
 	}
 
 	GFile *file = g_file_new_for_uri(uri);
 
 	if (!file) {
 		debugf("uri: %s, file: %p", uri, file);
-		return FALSE;
+		return false;
 	}
 
 #if 0
@@ -753,14 +754,14 @@ static gboolean open_uri(int64_t term_n, window_t *window, double x, double y)
 	GtkFileLauncher *launcher = gtk_file_launcher_new(file);
 
 	if (!launcher) {
-		return FALSE;
+		return false;
 	}
 
 	debugf("launcher: %p", launcher);
 	debugf("window: %p, GTK_WINDOW(window): %p", window->window, GTK_WINDOW(window->window));
 	gtk_file_launcher_launch(launcher, GTK_WINDOW(window->window), NULL, file_launch_callback, launcher);
 
-	return TRUE;
+	return true;
 }
 
 static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, int64_t term_n, window_t *window)
@@ -773,7 +774,7 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 
 	if (gdk_event_triggers_context_menu(event)) {
 		show_menu(window, x, y);
-		return TRUE;
+		return true;
 	} else if (term_n >= 0) {
 		GdkModifierType state = gdk_event_get_modifier_state(event);
 		int button = gdk_button_event_get_button(event);
@@ -786,14 +787,14 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 							return open_uri(term_n, window, x, y);
 						default:
 							debugf("Got impossible button binding action.");
-							return FALSE;
+							return false;
 					}
 				}
 			}
 		}
 	}
 
-	return FALSE;
+	return false;
 }
 
 void add_button(GtkWidget *widget, long int term_n, int window_i)
@@ -907,11 +908,11 @@ int new_window (void)
 	debugf("");
 	notebook = gtk_notebook_new();
 	debugf("");
-	g_object_set (G_OBJECT (notebook), "scrollable", TRUE, "enable-popup", TRUE, NULL);
+	g_object_set (G_OBJECT (notebook), "scrollable", true, "enable-popup", true, NULL);
 	debugf("");
-	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), FALSE);
+	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), false);
 	debugf("");
-	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), FALSE);
+	gtk_notebook_set_show_border (GTK_NOTEBOOK(notebook), false);
 	debugf("");
 	gtk_window_set_child(GTK_WINDOW(window), GTK_WIDGET(notebook));
 	gtk_widget_set_visible(GTK_WIDGET(notebook), true);
@@ -1011,15 +1012,15 @@ int main(int argc, char *argv[], char *envp[])
 	memset (&terms, 0, sizeof (terms));
 	terms.envp = envp;
 	debugf ("Using VTE: %s (%s)", vte_get_features(), vte_get_user_shell());
-	terms.audible_bell = TRUE;
+	terms.audible_bell = true;
 	terms.font_scale = 1;
-	terms.scroll_on_output = FALSE;
-	terms.scroll_on_keystroke = TRUE;
-	terms.rewrap_on_resize = TRUE;
+	terms.scroll_on_output = false;
+	terms.scroll_on_keystroke = true;
+	terms.rewrap_on_resize = true;
 	terms.scrollback_lines = 512;
-	terms.allow_bold = FALSE;
-	terms.bold_is_bright = TRUE;
-	terms.mouse_autohide = TRUE;
+	terms.allow_bold = false;
+	terms.bold_is_bright = true;
+	terms.mouse_autohide = true;
 
 	chdir(getenv("HOME"));
 
