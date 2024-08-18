@@ -130,12 +130,9 @@ do_move_to_window (GSimpleAction *self, GVariant *parameter, gpointer data)
 
 	widget = gtk_notebook_get_nth_page(windows[window_i].notebook, gtk_notebook_get_current_page(windows[window_i].notebook));
 
-	for (i = 0; i < terms.n_active; i++) {
-		if (terms.active[i].term == widget) {
-			term_set_window (i, new_window_i);
-			term_switch (i, NULL, NULL, NULL, window_i);
-			break;
-		}
+	if (term_find(widget, &i)) {
+		term_set_window (i, new_window_i);
+		term_switch (i, NULL, NULL, NULL, window_i);
 	}
 }
 

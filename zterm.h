@@ -120,6 +120,7 @@ int _fprintf(bool print, FILE *io, const char *fmt, ...);
 #endif
 int _fnullf(FILE *io, const char *fmt, ...);
 void do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
+bool term_find (GtkWidget *term, int *i);
 void term_set_window (int n, int window_i);
 void term_switch (long n, char *cmd, char **argv, char **env, int window_i);
 void temu_parse_config (void);

@@ -131,7 +131,7 @@ temu_reorder (void)
 	}
 }
 
-static bool
+bool
 term_find (GtkWidget *term, int *i)
 {
 	for (*i = 0; *i < terms.n_active; *i = *i + 1) {
