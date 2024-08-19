@@ -665,8 +665,6 @@ static void show_menu(window_t *window, double x, double y)
 	gtk_popover_popup(GTK_POPOVER(window->menu));
 }
 
-#undef FUNC_DEBUG
-#define FUNC_DEBUG false
 static gboolean
 term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keycode, GdkModifierType state, gpointer user_data)
 {
@@ -674,12 +672,20 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	bind_t	*cur;
 	GtkWidget *widget;
 
+#if 0
 	gchar *name = gtk_accelerator_name(keyval, state);
-	debugf ("keyval: %d (%s), state: 0x%x, %d, '%s'", keyval, gdk_keyval_name(keyval), state, state, name);
+	gchar *label = gtk_accelerator_get_label(keyval, state);
+	debugf ("keyval: %d (%s), state: 0x%x, %d, name: '%s', label: '%s'", keyval, gdk_keyval_name(keyval), state, state, name, label);
+	g_free(label);
 	g_free(name);
+#endif
 
 	for (cur = terms.keys; cur; cur = cur->next) {
-		//fprintf (stderr, "key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)\n", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, gtk_accelerator_name(0, cur->state));
+#if 0
+		gchar *name = gtk_accelerator_name(cur->key_min, cur->state);
+		debugf("key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, name);
+		g_free(name);
+#endif
 		if ((keyval >= cur->key_min) && (keyval <= cur->key_max)) {
 			if ((state & bind_mask) == cur->state) {
 				switch (cur->action) {
@@ -725,7 +731,7 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						debugf("Fell into impossible key binding case.");
 						return false;
 				}
-				debugf("action: %d", cur->action);
+				//debugf("action: %d", cur->action);
 				return true;
 			}
 		}
@@ -733,8 +739,6 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 
 	return false;
 }
-#undef FUNC_DEBUG
-#define FUNC_DEBUG true
 
 static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
 {
