@@ -42,6 +42,40 @@ do_copy (GSimpleAction *self, GVariant *parameter, gpointer data)
 }
 
 void
+do_copy_uri (GSimpleAction *self, GVariant *parameter, gpointer data)
+{
+	long int window_i = (long int) data;
+	int n;
+
+	debugf("parameter: %p, user_data: %p", parameter, data);
+
+	window_t *window = &windows[window_i];
+
+	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
+
+	if (term_find(widget, &n)) {
+		process_uri(n, window, BIND_ACT_CUT_URI, window->menu_x, window->menu_y, true);
+	}
+}
+
+void
+do_open_uri (GSimpleAction *self, GVariant *parameter, gpointer data)
+{
+	long int window_i = (long int) data;
+	int n;
+
+	debugf("parameter: %p, user_data: %p", parameter, data);
+
+	window_t *window = &windows[window_i];
+
+	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
+
+	if (term_find(widget, &n)) {
+		process_uri(n, window, BIND_ACT_OPEN_URI, window->menu_x, window->menu_y, true);
+	}
+}
+
+void
 do_paste (GSimpleAction *self, GVariant *parameter, gpointer data)
 {
 	long int i = (long int) data;
@@ -201,6 +235,8 @@ rebuild_window_menu(long int window_n)
 	GMenu *actions = g_menu_new();
 	z_menu_append(actions, add_actions, &n_add_actions, "menu.", "_Copy", "copy", do_copy, window_n);
 	z_menu_append(actions, add_actions, &n_add_actions, "menu.", "_Paste", "paste", do_paste, window_n);
+	z_menu_append(actions, add_actions, &n_add_actions, "menu.", "Copy _URI", "copy_uri", do_copy_uri, window_n);
+	z_menu_append(actions, add_actions, &n_add_actions, "menu.", "_Open URI", "open_uri", do_open_uri, window_n);
 	g_menu_append_section(main, "Actions", G_MENU_MODEL(actions));
 
 	GMenu *terminals = g_menu_new();

@@ -525,6 +525,22 @@ static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *con
 	window_t *window = &windows[terms.active[n].window];
 
 	debugf("context: %p, term %d", context, n);
+	if (window->menu_hyperlink_uri) {
+		free(window->menu_hyperlink_uri);
+		window->menu_hyperlink_uri = NULL;
+	}
+
+	if (!context) {
+		vte_terminal_set_context_menu_model (term, NULL);
+		window->menu_x = window->menu_y = 0;
+		return true;
+	}
+
+	vte_event_context_get_coordinates(context, &window->menu_x, &window->menu_y);
+	if (terms.active[n].hyperlink_uri) {
+		window->menu_hyperlink_uri = strdup(terms.active[n].hyperlink_uri);
+		debugf("Setting menu hyperlink uri: %s", window->menu_hyperlink_uri);
+	}
 
 	vte_terminal_set_context_menu_model (term, window->menu_model);
 
@@ -626,7 +642,23 @@ static void show_menu(window_t *window, double x, double y)
 	rect.x = x;
 	rect.y = y;
 
-	gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), TRUE);
+	if (window->menu_hyperlink_uri) {
+		free(window->menu_hyperlink_uri);
+		window->menu_hyperlink_uri = NULL;
+	}
+
+	GtkWidget *widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
+	int n;
+	term_find(widget, &n);
+
+	window->menu_x = x;
+	window->menu_y = y;
+	if (terms.active[n].hyperlink_uri) {
+		window->menu_hyperlink_uri = strdup(terms.active[n].hyperlink_uri);
+		debugf("Setting menu hyperlink uri: %s", window->menu_hyperlink_uri);
+	}
+
+	gtk_popover_set_has_arrow (GTK_POPOVER(window->menu), true);
 	gtk_widget_set_halign(window->menu, GTK_ALIGN_START);
 	gtk_widget_set_valign(window->menu, GTK_ALIGN_START);
 	gtk_popover_set_pointing_to(GTK_POPOVER(window->menu), &rect);
@@ -677,6 +709,17 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 						break;
 					case BIND_ACT_PREV_TERM:
 						gtk_notebook_prev_page(GTK_NOTEBOOK(window->notebook));
+						break;
+					case BIND_ACT_OPEN_URI:
+					case BIND_ACT_CUT_URI:
+						int n;
+
+						widget = gtk_notebook_get_nth_page(window->notebook, gtk_notebook_get_current_page(window->notebook));
+
+						if (term_find(widget, &n)) {
+							process_uri(n, window, cur->action, -1, -1, false);
+							return true;
+						}
 						break;
 					default:
 						debugf("Fell into impossible key binding case.");
@@ -730,19 +773,84 @@ static void file_launch_callback (GObject *source, GAsyncResult *result, gpointe
 
 }
 
-static gboolean open_uri(int64_t term_n, window_t *window, double x, double y)
+gboolean process_uri(int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu)
 {
 	GError *error = NULL;
 	const char *uri;
 
-	if (terms.active[term_n].hyperlink_uri) {
-		uri = terms.active[term_n].hyperlink_uri;
+	/*
+	 * There are two different kinds of URIs for us to deal with.
+	 *
+	 * The first is stuff that's just printed in URI format.
+	 *
+	 * The second is URIs given via OSC codes, such as how `eza --hyperlink` works.
+	 *
+	 * And we get called in roughly three different contexts, key bindings, mouse bindings, and menus.
+	 *
+	 * For the first case, a text URI, we must use vte_terminal_check_match_at
+	 * with the coordinates of the mouse pointer.
+	 *
+	 * For the key binding case, we'll need to find the current location of the
+	 * pointer.
+	 *
+	 * For the mouse binding case, we'll be passed the location the click
+	 * happened.
+	 *
+	 * For the menu case, we recorded the location of the pointer at the time
+	 * that the menu was opened.
+	 *
+	 *
+	 * For the second case, a URI given OSC codes, the only time we know about
+	 * it is when we get a signal with the URI in it, which happens at
+	 * mouseover time, or when it leaves, with no URI.
+	 *
+	 * In that case, both the key binding and mouse binding cases look at the
+	 * terminal's hyperlink_uri variable, and the menu case looks at the
+	 * window's menu_hyperlink_uri variable, which gets set from the terminal's
+	 * hyperlink_uri variable at the time the window is opened.
+	 *
+	 * It would be bloody _great_ if printed URIs and URIs via OSC code would
+	 * work roughly the same way, either with a signal with the URI on mouse
+	 * over, or a function to check for a URI via OSC code with coordinates
+	 * passed to it.
+	 *
+	 * But that's not what we actually have, ah well.
+	 */
+	if (menu) {
+		// We can't rely on what the current state is, because we're in a menu.
+		if (window->menu_hyperlink_uri) {
+			uri = window->menu_hyperlink_uri;
+			debugf("window menu hyperlink: %s", uri);
+		} else {
+			int tag = 0;
+			uri = vte_terminal_check_match_at (VTE_TERMINAL (terms.active[term_n].term), x, y, &tag);
+			debugf("menu coord link: %s", uri);
+		}
 	} else {
-		int tag = 0;
+		if (terms.active[term_n].hyperlink_uri) {
+			uri = terms.active[term_n].hyperlink_uri;
+			debugf("Terminal hyperlink: %s", uri);
+		} else {
+			int tag = 0;
 
-		uri = vte_terminal_check_match_at (VTE_TERMINAL (terms.active[term_n].term), x, y, &tag);
-		debugf("Match URL: %s, tag: %d", uri, tag);
+			// We likely won't have coordinates, so look at where the mouse pointer is right now.
+			if (x == -1 && y == -1) {
+				debugf("Trying to find the cursor.");
+				GdkDisplay *display = gdk_display_get_default();
+				GdkSeat *seat = gdk_display_get_default_seat(display);
+				GdkDevice *pointer = gdk_seat_get_pointer(seat);
+				GdkModifierType mask;
+				GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(GTK_WINDOW(window->window)));
+
+				gdk_surface_get_device_position(GDK_SURFACE(surface), pointer, &x, &y, &mask);
+			}
+
+			uri = vte_terminal_check_match_at (VTE_TERMINAL (terms.active[term_n].term), x, y, &tag);
+			debugf("Match URI: %s, tag: %d, at %fx%f", uri, tag, x, y);
+		}
 	}
+
+	debugf("URI: %s, at %fx%f", uri, x, y);
 
 	if (!uri) {
 		debugf("No URI found.");
@@ -755,30 +863,45 @@ static gboolean open_uri(int64_t term_n, window_t *window, double x, double y)
 		return false;
 	}
 
-	GFile *file = g_file_new_for_uri(uri);
 
-	if (!file) {
-		debugf("uri: %s, file: %p", uri, file);
-		return false;
-	}
+	switch (action) {
+		case BIND_ACT_CUT_URI:
+			GdkDisplay *display = gdk_display_get_default();
+			GdkClipboard *clipboard = gdk_display_get_clipboard(display);
+			gdk_clipboard_set_text(clipboard, uri);
+
+			debugf("COPY URI: %s", uri);
+			break;
+		case BIND_ACT_OPEN_URI:
+			GFile *file = g_file_new_for_uri(uri);
+
+			if (!file) {
+				debugf("uri: %s, file: %p", uri, file);
+				return false;
+			}
 
 #if 0
-	debugf("path: %s", g_file_get_path(file));
-	debugf("parse_name: %s", g_file_get_parse_name(file));
-	debugf("uri: %s", g_file_get_uri(file));
-	debugf("uri_scheme: %s", g_file_get_uri_scheme(file));
-	debugf("basename: %s", g_file_get_basename(file));
+			debugf("raw uri: %s", uri);
+			debugf("path: %s", g_file_get_path(file));
+			debugf("parse_name: %s", g_file_get_parse_name(file));
+			debugf("uri: %s", g_file_get_uri(file));
+			debugf("uri_scheme: %s", g_file_get_uri_scheme(file));
+			debugf("basename: %s", g_file_get_basename(file));
 #endif
+			GtkFileLauncher *launcher = gtk_file_launcher_new(file);
 
-	GtkFileLauncher *launcher = gtk_file_launcher_new(file);
+			if (!launcher) {
+				return false;
+			}
 
-	if (!launcher) {
-		return false;
+			debugf("launcher: %p", launcher);
+			debugf("window: %p, GTK_WINDOW(window): %p", window->window, GTK_WINDOW(window->window));
+			gtk_file_launcher_launch(launcher, GTK_WINDOW(window->window), NULL, file_launch_callback, launcher);
+			break;
+		default:
+			errorf("Bad action %d!", action);
+			break;
 	}
-
-	debugf("launcher: %p", launcher);
-	debugf("window: %p, GTK_WINDOW(window): %p", window->window, GTK_WINDOW(window->window));
-	gtk_file_launcher_launch(launcher, GTK_WINDOW(window->window), NULL, file_launch_callback, launcher);
 
 	return true;
 }
@@ -800,7 +923,8 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 				if ((state & bind_mask) == cur->state) {
 					switch (cur->action) {
 						case BIND_ACT_OPEN_URI:
-							return open_uri(term_n, window, x, y);
+						case BIND_ACT_CUT_URI:
+							return process_uri(term_n, window, cur->action, x, y, false);
 						default:
 							debugf("Got impossible button binding action.");
 							return false;

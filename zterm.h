@@ -22,6 +22,7 @@ typedef enum bind_actions {
 	BIND_ACT_NEXT_TERM,
 	BIND_ACT_PREV_TERM,
 	BIND_ACT_OPEN_URI,
+	BIND_ACT_CUT_URI,
 } bind_actions_t;
 
 typedef struct bind_s {
@@ -62,6 +63,8 @@ typedef struct window_s {
 	GMenuModel *menu_model;
 	GtkEventController *key_controller;
 	int color_scheme;
+	double menu_x, menu_y; // Where the mouse cursor was when we opened the menu.
+	char *menu_hyperlink_uri;
 } window_t;
 
 typedef struct terms_s {
@@ -125,6 +128,7 @@ void term_set_window (int n, int window_i);
 void term_switch (long n, char *cmd, char **argv, char **env, int window_i);
 void temu_parse_config (void);
 void term_config (GtkWidget *term, int window_i);
+gboolean process_uri(int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void rebuild_menus(void);
 
 #endif // _ZTERM_H

@@ -65,6 +65,8 @@ temu_parse_bind_action (char **subs)
 		bind->action = BIND_ACT_CUT;
 	} else if (!strcasecmp(subs[0], "CUT_HTML")) {
 		bind->action = BIND_ACT_CUT_HTML;
+	} else if (!strcasecmp(subs[0], "CUT_URI")) {
+		bind->action = BIND_ACT_CUT_URI;
 	} else if (!strcasecmp(subs[0], "PASTE")) {
 		bind->action = BIND_ACT_PASTE;
 	} else if (!strcasecmp(subs[0], "MENU")) {
@@ -113,6 +115,8 @@ temu_parse_bind_button (char **subs)
 	debugf();
 	if (!strcasecmp(subs[0], "OPEN_URI")) {
 		bind->action = BIND_ACT_OPEN_URI;
+	} else if (!strcasecmp(subs[0], "CUT_URI")) {
+		bind->action = BIND_ACT_CUT_URI;
 	} else {
 		errorf("Unknown bind action '%s'.", subs[0]);
 		free(bind);
