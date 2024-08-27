@@ -1163,6 +1163,7 @@ int main(int argc, char *argv[], char *envp[])
 {
 	exec_t exec = { NULL };
 	int i;
+	char *shell;
 
 	g_set_application_name("zterm");
 	app = gtk_application_new ("org.aehallh.zterm", 0);
@@ -1171,7 +1172,9 @@ int main(int argc, char *argv[], char *envp[])
 
 	memset (&terms, 0, sizeof (terms));
 	terms.envp = envp;
-	debugf ("Using VTE: %s (%s)", vte_get_features(), vte_get_user_shell());
+	shell = vte_get_user_shell();
+	debugf ("Using VTE: %s (%s)", vte_get_features(), shell);
+	free(shell);
 	terms.audible_bell = true;
 	terms.font_scale = 1;
 	terms.scroll_on_output = false;
