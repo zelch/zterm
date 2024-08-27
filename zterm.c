@@ -506,7 +506,7 @@ static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle 
 {
 	int64_t n = (int64_t) user_data;
 
-	// debugf("uri: %s, n: %ld", uri, n);
+	debugf("uri: %s, n: %ld", uri, n);
 
 	if (terms.active[n].hyperlink_uri != NULL) {
 		free(terms.active[n].hyperlink_uri);
@@ -516,6 +516,27 @@ static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle 
 	if (uri != NULL) {
 		terms.active[n].hyperlink_uri = strdup(uri);
 	}
+}
+
+static void term_resize_window (VteTerminal *term, guint width, guint height, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+
+	debugf("target size: %dx%d, term %d", width, height, n);
+}
+
+static void term_increase_font_size (VteTerminal *term, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+
+	debugf("term %d", n);
+}
+
+static void term_decrease_font_size (VteTerminal *term, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+
+	debugf("term %d", n);
 }
 
 static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *context, gpointer user_data)
@@ -548,6 +569,91 @@ static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *con
 	return true;
 }
 
+static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType type, VtePropertyFlags flags, const char *name, int64_t n)
+{
+	const char *resolved_name;
+	int prop = 0;
+	gboolean bvalue;
+	int64_t ivalue;
+	uint64_t uivalue;
+	double dvalue;
+	GdkRGBA color_value;
+	const char *svalue;
+	const uint8_t *data_value;
+	size_t value_len;
+
+	if (vte_query_termprop(name, &resolved_name, &prop, &type, &flags)) {
+		switch (type) {
+			case VTE_PROPERTY_INVALID:
+			case VTE_PROPERTY_VALUELESS:
+				debugf("termprop: %s, type: VALUELESS %d, term: %d", name, type, n);
+				break;
+			case VTE_PROPERTY_BOOL:
+				vte_terminal_get_termprop_bool_by_id(term, prop, &bvalue);
+				debugf("termprop: %s, type: BOOL %d, value: %d, term: %d", name, type, bvalue, n);
+				break;
+			case VTE_PROPERTY_INT:
+				vte_terminal_get_termprop_int_by_id(term, prop, &ivalue);
+				debugf("termprop: %s, type: INT %d, value: %d, term: %d", name, type, ivalue, n);
+				break;
+			case VTE_PROPERTY_UINT:
+				vte_terminal_get_termprop_uint_by_id(term, prop, &uivalue);
+				debugf("termprop: %s, type: UINT %d, value: %d, term: %d", name, type, uivalue, n);
+				break;
+			case VTE_PROPERTY_DOUBLE:
+				vte_terminal_get_termprop_double_by_id(term, prop, &dvalue);
+				debugf("termprop: %s, type: DOUBLE %d, value: %d, term: %d", name, type, dvalue, n);
+				break;
+			case VTE_PROPERTY_RGB:
+			case VTE_PROPERTY_RGBA:
+				vte_terminal_get_termprop_rgba_by_id(term, prop, &color_value);
+				debugf("termprop: %s, type: RGBA %d, value: _, term: %d", name, type, n);
+				break;
+			case VTE_PROPERTY_STRING:
+				svalue = vte_terminal_get_termprop_string_by_id(term, prop, &value_len);
+				debugf("termprop: %s, type: STRING %d, value: %s, len: %d, term: %d", name, type, svalue, value_len, n);
+				break;
+			case VTE_PROPERTY_DATA:
+			case VTE_PROPERTY_UUID:
+				data_value = vte_terminal_get_termprop_data_by_id(term, prop, &value_len);
+				debugf("termprop: %s, type: DATA %d, value: %s, len: %d, term: %d", name, type, data_value, value_len, n);
+				break;
+			case VTE_PROPERTY_URI:
+				GUri *uri_value = vte_terminal_ref_termprop_uri_by_id(term, prop);
+				if (uri_value == NULL) {
+					debugf("Unable to get URI.");
+					break;
+				}
+				svalue = g_uri_to_string(uri_value);
+				debugf("termprop: %s, type: URI %d, value: %s, term: %d", name, type, svalue, n);
+				free((void *) svalue);
+				g_uri_unref(uri_value);
+				break;
+		}
+	} else {
+		debugf("Unable to get termprop info for %s on term %d", name, n);
+	}
+}
+
+static gboolean term_termprops_changed (VteTerminal *term, int const *props, int n_props, gpointer user_data)
+{
+	int64_t n = (int64_t) user_data;
+	const char *name;
+	VtePropertyType type;
+	VtePropertyFlags flags;
+
+	debugf("%d termprops changed on term %d.", n_props, n);
+	for (int i = 0; i < n_props; i++) {
+		if (vte_query_termprop_by_id(props[i], &name, &type, &flags)) {
+			debugf("Prop %d / %s: type %d, flags %d", props[i], name, type, flags);
+			term_termprop_changed (term, props[i], type, flags, name, n);
+		}
+	}
+
+	return false;
+}
+
+
 void
 term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 {
@@ -573,7 +679,11 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "show", G_CALLBACK (term_show), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "map", G_CALLBACK (term_map), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "hyperlink_hover_uri_changed", G_CALLBACK (term_hover_uri_changed), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "resize_window", G_CALLBACK (term_resize_window), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "increase_font_size", G_CALLBACK (term_increase_font_size), (void *) n);
+		g_signal_connect_after (G_OBJECT (term), "decrease_font_size", G_CALLBACK (term_decrease_font_size), (void *) n);
 		g_signal_connect (G_OBJECT (term), "setup_context_menu", G_CALLBACK (term_setup_context_menu), (void *) n);
+		g_signal_connect (G_OBJECT (term), "termprops_changed", G_CALLBACK (term_termprops_changed), (void *) n);
 
 		terms.active[n].cmd = cmd;
 		terms.active[n].argv = argv;

@@ -91,9 +91,9 @@ do_t_decorate (GSimpleAction *self, GVariant *parameter, gpointer data)
 {
 	long int i = (long int) data;
 
-	debugf("");
 
 	gboolean decorated = gtk_window_get_decorated (GTK_WINDOW(windows[i].window));
+	debugf("setting decorated: %d", !decorated);
 	gtk_window_set_decorated(GTK_WINDOW(windows[i].window), !decorated);
 }
 
@@ -186,6 +186,14 @@ do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer d
 			vte_terminal_set_colors (VTE_TERMINAL (terms.active[i].term), &terms.color_schemes[windows[window_i].color_scheme].foreground, &terms.color_schemes[windows[window_i].color_scheme].background, &colors[0], MIN(256, sizeof (colors) / sizeof(colors[0])));
 		}
 	}
+}
+
+static void
+menu_closed(GtkPopover *menu, gpointer user_data)
+{
+	long int i = (long int) user_data;
+
+	debugf("window %d", i);
 }
 
 // This is really strdupa.
@@ -324,6 +332,7 @@ rebuild_window_menu(long int window_n)
 	windows[window_n].menu = menu;
 	gtk_widget_set_parent(menu, windows[window_n].window);
 	debugf("windows[%d].menu: %p", window_n, windows[window_n].menu);
+	g_signal_connect_after(menu, "close", G_CALLBACK(menu_closed), (void *) window_n);
 
 	return;
 }
