@@ -377,6 +377,7 @@ term_config (GtkWidget *term, int window_i)
 	vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
 	vte_terminal_set_enable_sixel (VTE_TERMINAL (term), true);
 	vte_terminal_set_allow_hyperlink (VTE_TERMINAL (term), true);
+	vte_terminal_set_enable_legacy_osc777 (VTE_TERMINAL (term), true);
 
 	// FIXME: Should this be in the config?
 	VteRegex *regex;
