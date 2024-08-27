@@ -584,7 +584,7 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 
 		term_config(term, window_i);
 
-		gtk_window_present_with_time (GTK_WINDOW(windows[window_i].window), GDK_CURRENT_TIME);
+		gtk_window_present (GTK_WINDOW(windows[window_i].window));
 	}
 
 	if (window_i != terms.active[n].window) {
