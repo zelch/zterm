@@ -163,11 +163,9 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 		snprintf (window_str, sizeof (window_str), "[%d]: ", window_i + 1);
 	}
 
-	if (vte_terminal_get_window_title(terminal)) {
-		title_str = vte_terminal_get_window_title(terminal);
-	}
+	title_str = vte_terminal_get_termprop_string_by_id(terminal, VTE_PROPERTY_ID_XTERM_TITLE, NULL);
 
-	if (snprintf(new_str, sizeof(new_str) - 1, "%s%s [%ld]", window_str, title_str, n + 1) < 0) {
+	if (snprintf(new_str, sizeof(new_str) - 1, "%s%s [%ld]", window_str, title_str ? title_str : "zterm", n + 1) < 0) {
 		return; // Memory allocation issue.
 	}
 
