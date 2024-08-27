@@ -669,6 +669,23 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	window_t *window = (window_t *) user_data;
 	bind_t	*cur;
 	GtkWidget *widget;
+	guint keyval_lower = keyval;
+
+	/*
+	 * Key bindings that involve shift are a problem, because we may get the
+	 * upper case keyval (C instead of c), and yet modern gtk_accelerator_parse
+	 * will always convert the keyval to lowercase.
+	 *
+	 * We could do something outright absurd, like using gtk_accelerator_name
+	 * followed by gtk_accelerator_parse to normalize the key press, but the
+	 * performance impact of that makes it feel like a bad plan.
+	 *
+	 * So if it's an alpha character, make a lower case version, and check the
+	 * binding against that as well.
+	 */
+	if (keyval < 0xFF && isalpha(keyval)) {
+		keyval_lower = tolower(keyval);
+	}
 
 #if 0
 	gchar *name = gtk_accelerator_name(keyval, state);
@@ -684,7 +701,8 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 		debugf("key_min: %d (%s), key_max: %d (%s), state: 0x%x (%s)", cur->key_min, gdk_keyval_name(cur->key_min), cur->key_max, gdk_keyval_name(cur->key_max), cur->state, name);
 		g_free(name);
 #endif
-		if ((keyval >= cur->key_min) && (keyval <= cur->key_max)) {
+		if (((keyval >= cur->key_min) && (keyval <= cur->key_max)) ||
+			((keyval_lower >= cur->key_min) && (keyval_lower <= cur->key_max))) {
 			if ((state & bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
