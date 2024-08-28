@@ -188,6 +188,15 @@ do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer d
 	}
 }
 
+/*
+ * Ideally, we would free menu_hyperlink_uri here.
+ *
+ * Sadly, if someone opens the menu, and then selects something like 'Copy
+ * URI', we get the closed signal before we get told that a menu item was
+ * selected.
+ *
+ * As such, this is far less useful at the moment.
+ */
 static void
 menu_closed(GtkPopover *menu, gpointer user_data)
 {
