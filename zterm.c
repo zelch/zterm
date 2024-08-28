@@ -1306,7 +1306,9 @@ int main(int argc, char *argv[], char *envp[])
 	terms.bold_is_bright = true;
 	terms.mouse_autohide = true;
 
-	chdir(getenv("HOME"));
+	if (chdir(getenv("HOME")) != 0) {
+		errorf("Unable to chdir to %s: %s", getenv("HOME"), strerror(errno));
+	}
 
 	if (argc > 1) {
 		debugf("argc: %d", argc);
