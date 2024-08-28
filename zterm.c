@@ -163,7 +163,11 @@ temu_window_title_change (VteTerminal *terminal, long int n)
 		snprintf (window_str, sizeof (window_str), "[%d]: ", window_i + 1);
 	}
 
+#if VTE_CHECK_VERSION(0, 77, 0)
 	title_str = vte_terminal_get_termprop_string_by_id(terminal, VTE_PROPERTY_ID_XTERM_TITLE, NULL);
+#else
+	title_str = vte_terminal_get_window_title(terminal);
+#endif
 
 	if (snprintf(new_str, sizeof(new_str) - 1, "%s%s [%ld]", window_str, title_str ? title_str : "zterm", n + 1) < 0) {
 		return; // Memory allocation issue.
@@ -377,7 +381,9 @@ term_config (GtkWidget *term, int window_i)
 	vte_terminal_set_mouse_autohide (VTE_TERMINAL (term), terms.mouse_autohide);
 	vte_terminal_set_enable_sixel (VTE_TERMINAL (term), true);
 	vte_terminal_set_allow_hyperlink (VTE_TERMINAL (term), true);
+#if VTE_CHECK_VERSION(0, 77, 0)
 	vte_terminal_set_enable_legacy_osc777 (VTE_TERMINAL (term), true);
+#endif
 
 	// FIXME: Should this be in the config?
 	VteRegex *regex;
@@ -569,6 +575,7 @@ static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *con
 	return true;
 }
 
+#if VTE_CHECK_VERSION(0, 77, 0)
 static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType type, VtePropertyFlags flags, const char *name, int64_t n)
 {
 	const char *resolved_name;
@@ -652,6 +659,7 @@ static gboolean term_termprops_changed (VteTerminal *term, int const *props, int
 
 	return false;
 }
+#endif
 
 
 void
@@ -683,7 +691,9 @@ term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		g_signal_connect_after (G_OBJECT (term), "increase_font_size", G_CALLBACK (term_increase_font_size), (void *) n);
 		g_signal_connect_after (G_OBJECT (term), "decrease_font_size", G_CALLBACK (term_decrease_font_size), (void *) n);
 		g_signal_connect (G_OBJECT (term), "setup_context_menu", G_CALLBACK (term_setup_context_menu), (void *) n);
+#if VTE_CHECK_VERSION(0, 77, 0)
 		g_signal_connect (G_OBJECT (term), "termprops_changed", G_CALLBACK (term_termprops_changed), (void *) n);
+#endif
 
 		terms.active[n].cmd = cmd;
 		terms.active[n].argv = argv;
