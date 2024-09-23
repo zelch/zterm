@@ -840,6 +840,11 @@ term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keyco
 	 *
 	 * So if it's an alpha character, make a lower case version, and check the
 	 * binding against that as well.
+	 *
+	 * Note: isalpha's argument is an int, however it is documented that it
+	 * must be either an unsigned int, or the constant EOF.
+	 *
+	 * Notably, it segfaults for some values above 0xFF on my system.
 	 */
 	if (keyval < 0xFF && isalpha(keyval)) {
 		keyval_lower = tolower(keyval);
