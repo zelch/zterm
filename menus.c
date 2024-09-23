@@ -341,7 +341,7 @@ rebuild_window_menu(long int window_n)
 	windows[window_n].menu = menu;
 	gtk_widget_set_parent(menu, windows[window_n].window);
 	debugf("windows[%d].menu: %p", window_n, windows[window_n].menu);
-	g_signal_connect_after(menu, "close", G_CALLBACK(menu_closed), (void *) window_n);
+	g_signal_connect_after(menu, "closed", G_CALLBACK(menu_closed), (void *) window_n);
 
 	return;
 }
