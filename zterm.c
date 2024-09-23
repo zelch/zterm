@@ -358,8 +358,45 @@ term_set_window (int n, int window_i)
 void
 term_config (GtkWidget *term, int window_i)
 {
+	static bool manage_fc_timestamp = false;
+
 	if (terms.font) {
-		pango_cairo_font_map_set_default(NULL); // Force a full reload of the fontmap, darn it.
+		/*
+		 * This is all to workaround https://gitlab.gnome.org/GNOME/gtk/-/issues/7039
+		 *
+		 * The very short version: Check to see if gtk-fontconfig-timestamp has been set.
+		 *
+		 * If it has, we can pretend that gtk is going to do the right thing.
+		 *
+		 * It won't until the first bug described in the issue is fixed, but
+		 * that's not too hard for the to workaround. (Make a change, then make
+		 * another change.  The first change will then be picked up correctly.)
+		 *
+		 * If it has not been set, then we need to do it ourselves.
+		 *
+		 * Use a static variable to check if we are still managing it.
+		 *
+		 * NOTE: Sadly, just setting gtk-fontconfig-timestamp to different
+		 * values in sequence isn't enough.
+		 *
+		 * FcConfigUptoDate needs to show as false during both increments.
+		 *
+		 * Sadly, we don't really have any way to trigger that.
+		 *
+		 * Without talking to the fontconfig layer of pango ourselves, we don't
+		 * really have any good options here, except for the user to make a
+		 * fontconfig change, hit reload config settings, make a second change,
+		 * and then hit reload config settings again.
+		 */
+		int timestamp = 0;
+		g_object_get(gtk_settings_get_default(), "gtk-fontconfig-timestamp", &timestamp, NULL);
+
+		if (timestamp == 0 || manage_fc_timestamp) {
+			manage_fc_timestamp = true;
+			timestamp++;
+
+			g_object_set(gtk_settings_get_default(), "gtk-fontconfig-timestamp", timestamp, NULL);
+		}
 
 		PangoFontDescription *font = pango_font_description_from_string(terms.font);
 		if (font) {
