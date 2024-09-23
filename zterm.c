@@ -1232,6 +1232,7 @@ int new_window (void)
 	notebook = gtk_notebook_new();
 	debugf("");
 	g_object_set (G_OBJECT (notebook), "scrollable", true, "enable-popup", true, NULL);
+	gtk_notebook_popup_enable(GTK_NOTEBOOK(notebook));
 	debugf("");
 	gtk_notebook_set_show_tabs (GTK_NOTEBOOK(notebook), false);
 	debugf("");
