@@ -1,9 +1,6 @@
 #include "zterm.h"
 #include <regex.h>
 #include <string.h>
-#ifdef HAVE_LIBBSD
-#  include <bsd/string.h>
-#endif
 
 static int zregcomp(regex_t *restrict preg, const char *restrict regex, int cflags)
 {

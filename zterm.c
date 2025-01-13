@@ -19,9 +19,6 @@
 #include <pcre2.h>
 
 extern char **environ;
-#ifdef HAVE_LIBBSD
-#  include <bsd/string.h>
-#endif
 
 GdkRGBA colors[256] = {
 #include "256colors.h"
