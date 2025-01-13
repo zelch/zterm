@@ -25,6 +25,7 @@ updatefile () {
   FILENAME=$(basename "$1")
   DIRNAME=$(dirname "${FILENAME}")
   FILECONTENT="$2"
+  #decho "New file content: ${FILECONTENT}"
 
   mkdir -p "${DIRNAME}"
   if [[ -d "${DIRNAME}" ]] ; then
@@ -43,8 +44,8 @@ updatefile () {
       fi
     fi
     if [[ "${FILEALREADYMATCHING}" != "true" ]] ; then
-       decho "file doesnt match, making it match now"  #echo if debug=1
-       decho "file is ${FILENAME} by the way"            #echo if debug=1
+      decho "file doesnt match, making it match now"  #echo if debug=1
+      decho "file is ${FILENAME} by the way"            #echo if debug=1
       printf '%s' "$2" > "${FILENAME}"
     fi
   fi
