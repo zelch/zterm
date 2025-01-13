@@ -14,7 +14,7 @@ endif
 
 FILES = zterm.o menus.o config.o
 
-all: update_cflags zterm .syntastic_c_config ${EXTRA} tags
+all: update_cflags tags zterm ${EXTRA}
 
 debug : CFLAGS += -DDEBUG
 debug : all
@@ -43,11 +43,11 @@ zterm.app: zterm Info.plist PkgInfo Linux_terminal.svg Makefile Linux_terminal.i
 clean:
 	rm -rf *.o zterm zterm.app .cflags
 
-.PHONY: update_cflags
-update_cflags:
+.PHONY: update_cflags .syntastic_c_config compile_flags.txt
+update_cflags: .syntastic_c_config compile_flags.txt
 	@bash ./maybe_update .cflags "$(CFLAGS)"
 
-.syntastic_c_config: *.c *.h
-	echo "${CFLAGS}" | sed 's/ /\n/g' > .syntastic_c_config
+.syntastic_c_config compile_flags.txt:
+	@bash ./maybe_update $@ "$$(echo "${CFLAGS}" | sed 's/ /\n/g')"
 
 # vim: set ts=8 sw=8:
