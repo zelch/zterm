@@ -8,7 +8,6 @@ ifeq (${UNAME_S},Darwin)
 	CFLAGS += -mmacosx-version-min=13.0
 	EXTRA = zterm.app
 else ifeq (${UNAME_S},Linux)
-	CFLAGS += -D LINUX
 	LDFLAGS += -lm
 endif
 
@@ -17,7 +16,7 @@ FILES = zterm.o menus.o config.o
 
 all: update_cflags zterm .syntastic_c_config ${EXTRA} tags
 
-debug : CFLAGS += -D DEBUG
+debug : CFLAGS += -DDEBUG
 debug : all
 
 zterm: $(FILES)
