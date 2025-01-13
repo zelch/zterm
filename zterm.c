@@ -30,7 +30,7 @@ int _vfprintf(FILE *io, const char *fmt, va_list args)
 	if (isatty(0)) {
 		char buf[32] = { 0 }; // With some extra space, because.
 		int millisec;
-		struct tm *tm_info;
+		const struct tm *tm_info;
 		struct timeval tv;
 
 		gettimeofday(&tv, NULL);
@@ -70,7 +70,7 @@ int _fprintf(bool print, FILE *io, const char *fmt, ...)
 }
 
 // This exists just to ensure that the arguments are always evaluated.
-int _fnullf(FILE *io, const char *fmt, ...)
+int _fnullf(const FILE *io, const char *fmt, ...)
 {
 	return 0;
 }
