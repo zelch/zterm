@@ -144,7 +144,7 @@ static void
 temu_window_title_change (VteTerminal *terminal, long int n)
 {
 	char window_str[16] = { 0 };
-	const char *title_str = "zterm";
+	const char *title_str;
 	gchar new_str[64] = { 0 };
 	int max_windows = 0;
 	int window_i = terms.active[n].window;
