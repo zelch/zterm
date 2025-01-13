@@ -1355,7 +1355,7 @@ int main(int argc, char *argv[], char *envp[])
 	if (argc > 1) {
 		debugf("argc: %d", argc);
 		exec.argv = calloc(argc + 1, sizeof (char *));
-		for (int i = 0; i < argc; i++) {
+		for (i = 0; i < argc; i++) {
 			exec.argv[i] = argv[i + 1];
 		}
 		exec.env = envp;
