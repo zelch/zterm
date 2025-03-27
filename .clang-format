@@ -1,0 +1,21 @@
+---
+BasedOnStyle: Microsoft
+IndentPPDirectives: AfterHash
+ContinuationIndentWidth: 2
+IndentWidth: 4
+TabWidth: 4
+UseTab: Always
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Left
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+BraceWrapping:
+  AfterControlStatement: MultiLine
+BreakBeforeBraces: Linux
+IndentCaseLabels: true
+SeparateDefinitionBlocks: Always
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: Always
+ColumnLimit: 130
+PenaltyReturnTypeOnItsOwnLine: 50000
+AlwaysBreakAfterReturnType: None
