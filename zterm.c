@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include "zterm.h"
 
 #include <ctype.h>

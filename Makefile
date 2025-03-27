@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS := -g -Wall -Werror -O2 $(shell pkg-config gtk4 vte-2.91-gtk4 libbsd-overlay --cflags)
+CFLAGS := -std=gnu23 -g -Wall -Werror -O2 $(shell pkg-config gtk4 vte-2.91-gtk4 libbsd-overlay --cflags)
 LDFLAGS := $(shell pkg-config gtk4 vte-2.91-gtk4 libbsd-overlay --libs)
 UNAME_S := $(shell uname -s)
 # CFLAGS += -DGDK_DISABLE_DEPRECATED -DGTK_DISABLE_DEPRECATED
