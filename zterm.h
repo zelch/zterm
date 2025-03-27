@@ -110,7 +110,8 @@ extern GtkApplication *app;
 extern int start_width;
 extern int start_height;
 
-extern unsigned int bind_mask;
+extern unsigned int key_bind_mask;
+extern unsigned int button_bind_mask;
 
 int _fprintf (bool print, FILE *io, const char *fmt, ...);
 #define errorf(format, ...)                                                                                                      \

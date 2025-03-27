@@ -80,9 +80,11 @@ int start_height = 768;
 int char_width	= 0;
 int char_height = 0;
 
-unsigned int bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^
-						 (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
-;
+unsigned int key_bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^
+							 (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
+
+unsigned int button_bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^
+								(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
 
 terms_t	 terms;
 window_t windows[MAX_WINDOWS];
@@ -871,7 +873,16 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 #endif
 		if (((keyval >= cur->key_min) && (keyval <= cur->key_max)) ||
 			((keyval_lower >= cur->key_min) && (keyval_lower <= cur->key_max))) {
-			if ((state & bind_mask) == cur->state) {
+			gchar *name	 = gtk_accelerator_name (0, state);
+			gchar *label = gtk_accelerator_get_label (0, state);
+			// debugf ("state: 0x%x, %d, name: '%s', label:
+			// '%s'", state, state, name, label);
+			g_free (label);
+			g_free (name);
+			// debugf("key: %d, state: %x, key_bind_mask:
+			// %x, cur->state: %x", key, state,
+			// key_bind_mask, cur->state);
+			if ((state & key_bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
 						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, cur->argv, cur->env, window - &windows[0]);
@@ -1106,7 +1117,16 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 
 		for (bind_button_t *cur = terms.buttons; cur; cur = cur->next) {
 			if (cur->button == button) {
-				if ((state & bind_mask) == cur->state) {
+				gchar *name	 = gtk_accelerator_name (0, state);
+				gchar *label = gtk_accelerator_get_label (0, state);
+				// debugf ("state: 0x%x, %d, name: '%s', label:
+				// '%s'", state, state, name, label);
+				g_free (label);
+				g_free (name);
+				// debugf("button: %d, state: %x, button_bind_mask:
+				// %x, cur->state: %x", button, state,
+				// button_bind_mask, cur->state);
+				if ((state & button_bind_mask) == cur->state) {
 					switch (cur->action) {
 						case BIND_ACT_OPEN_URI:
 						case BIND_ACT_CUT_URI:

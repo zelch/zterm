@@ -130,12 +130,29 @@ static void temu_parse_bind_button (char **subs)
 	debugf ("Parsing '%s' as partial accelerator, result: state: 0x%x, button: %d, ret: %d", subs[1], bind->state, bind->button,
 			ret);
 	if (!ret) {
+		bind->state = strtol (subs[1], NULL, 0);
+		if (bind->state) {
+			debugf ("Parsing '%s' as numeric value, result: state: 0x%x, button: %d, ret: %d", subs[1], bind->state, bind->button,
+					ret);
+			button_bind_mask |= bind->state;
+		} else {
+			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1],
+					subs[2]);
+			return;
+		}
+
 		errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1], subs[2]);
 		return;
 	}
 
 	debugf ("Binding: button: %d, state: 0x%x, action: %d (%s %s %s)", bind->button, bind->state, bind->action, subs[0], subs[1],
 			subs[2]);
+
+	gchar *name	 = gtk_accelerator_name (0, bind->state);
+	gchar *label = gtk_accelerator_get_label (0, bind->state);
+	debugf ("bind->state: 0x%x, %d, name: '%s', label: '%s'", bind->state, bind->state, name, label);
+	g_free (label);
+	g_free (name);
 }
 
 static void temu_parse_bind_ignore (char **subs)
@@ -151,7 +168,8 @@ static void temu_parse_bind_ignore (char **subs)
 		exit (1);
 	}
 
-	bind_mask &= ~state;
+	key_bind_mask &= ~state;
+	button_bind_mask &= ~state;
 }
 
 static void temu_free_keys (void)
@@ -218,7 +236,7 @@ static void free_subs (char *subs[], size_t count)
 
 // REG_ENHANCED does not exist on Linux, but we still want to compile. (I know, picky picky.)
 #ifndef REG_ENHANCED
-#define REG_ENHANCED 0
+#	define REG_ENHANCED 0
 #endif
 
 void temu_parse_config (void)
