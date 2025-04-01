@@ -441,14 +441,6 @@ void term_config (GtkWidget *term, int window_i)
 			debugf ("regex failed to compile '%s', we should add error handling.", pattern);
 		}
 	}
-	/*
-	regex = vte_regex_new_for_match("([a-z]+://(\\w+(:\\w+)@)?[^\\s<>]*)", -1, PCRE2_NEVER_BACKSLASH_C | PCRE2_UTF |
-	PCRE2_MULTILINE | PCRE2_CASELESS, NULL); if (regex) { int ret = vte_terminal_match_add_regex(VTE_TERMINAL (term), regex, 0);
-		debugf("regex: %p, ret: %d", regex, ret);
-	} else {
-		debugf("regex failed to compile, we should add error handling.");
-	}
-	*/
 
 	if (terms.color_schemes[windows[window_i].color_scheme].name[0]) {
 		vte_terminal_set_colors (VTE_TERMINAL (term), &terms.color_schemes[windows[window_i].color_scheme].foreground,
