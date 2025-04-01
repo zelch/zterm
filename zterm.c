@@ -22,6 +22,8 @@ GdkRGBA colors[256] = {
 #include "256colors.h"
 };
 
+int _vfprintf (FILE *io, const char *fmt, va_list args) __attribute__ ((format (printf, 2, 0)));
+
 int _vfprintf (FILE *io, const char *fmt, va_list args)
 {
 	// Only bother with timestamps if STDIN is a tty, otherwise we're probably running in a context that ends up in syslog/the
@@ -492,7 +494,7 @@ static gboolean term_spawn (gpointer data)
 
 		if (terms.active[n].cmd) {
 			char *argv[] = {"/bin/sh", "-c", terms.active[n].cmd, NULL};
-			debugf ("Spawning with args: %s %s %s %s", argv[0], argv[1], argv[2], argv[3]);
+			debugf ("Spawning with args: %s %s %s", argv[0], argv[1], argv[2]);
 			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT,
 									  NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
 		} else if (terms.active[n].argv != NULL && terms.active[n].argv[0] != NULL) {
@@ -573,21 +575,21 @@ static void term_resize_window (VteTerminal *term, guint width, guint height, gp
 {
 	int64_t n = (int64_t) user_data;
 
-	debugf ("target size: %dx%d, term %d", width, height, n);
+	debugf ("target size: %dx%d, term %ld", width, height, n);
 }
 
 static void term_increase_font_size (VteTerminal *term, gpointer user_data)
 {
 	int64_t n = (int64_t) user_data;
 
-	debugf ("term %d", n);
+	debugf ("term %ld", n);
 }
 
 static void term_decrease_font_size (VteTerminal *term, gpointer user_data)
 {
 	int64_t n = (int64_t) user_data;
 
-	debugf ("term %d", n);
+	debugf ("term %ld", n);
 }
 
 static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *context, gpointer user_data)
@@ -595,7 +597,7 @@ static gboolean term_setup_context_menu (VteTerminal *term, VteEventContext *con
 	int64_t	  n		 = (int64_t) user_data;
 	window_t *window = &windows[terms.active[n].window];
 
-	debugf ("context: %p, term %d", context, n);
+	debugf ("context: %p, term %ld", context, n);
 	if (window->menu_hyperlink_uri) {
 		free (window->menu_hyperlink_uri);
 		window->menu_hyperlink_uri = NULL;
@@ -639,37 +641,37 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 		switch (type) {
 			case VTE_PROPERTY_INVALID:
 			case VTE_PROPERTY_VALUELESS:
-				debugf ("termprop: %s, type: VALUELESS %d, term: %d", name, type, n);
+				debugf ("termprop: %s, type: VALUELESS %d, term: %ld", name, type, n);
 				break;
 			case VTE_PROPERTY_BOOL:
 				vte_terminal_get_termprop_bool_by_id (term, prop, &bvalue);
-				debugf ("termprop: %s, type: BOOL %d, value: %d, term: %d", name, type, bvalue, n);
+				debugf ("termprop: %s, type: BOOL %d, value: %d, term: %ld", name, type, bvalue, n);
 				break;
 			case VTE_PROPERTY_INT:
 				vte_terminal_get_termprop_int_by_id (term, prop, &ivalue);
-				debugf ("termprop: %s, type: INT %d, value: %d, term: %d", name, type, ivalue, n);
+				debugf ("termprop: %s, type: INT %d, value: %ld, term: %ld", name, type, ivalue, n);
 				break;
 			case VTE_PROPERTY_UINT:
 				vte_terminal_get_termprop_uint_by_id (term, prop, &uivalue);
-				debugf ("termprop: %s, type: UINT %d, value: %d, term: %d", name, type, uivalue, n);
+				debugf ("termprop: %s, type: UINT %d, value: %ld, term: %ld", name, type, uivalue, n);
 				break;
 			case VTE_PROPERTY_DOUBLE:
 				vte_terminal_get_termprop_double_by_id (term, prop, &dvalue);
-				debugf ("termprop: %s, type: DOUBLE %d, value: %d, term: %d", name, type, dvalue, n);
+				debugf ("termprop: %s, type: DOUBLE %d, value: %f, term: %ld", name, type, dvalue, n);
 				break;
 			case VTE_PROPERTY_RGB:
 			case VTE_PROPERTY_RGBA:
 				vte_terminal_get_termprop_rgba_by_id (term, prop, &color_value);
-				debugf ("termprop: %s, type: RGBA %d, value: _, term: %d", name, type, n);
+				debugf ("termprop: %s, type: RGBA %d, value: _, term: %ld", name, type, n);
 				break;
 			case VTE_PROPERTY_STRING:
 				svalue = vte_terminal_get_termprop_string_by_id (term, prop, &value_len);
-				debugf ("termprop: %s, type: STRING %d, value: %s, len: %d, term: %d", name, type, svalue, value_len, n);
+				debugf ("termprop: %s, type: STRING %d, value: %s, len: %ld, term: %ld", name, type, svalue, value_len, n);
 				break;
 			case VTE_PROPERTY_DATA:
 			case VTE_PROPERTY_UUID:
 				data_value = vte_terminal_get_termprop_data_by_id (term, prop, &value_len);
-				debugf ("termprop: %s, type: DATA %d, value: %s, len: %d, term: %d", name, type, data_value, value_len, n);
+				debugf ("termprop: %s, type: DATA %d, value: %s, len: %ld, term: %ld", name, type, data_value, value_len, n);
 				break;
 			case VTE_PROPERTY_URI:
 				GUri *uri_value = vte_terminal_ref_termprop_uri_by_id (term, prop);
@@ -678,13 +680,13 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 					break;
 				}
 				svalue = g_uri_to_string (uri_value);
-				debugf ("termprop: %s, type: URI %d, value: %s, term: %d", name, type, svalue, n);
+				debugf ("termprop: %s, type: URI %d, value: %s, term: %ld", name, type, svalue, n);
 				free ((void *) svalue);
 				g_uri_unref (uri_value);
 				break;
 		}
 	} else {
-		debugf ("Unable to get termprop info for %s on term %d", name, n);
+		debugf ("Unable to get termprop info for %s on term %ld", name, n);
 	}
 }
 
@@ -695,7 +697,7 @@ static gboolean term_termprops_changed (VteTerminal *term, int const *props, int
 	VtePropertyType	 type;
 	VtePropertyFlags flags;
 
-	debugf ("%d termprops changed on term %d.", n_props, n);
+	debugf ("%d termprops changed on term %ld.", n_props, n);
 	for (int i = 0; i < n_props; i++) {
 		if (vte_query_termprop_by_id (props[i], &name, &type, &flags)) {
 			debugf ("Prop %d / %s: type %d, flags %d", props[i], name, type, flags);
@@ -1268,7 +1270,7 @@ int new_window (void)
 
 	windows[i].window	= GTK_WIDGET (window);
 	windows[i].notebook = GTK_NOTEBOOK (notebook);
-	debugf ("windows[%d].notebook: %p", i, windows[i].notebook);
+	debugf ("windows[%ld].notebook: %p", i, windows[i].notebook);
 
 	gtk_widget_set_can_focus (notebook, true);
 

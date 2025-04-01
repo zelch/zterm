@@ -148,7 +148,7 @@ void do_move_to_window (GSimpleAction *self, GVariant *parameter, gpointer data)
 	int		   i;
 	GtkWidget *widget;
 
-	debugf ("window_i: %d, new_window_i: %d, data: 0x%x", window_i, new_window_i, data);
+	debugf ("window_i: %ld, new_window_i: %ld, data: 0x%p", window_i, new_window_i, data);
 
 	widget = gtk_notebook_get_nth_page (windows[window_i].notebook, gtk_notebook_get_current_page (windows[window_i].notebook));
 
@@ -191,7 +191,7 @@ static void menu_closed (GtkPopover *menu, gpointer user_data)
 {
 	long int i = (long int) user_data;
 
-	debugf ("window %d", i);
+	debugf ("window %ld", i);
 }
 
 // This is really strdupa.
@@ -221,9 +221,9 @@ static void z_menu_append (GMenu *menu, ZActionEntry *actions, int *n_actions, c
 	g_menu_append (menu, label, buf);
 	debugf ("label: %s, action: %s, name: %s", label, buf, _name);
 	ZActionEntry tmp = {
-		.entry = {_name, function},
-			.user_data = (gpointer) _user_data
-	  };
+	  .entry = {_name, function},
+		  .user_data = (gpointer) _user_data
+	};
 	actions[(*n_actions)++] = tmp;
 	debugf ("action: %d, name: %s", *n_actions - 1, actions[*n_actions - 1].entry.name);
 }
@@ -233,7 +233,7 @@ static void rebuild_window_menu (long int window_n)
 	ZActionEntry add_actions[64];
 	int			 n_add_actions = 0;
 
-	debugf ("windows[%d].menu: %p", window_n, windows[window_n].menu);
+	debugf ("windows[%ld].menu: %p", window_n, windows[window_n].menu);
 	if (windows[window_n].menu != NULL) {
 		gtk_widget_unparent (GTK_WIDGET (windows[window_n].menu));
 		windows[window_n].menu = NULL;
@@ -310,9 +310,9 @@ static void rebuild_window_menu (long int window_n)
 		z_menu_append (window, add_actions, &n_add_actions, "menu.", _title, _action, do_move_to_window,
 					   ((first_empty << 8) + window_n));
 	} else {
-		debugf ("first_empty: %d", first_empty);
+		debugf ("first_empty: %ld", first_empty);
 		for (long n = 0; n < MAX_WINDOWS; n++) {
-			debugf ("windows[%d].window: %p", n, windows[n].window);
+			debugf ("windows[%ld].window: %p", n, windows[n].window);
 		}
 	}
 
@@ -336,7 +336,7 @@ static void rebuild_window_menu (long int window_n)
 
 	windows[window_n].menu = menu;
 	gtk_widget_set_parent (menu, windows[window_n].window);
-	debugf ("windows[%d].menu: %p", window_n, windows[window_n].menu);
+	debugf ("windows[%ld].menu: %p", window_n, windows[window_n].menu);
 	g_signal_connect_after (menu, "closed", G_CALLBACK (menu_closed), (void *) window_n);
 
 	return;

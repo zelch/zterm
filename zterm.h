@@ -113,7 +113,8 @@ extern int start_height;
 extern unsigned int key_bind_mask;
 extern unsigned int button_bind_mask;
 
-int _fprintf (bool print, FILE *io, const char *fmt, ...);
+int _fprintf (bool print, FILE *io, const char *fmt, ...) __attribute__ ((format (printf, 3, 4)));
+
 #define errorf(format, ...)                                                                                                      \
 	_fprintf (true, stderr, "ERROR: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__ (, ) __VA_ARGS__)
 #define infof(format, ...)                                                                                                       \
