@@ -388,6 +388,8 @@ void term_config (GtkWidget *term, int window_i)
 		int timestamp = 0;
 		g_object_get (gtk_settings_get_default (), "gtk-fontconfig-timestamp", &timestamp, NULL);
 
+		debugf ("gtk-fontconfig-timestamp: %d", timestamp);
+
 		if (timestamp == 0 || manage_fc_timestamp) {
 			manage_fc_timestamp = true;
 			timestamp++;
