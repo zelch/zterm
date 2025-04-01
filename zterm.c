@@ -93,12 +93,11 @@ window_t windows[MAX_WINDOWS];
 
 GtkApplication *app;
 
-static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, int64_t term_n, window_t *window);
-static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
-static gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data);
+static void		window_pressed_event (GtkGestureClick *gesture, gint n_press, gdouble x, double y, gpointer user_data);
+static gboolean button_event (GtkGesture *gesture, double x, double y, int64_t term_n, window_t *window);
 int				new_window (void);
 void			destroy_window (int i);
-void			add_button (GtkWidget *widget, long int term_n, int window_i);
+void			add_button (GtkWidget *widget, int window_i);
 
 static void print_widget_size (GtkWidget *widget, const char *name)
 {
@@ -516,8 +515,6 @@ static gboolean term_spawn (gpointer data)
 		}
 
 		terms.active[n].spawned++;
-
-		add_button (GTK_WIDGET (terms.active[n].term), n, -1);
 
 		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
 		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_ON);
@@ -937,24 +934,24 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 	return false;
 }
 
-static gboolean term_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
-{
-	long int n = (long int) user_data;
-
-	window_t *window = &windows[terms.active[n].window];
-
-	// debugf("Got button: %d, n: %ld", gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture)), n);
-
-	return button_event (gesture, sequence, n, window);
-}
-
-static gboolean window_button_event (GtkGesture *gesture, GdkEventSequence *sequence, gpointer user_data)
+static void window_pressed_event (GtkGestureClick *gesture, gint n_press, gdouble x, double y, gpointer user_data)
 {
 	window_t *window = (window_t *) user_data;
 
-	debugf ("Got window button: %d", gtk_gesture_single_get_current_button (GTK_GESTURE_SINGLE (gesture)));
+	int		 n;
+	gboolean ret = false;
 
-	return button_event (gesture, sequence, -1, window);
+	GtkWidget *widget = gtk_notebook_get_nth_page (window->notebook, gtk_notebook_get_current_page (window->notebook));
+
+	if (term_find (widget, &n)) {
+		ret = button_event (GTK_GESTURE (gesture), x, y, n, window);
+	}
+
+	// debugf ("button_event, x: %lf, y: %lf, n_press: %d, ret: %d", x, y, n_press, ret);
+
+	if (ret) {
+		gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+	}
 }
 
 static void file_launch_callback (GObject *source, GAsyncResult *result, gpointer data)
@@ -1105,13 +1102,10 @@ gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, d
 	return true;
 }
 
-static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, int64_t term_n, window_t *window)
+static gboolean button_event (GtkGesture *gesture, double x, double y, int64_t term_n, window_t *window)
 {
-	GdkEvent *event = gtk_gesture_get_last_event (gesture, sequence);
-
-	double x, y;
-
-	gtk_gesture_get_point (gesture, sequence, &x, &y);
+	GdkEventSequence *sequence = gtk_gesture_single_get_current_sequence (GTK_GESTURE_SINGLE (gesture));
+	GdkEvent		 *event	   = gtk_gesture_get_last_event (gesture, sequence);
 
 	if (term_n >= 0) {
 		GdkModifierType state  = gdk_event_get_modifier_state (event);
@@ -1145,16 +1139,15 @@ static gboolean button_event (GtkGesture *gesture, GdkEventSequence *sequence, i
 	return false;
 }
 
-void add_button (GtkWidget *widget, long int term_n, int window_i)
+void add_button (GtkWidget *widget, int window_i)
 {
 	GtkGesture *gesture = gtk_gesture_click_new ();
-	if (term_n >= 0) {
-		g_signal_connect (gesture, "begin", G_CALLBACK (term_button_event), (void *) term_n);
-	} else {
-		g_signal_connect (gesture, "begin", G_CALLBACK (window_button_event), (void *) &windows[window_i]);
-	}
 	gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (gesture), 0);
+	gtk_gesture_single_set_exclusive (GTK_GESTURE_SINGLE (gesture), true);
 	gtk_widget_add_controller (widget, GTK_EVENT_CONTROLLER (gesture));
+	gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (gesture), GTK_PHASE_CAPTURE);
+
+	g_signal_connect (gesture, "pressed", G_CALLBACK (window_pressed_event), (void *) &windows[window_i]);
 }
 
 #undef FUNC_DEBUG
@@ -1279,8 +1272,7 @@ int new_window (void)
 	gtk_event_controller_set_propagation_phase (windows[i].key_controller, GTK_PHASE_CAPTURE);
 	g_signal_connect (windows[i].key_controller, "key-pressed", G_CALLBACK (term_key_event), &windows[i]);
 
-	add_button (GTK_WIDGET (windows[i].window), -1, i);
-	add_button (GTK_WIDGET (windows[i].notebook), -1, i);
+	add_button (GTK_WIDGET (windows[i].window), i);
 
 	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK (notebook));
 
