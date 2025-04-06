@@ -11,19 +11,25 @@ else ifeq (${UNAME_S},Linux)
 	LDFLAGS += -lm
 endif
 
+BEAR := $(shell which bear)
+ifeq ({BEAR},bear not found)
+	BEAR :=
+else
+	BEAR += --append --
+endif
 
 FILES = zterm.o menus.o config.o
 
-all: update_cflags tags zterm ${EXTRA}
+all: update_cflags zterm ${EXTRA}
 
 debug : CFLAGS += -DDEBUG
 debug : all
 
 zterm: $(FILES)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	$(BEAR) $(CC) -o $@ $^ $(LDFLAGS)
 
 $(FILES): %.o: %.c .cflags
-	$(CC) -c $(CFLAGS) -o $@ $<
+	$(BEAR) $(CC) -c $(CFLAGS) -o $@ $<
 
 tags: *.c
 	ctags *.c
@@ -41,7 +47,7 @@ zterm.app: zterm Info.plist PkgInfo Linux_terminal.svg Makefile Linux_terminal.i
 	cp Linux_terminal.icns zterm.app/Contents/Resources/
 
 clean:
-	rm -rf *.o zterm zterm.app .cflags
+	rm -rf *.o zterm zterm.app .cflags .syntastic_c_config compile_flags.txt compile_flags.json tags
 
 .PHONY: update_cflags .syntastic_c_config compile_flags.txt
 update_cflags: .syntastic_c_config compile_flags.txt
