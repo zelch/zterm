@@ -1197,14 +1197,8 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 
 		// These round down to the nearest character size.
 		// The commented out versions round up instead.
-		if ((target_width % char_width) != EXTRA_WIDTH) {
-			// target_width += (char_width - (target_width % char_width)) + EXTRA_WIDTH;
-			target_width -= (target_width % char_width) - EXTRA_WIDTH;
-		}
-		if ((target_height % char_height) != EXTRA_HEIGHT) {
-			// target_height += (char_height - (target_height % char_height)) + EXTRA_HEIGHT;
-			target_height -= (target_height % char_height) - EXTRA_HEIGHT;
-		}
+		target_width  = ((target_width - EXTRA_WIDTH + char_width / 2) / char_width) * char_width + EXTRA_WIDTH;
+		target_height = ((target_height - EXTRA_HEIGHT + char_height / 2) / char_height) * char_height + EXTRA_HEIGHT;
 
 		// Set the minimum size.
 		gdk_toplevel_size_set_min_size (size, min_width, min_height);
