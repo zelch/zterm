@@ -641,6 +641,11 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 
 	if (vte_query_termprop (name, &resolved_name, &prop, &type, &flags)) {
 		switch (type) {
+#	if VTE_CHECK_VERSION(0, 80, 0)
+			case VTE_PROPERTY_IMAGE:
+				debugf ("termprop: %s, type: IMAGE %d, term: %ld", name, type, n);
+				break;
+#	endif
 			case VTE_PROPERTY_INVALID:
 			case VTE_PROPERTY_VALUELESS:
 				debugf ("termprop: %s, type: VALUELESS %d, term: %ld", name, type, n);
