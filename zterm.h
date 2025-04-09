@@ -59,6 +59,7 @@ typedef struct window_s {
 	GtkWidget		   *window;
 	GtkWidget		   *menu;
 	GMenuModel		   *menu_model;
+	GMenuModel		   *menu_model_term_list;
 	GtkEventController *key_controller;
 	int					color_scheme;
 	double				menu_x,
@@ -75,6 +76,7 @@ typedef struct terms_s {
 		char	 **argv; // NULL terminated, only evaluated if cmd is NULL.
 		char	 **env;	 // If this term has a unique environment.
 		char	  *hyperlink_uri;
+		char	   title[64];
 		GtkWidget *term;
 	} *active;
 
@@ -136,5 +138,6 @@ void	 temu_parse_config (void);
 void	 term_config (GtkWidget *term, int window_i);
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void	 rebuild_menus (void);
+void	 rebuild_term_list (long int window_n);
 
 // vim: set ts=4 sw=4 noexpandtab :

@@ -114,15 +114,6 @@ void do_t_tabbar (GSimpleAction *self, GVariant *parameter, gpointer data)
 	gtk_notebook_set_show_tabs (GTK_NOTEBOOK (windows[i].notebook), !show_tabs);
 }
 
-void do_show_terms (GSimpleAction *self, GVariant *parameter, gpointer data)
-{
-	long int window_i = (long int) data;
-	gboolean ret;
-
-	ret = gtk_widget_activate_action_variant (GTK_WIDGET (windows[window_i].notebook), "menu.popup", NULL);
-	debugf ("gtk_widget_activate_action_variant: %d", ret);
-}
-
 void do_next_term (GSimpleAction *self, GVariant *parameter, gpointer data)
 {
 	long int i = (long int) data;
@@ -156,6 +147,14 @@ void do_move_to_window (GSimpleAction *self, GVariant *parameter, gpointer data)
 		term_set_window (i, new_window_i);
 		term_switch (i, NULL, NULL, NULL, window_i);
 	}
+}
+
+void do_switch_terminal (GSimpleAction *self, GVariant *parameter, gpointer data)
+{
+	long int i		  = ((long int) data) >> 8;
+	long int window_i = ((long int) data) & ((1 << 8) - 1);
+
+	term_switch (i, NULL, NULL, NULL, window_i);
 }
 
 void do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer data)
@@ -228,6 +227,41 @@ static void z_menu_append (GMenu *menu, ZActionEntry *actions, int *n_actions, c
 	debugf ("action: %d, name: %s", *n_actions - 1, actions[*n_actions - 1].entry.name);
 }
 
+void rebuild_term_list (long int window_n)
+{
+	ZActionEntry add_actions[64];
+	int			 n_add_actions = 0;
+	int			 i, j;
+	if (windows[window_n].menu_model_term_list != NULL) {
+		g_menu_remove_all (G_MENU (windows[window_n].menu_model_term_list));
+	} else {
+		windows[window_n].menu_model_term_list = G_MENU_MODEL (g_menu_new ());
+	}
+
+	GMenu *list = G_MENU (windows[window_n].menu_model_term_list);
+
+	for (i = j = 0; i < terms.n_active; i++) {
+		if (terms.active[i].term && terms.active[i].window == window_n) {
+
+			char action[64] = {0};
+
+			snprintf (action, sizeof (action), "terms.term_%d", i);
+			char *_action = dupstr (action);
+			z_menu_append (list, add_actions, &n_add_actions, "terms.", terms.active[i].title, _action, do_switch_terminal,
+						   ((i << 8) + window_n));
+			debugf ("Window %ld, term %d, n %d", window_n, i, j++);
+		}
+	}
+
+	GSimpleActionGroup *group = g_simple_action_group_new ();
+
+	for (int i = 0; i < n_add_actions; i++) {
+		g_action_map_add_action_entries (G_ACTION_MAP (group), &add_actions[i].entry, 1, add_actions[i].user_data);
+		debugf ("action: %d, name: %s", i, add_actions[i].entry.name);
+	}
+	gtk_widget_insert_action_group (windows[window_n].window, "terms", G_ACTION_GROUP (group));
+}
+
 static void rebuild_window_menu (long int window_n)
 {
 	ZActionEntry add_actions[64];
@@ -249,7 +283,8 @@ static void rebuild_window_menu (long int window_n)
 	g_menu_append_section (main, "Actions", G_MENU_MODEL (actions));
 
 	GMenu *terminals = g_menu_new ();
-	z_menu_append (terminals, add_actions, &n_add_actions, "menu.", "_Show Terminals", "show_terminals", do_show_terms, window_n);
+	rebuild_term_list (window_n);
+	g_menu_append_submenu (terminals, "Terminal List", windows[window_n].menu_model_term_list);
 	z_menu_append (terminals, add_actions, &n_add_actions, "menu.", "_Previous Terminal", "prev_terminal", do_prev_term,
 				   window_n);
 	z_menu_append (terminals, add_actions, &n_add_actions, "menu.", "_Next Terminal", "next_terminal", do_next_term, window_n);

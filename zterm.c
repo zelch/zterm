@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "zterm.h"
 
 #include <ctype.h>
@@ -145,10 +146,12 @@ static void temu_window_title_change (VteTerminal *terminal, long int n)
 {
 	char		window_str[16] = {0};
 	const char *title_str;
-	gchar		new_str[64] = {0};
 	int			max_windows = 0;
 	int			window_i	= terms.active[n].window;
 	int			notebook_i	= 0;
+	VtePty	   *pty			= vte_terminal_get_pty (terminal);
+	int			pty_fd		= vte_pty_get_fd (pty);
+	char	   *pts			= ptsname (pty_fd);
 
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
@@ -166,17 +169,24 @@ static void temu_window_title_change (VteTerminal *terminal, long int n)
 	title_str = vte_terminal_get_window_title (terminal);
 #endif
 
-	if (snprintf (new_str, sizeof (new_str) - 1, "%s%s [%ld]", window_str, title_str ? title_str : "zterm", n + 1) < 0) {
+	if (pts != NULL && strncmp ("/dev/", pts, 5) == 0) {
+		pts += 5;
+	}
+
+	if (snprintf (terms.active[n].title, sizeof (terms.active[n].title) - 1, "%s%s [%ld - %s]", window_str,
+				  title_str ? title_str : "zterm", n + 1, pts) < 0) {
 		return; // Memory allocation issue.
 	}
 
-	gtk_window_set_title (GTK_WINDOW (windows[window_i].window), new_str);
+	gtk_window_set_title (GTK_WINDOW (windows[window_i].window), terms.active[n].title);
 
 	notebook_i = gtk_notebook_page_num (windows[window_i].notebook, GTK_WIDGET (terminal));
 	if (notebook_i >= 0) {
-		gtk_notebook_set_menu_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
-		gtk_notebook_set_tab_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), new_str);
+		gtk_notebook_set_menu_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), terms.active[n].title);
+		gtk_notebook_set_tab_label_text (windows[window_i].notebook, GTK_WIDGET (terminal), terms.active[n].title);
 	}
+
+	rebuild_term_list (window_i);
 }
 
 static void temu_window_title_changed (VteTerminal *terminal, gpointer data)
@@ -201,6 +211,7 @@ static void prune_windows (void)
 				destroy_window (i);
 				pruned++;
 			}
+			rebuild_term_list (i);
 		}
 	}
 
@@ -742,6 +753,8 @@ void term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		term_config (term, window_i);
 
 		gtk_window_present (GTK_WINDOW (windows[window_i].window));
+
+		rebuild_term_list (window_i);
 	}
 
 	if (window_i != terms.active[n].window) {
