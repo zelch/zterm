@@ -798,45 +798,77 @@ static void term_switch_page (GtkNotebook *notebook, GtkWidget *page, gint page_
 #undef FUNC_DEBUG
 #define FUNC_DEBUG true
 */
-
-static void show_menu (window_t *window, double x, double y)
+static bool get_pointer_position (window_t *window, double *out_x, double *out_y, int *term_n)
 {
-	GdkRectangle rect = {.width = 1, .height = 1};
+	GdkDisplay *display = gtk_widget_get_display (window->window);
+	GdkSeat	   *seat	= gdk_display_get_default_seat (display);
+	GdkDevice  *pointer = gdk_seat_get_pointer (seat);
 
-	if (x == -1 && y == -1) {
-		GdkDisplay	   *display = gdk_display_get_default ();
-		GdkSeat		   *seat	= gdk_display_get_default_seat (display);
-		GdkDevice	   *pointer = gdk_seat_get_pointer (seat);
-		GdkModifierType mask;
-		GdkSurface	   *surface = gtk_native_get_surface (GTK_NATIVE (GTK_WINDOW (window->window)));
+	GtkWidget	   *widget = gtk_notebook_get_nth_page (window->notebook, gtk_notebook_get_current_page (window->notebook));
+	GdkModifierType mask;
+	GtkNative	   *native;
+	GdkSurface	   *surface;
+	int				n;
+	double			x, y, tx, ty;
 
-		gdk_surface_get_device_position (GDK_SURFACE (surface), pointer, &x, &y, &mask);
+	term_find (widget, &n);
+	if (term_n != NULL) {
+		*term_n = n;
 	}
 
-	rect.x = x;
-	rect.y = y;
+	native	= gtk_widget_get_native (terms.active[n].term);
+	surface = gtk_native_get_surface (GTK_NATIVE (native));
+
+	gtk_native_get_surface_transform (native, &tx, &ty);
+
+	gdk_surface_get_device_position (GDK_SURFACE (surface), pointer, &x, &y, &mask);
+
+	graphene_point_t native_point, term_point;
+
+	native_point.x = x - tx;
+	native_point.y = y - ty;
+
+	bool valid = gtk_widget_compute_point (GTK_WIDGET (native), terms.active[n].term, &native_point, &term_point);
+	if (!valid) {
+		return false;
+	}
+	*out_x = term_point.x;
+	*out_y = term_point.y;
+
+	return true;
+}
+
+static void show_menu (window_t *window)
+{
+	// We want the X and Y coordinates of the main pointer so that, if the user has the menu open, and the mouse cursor is over a
+	// link, we can find that if they select a menu option which uses said link.
+	//
+	// The process of getting those coordinates, in the
+	// form wanted by VTE, is...  Convoluted.
+
+	double x, y;
+	int	   n;
+
+	bool valid = get_pointer_position (window, &x, &y, &n);
+	if (valid) {
+		window->menu_x = x;
+		window->menu_y = y;
+	} else {
+		window->menu_x = -1;
+		window->menu_y = -1;
+	}
 
 	if (window->menu_hyperlink_uri) {
 		free (window->menu_hyperlink_uri);
 		window->menu_hyperlink_uri = NULL;
 	}
-
-	GtkWidget *widget = gtk_notebook_get_nth_page (window->notebook, gtk_notebook_get_current_page (window->notebook));
-	int		   n;
-	term_find (widget, &n);
-
-	window->menu_x = x;
-	window->menu_y = y;
 	if (terms.active[n].hyperlink_uri) {
 		window->menu_hyperlink_uri = strdup (terms.active[n].hyperlink_uri);
 		debugf ("Setting menu hyperlink uri: %s", window->menu_hyperlink_uri);
 	}
 
-	gtk_popover_set_has_arrow (GTK_POPOVER (window->menu), true);
-	gtk_widget_set_halign (window->menu, GTK_ALIGN_START);
-	gtk_widget_set_valign (window->menu, GTK_ALIGN_START);
-	gtk_popover_set_pointing_to (GTK_POPOVER (window->menu), &rect);
-	gtk_popover_popup (GTK_POPOVER (window->menu));
+	gtk_menu_button_popup (GTK_MENU_BUTTON (window->header_button));
+	return;
 }
 
 static gboolean term_key_event (GtkEventControllerKey *key_controller, guint keyval, guint keycode, GdkModifierType state,
@@ -914,7 +946,7 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 						vte_terminal_paste_clipboard (VTE_TERMINAL (widget));
 						break;
 					case BIND_ACT_MENU:
-						show_menu (window, -1, -1);
+						show_menu (window);
 						break;
 					case BIND_ACT_NEXT_TERM:
 						gtk_notebook_next_page (GTK_NOTEBOOK (window->notebook));
@@ -1044,13 +1076,7 @@ gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, d
 			// We likely won't have coordinates, so look at where the mouse pointer is right now.
 			if (x == -1 && y == -1) {
 				debugf ("Trying to find the cursor.");
-				GdkDisplay	   *display = gdk_display_get_default ();
-				GdkSeat		   *seat	= gdk_display_get_default_seat (display);
-				GdkDevice	   *pointer = gdk_seat_get_pointer (seat);
-				GdkModifierType mask;
-				GdkSurface	   *surface = gtk_native_get_surface (GTK_NATIVE (GTK_WINDOW (window->window)));
-
-				gdk_surface_get_device_position (GDK_SURFACE (surface), pointer, &x, &y, &mask);
+				get_pointer_position (window, &x, &y, NULL);
 			}
 
 			uri = vte_terminal_check_match_at (VTE_TERMINAL (terms.active[term_n].term), x, y, &tag);
@@ -1283,6 +1309,40 @@ int new_window (void)
 	g_signal_connect (notebook, "switch_page", G_CALLBACK (term_switch_page), GTK_NOTEBOOK (notebook));
 
 	rebuild_menus ();
+
+	GtkWidget *header = gtk_header_bar_new ();
+	gtk_header_bar_set_show_title_buttons (GTK_HEADER_BAR (header), true);
+	gtk_window_set_titlebar (GTK_WINDOW (window), header);
+	GtkWidget *button = gtk_menu_button_new ();
+	gtk_menu_button_set_primary (GTK_MENU_BUTTON (button), false);
+	gtk_menu_button_set_has_frame (GTK_MENU_BUTTON (button), false);
+	gtk_menu_button_set_can_shrink (GTK_MENU_BUTTON (button), true);
+	gtk_menu_button_set_use_underline (GTK_MENU_BUTTON (button), true);
+	gtk_menu_button_set_direction (GTK_MENU_BUTTON (button), GTK_ARROW_DOWN);
+	gtk_menu_button_set_icon_name (GTK_MENU_BUTTON (button), "utilities-terminal");
+	gtk_header_bar_pack_end (GTK_HEADER_BAR (header), button);
+
+	GtkWidget *popover = gtk_popover_menu_new_from_model (windows[i].menu_model);
+	gtk_popover_set_autohide (GTK_POPOVER (popover), TRUE);
+	gtk_popover_set_has_arrow (GTK_POPOVER (popover), FALSE);
+	gtk_popover_set_position (GTK_POPOVER (popover), GTK_POS_BOTTOM);
+	gtk_widget_set_halign (popover, GTK_ALIGN_START);
+	gtk_widget_set_valign (popover, GTK_ALIGN_END);
+	windows[i].header		 = header;
+	windows[i].header_button = button;
+	gtk_menu_button_set_popover (GTK_MENU_BUTTON (button), popover);
+
+	gtk_widget_set_focusable (button, false);
+
+	GtkWidget *child = gtk_widget_get_first_child (button);
+	while (child != NULL) {
+		if (GTK_IS_TOGGLE_BUTTON (child)) {
+			gtk_widget_set_focusable (child, false);
+			break;
+		} else {
+			child = gtk_widget_get_next_sibling (child);
+		}
+	}
 
 	gtk_window_present (GTK_WINDOW (window));
 

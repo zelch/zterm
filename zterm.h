@@ -57,6 +57,8 @@ typedef struct color_scheme_s {
 typedef struct window_s {
 	GtkNotebook		   *notebook;
 	GtkWidget		   *window;
+	GtkWidget		   *header;
+	GtkWidget		   *header_button;
 	GtkWidget		   *menu;
 	GMenuModel		   *menu_model;
 	GMenuModel		   *menu_model_term_list;
