@@ -268,12 +268,13 @@ static void rebuild_window_menu (long int window_n)
 	int			 n_add_actions = 0;
 
 	debugf ("windows[%ld].menu: %p", window_n, windows[window_n].menu);
-	if (windows[window_n].menu != NULL) {
-		gtk_widget_unparent (GTK_WIDGET (windows[window_n].menu));
-		windows[window_n].menu = NULL;
+	if (windows[window_n].menu_model != NULL) {
+		g_menu_remove_all (G_MENU (windows[window_n].menu_model));
+	} else {
+		windows[window_n].menu_model = G_MENU_MODEL (g_menu_new ());
 	}
 
-	GMenu *main = g_menu_new ();
+	GMenu *main = G_MENU (windows[window_n].menu_model);
 
 	GMenu *actions = g_menu_new ();
 	z_menu_append (actions, add_actions, &n_add_actions, "menu.", "_Copy", "copy", do_copy, window_n);
@@ -370,7 +371,7 @@ static void rebuild_window_menu (long int window_n)
 	gtk_widget_insert_action_group (windows[window_n].window, "menu", G_ACTION_GROUP (group));
 
 	windows[window_n].menu = menu;
-	gtk_widget_set_parent (menu, windows[window_n].window);
+	// gtk_widget_set_parent (menu, windows[window_n].window);
 	debugf ("windows[%ld].menu: %p", window_n, windows[window_n].menu);
 	g_signal_connect_after (menu, "closed", G_CALLBACK (menu_closed), (void *) window_n);
 
