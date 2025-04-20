@@ -443,6 +443,7 @@ void term_config (GtkWidget *term, int window_i)
 	  NULL,
 	};
 
+	vte_terminal_match_remove_all (VTE_TERMINAL (term));
 	for (int i = 0; builtin_dingus[i] != NULL; i++) {
 		const char *pattern = builtin_dingus[i];
 		VteRegex   *regex =
