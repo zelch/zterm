@@ -12,7 +12,9 @@ else ifeq (${UNAME_S},Linux)
 endif
 
 BEAR := $(shell which bear)
-ifeq ({BEAR},bear not found)
+ifeq (${BEAR},bear not found)
+	BEAR :=
+else ifeq (${BEAR},)
 	BEAR :=
 else
 	BEAR += --append --
