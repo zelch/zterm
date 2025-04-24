@@ -1165,7 +1165,14 @@ static gboolean button_event (GtkGesture *gesture, double x, double y, int64_t t
 					switch (cur->action) {
 						case BIND_ACT_OPEN_URI:
 						case BIND_ACT_CUT_URI:
-							return process_uri (term_n, window, cur->action, x, y, false);
+							GtkNative		*native		  = gtk_widget_get_native (terms.active[term_n].term);
+							graphene_point_t native_point = {.x = x, .y = y}, term_point;
+							bool valid = gtk_widget_compute_point (GTK_WIDGET (native), terms.active[term_n].term, &native_point,
+																   &term_point);
+							if (!valid) {
+								return false;
+							}
+							return process_uri (term_n, window, cur->action, term_point.x, term_point.y, false);
 						default:
 							debugf ("Got impossible button binding action.");
 							return false;
