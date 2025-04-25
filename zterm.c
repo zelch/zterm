@@ -466,9 +466,17 @@ void term_config (GtkWidget *term, int window_i)
 
 	char_width	= vte_terminal_get_char_width (VTE_TERMINAL (term));
 	char_height = vte_terminal_get_char_height (VTE_TERMINAL (term));
+	debugf ("setting terminal size requests: %dx%d", char_width * 2, char_height * 2);
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i].term != NULL) {
+			gtk_widget_set_size_request (term, char_width * 2, char_height * 2);
+		}
+	}
 
+	/*
 	debugf ("setting size request: %dx%d", char_width * 2, char_height * 2);
 	gtk_widget_set_size_request (windows[window_i].window, char_width * 2, char_height * 2);
+	*/
 }
 
 static void spawn_callback (VteTerminal *term, GPid pid, GError *error, gpointer user_data)
@@ -1204,56 +1212,145 @@ void add_button (GtkWidget *widget, int window_i)
 // exist for GTK4.
 void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer user_data)
 {
-	int bounds_width, bounds_height;
-	int width, height;
-	int target_width, target_height;
-	int min_width, min_height;
+	int		   width, height;
+	int		   target_width, target_height;
+	int		   window_width, window_height;
+	int		   surface_width, surface_height;
+	int		   term_width, term_height;
+	int		   term_raw_width, term_raw_height;
+	int		   diff_width, diff_height;
+	GtkWidget *term		= NULL;
+	int		   window_i = -1;
 
-#define EXTRA_WIDTH 2
-#define EXTRA_HEIGHT 2
+#define EXTRA_WIDTH 0
+#define EXTRA_HEIGHT 0
 
-	gdk_toplevel_size_get_bounds (size, &bounds_width, &bounds_height);
+	if (char_width == 0 || char_height == 0) {
+		debugf ("We don't have a character size yet, abort.");
+		return;
+	}
 
 	gtk_window_get_default_size (GTK_WINDOW (user_data), &width, &height);
-	target_width  = width;
-	target_height = height;
+	window_width  = width;
+	window_height = height;
 
-	debugf ("bounds: %dx%d, target: %dx%d, char: %dx%d", bounds_width, bounds_height, width, height, char_width, char_height);
+	GdkSurface *surface = GDK_SURFACE (self);
+	surface_width		= gdk_surface_get_width (surface);
+	surface_height		= gdk_surface_get_height (surface);
 
-	if (char_width != 0 && char_height != 0) {
-		// The minimum window size is 4 characters in a square, plus the 'extra' width and height.
-		// The extra width and extra height exist to make it easier to see stuff at the edge of the window.
-		min_width  = (char_width * 4) + EXTRA_WIDTH;
-		min_height = (char_height * 4) + EXTRA_HEIGHT;
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (user_data == windows[i].window) {
+			window_i = i;
+			break;
+		}
+	}
 
-		// debugf("width /: %d, width %%: %d, height /: %d, height %%: %d", width / char_width, width % char_width, height /
-		// char_height, height % char_height);
+	if (window_i == -1) {
+		debugf ("We can't find the window?  Aborting.");
+		return;
+	}
 
-		// These round down to the nearest character size.
-		// The commented out versions round up instead.
-		target_width  = ((target_width - EXTRA_WIDTH + char_width / 2) / char_width) * char_width + EXTRA_WIDTH;
-		target_height = ((target_height - EXTRA_HEIGHT + char_height / 2) / char_height) * char_height + EXTRA_HEIGHT;
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i].term != NULL && terms.active[i].window == window_i) {
+			term = terms.active[i].term;
+			break;
+		}
+	}
 
-		// Set the minimum size.
-		gdk_toplevel_size_set_min_size (size, min_width, min_height);
+	if (term == NULL) {
+		debugf ("We can't find a terminal in the window.  Aborting.");
+		return;
+	}
 
-		// Ensure that the target size is within the minimum and maximum sizes.
-		target_width  = MAX (min_width, MIN (target_width, bounds_width));
-		target_height = MAX (min_height, MIN (target_height, bounds_height));
-		debugf ("Compute size: current: %dx%d, target: %dx%d, char: %dx%d, bounds: %dx%d", width, height, target_width,
-				target_height, char_width, char_height, bounds_width, bounds_height);
-#if FUNC_DEBUG
-		print_widget_size (GTK_WIDGET (user_data), "window");
+	term_raw_width	= gtk_widget_get_width (term);
+	term_raw_height = gtk_widget_get_height (term);
+	term_width		= term_raw_width;
+	term_height		= term_raw_height;
+
+	/*
+	term_width -= term_width % char_width;
+	term_height -= term_height % char_height;
+*/
+
+	if (term_width == 0 || term_height == 0) {
+		debugf ("We don't have terminal sizing yet.");
+		return;
+	}
+
+	// Round the terminal size to the nearest character increment.
+	// Maybe round down/nearest/up should be a config setting, not sure.
+	term_width	= ((term_width + char_width / 2) / char_width) * char_width;
+	term_height = ((term_height + char_height / 2) / char_height) * char_height;
+
+	// The 'margin' is everything in the space between the edges of the terminal itself, and the surface.
+	// We're making the strong assumption that when we are called, the terminal widget has already been resized to match the
+	// window.
+	int margin_width = 0, margin_height = 0;
+	margin_width += surface_width - term_raw_width;
+	margin_height += surface_height - term_raw_height;
+
+	target_width  = term_width + margin_width;
+	target_height = term_height + margin_height;
+
+	diff_width	= surface_width - target_width;
+	diff_height = surface_height - target_height;
+
+#if 0
+	if (diff_width >= char_width) {
+		debugf ("bumping target width: %d -> %d (+%d)", target_width, target_width + char_width, char_width);
+		target_width += char_width;
+		term_width += char_width;
+		diff_width = surface_width - target_width;
+	} else if (diff_width <= -char_width) {
+		debugf ("shrinking target width: %d -> %d (-%d)", target_width, target_width - char_width, char_width);
+		target_width -= char_width;
+		term_width -= char_width;
+		diff_width = surface_width - target_width;
+	}
+
+	if (diff_height >= char_height) {
+		debugf ("bumping target height: %d -> %d (+%d)", target_height, target_height + char_height, char_height);
+		target_height += char_height;
+		term_height += char_height;
+		diff_height = surface_height - target_height;
+	} else if (diff_height <= -char_height) {
+		debugf ("shrinking target height: %d -> %d (-%d)", target_height, target_height - char_height, char_height);
+		target_height -= char_height;
+		term_height -= char_height;
+		diff_height = surface_height - target_height;
+	}
+#endif
+#if 0
+	debugf ("char: %dx%d, term: %dx%d, header: %dx%d, margin: %dx%d, window: %dx%d", char_width, char_height, term_width,
+			term_height, header_width, header_height, margin_width, margin_height, window_width, window_height);
+
+	debugf ("header: %dx%d", gtk_widget_get_width (windows[0].header), gtk_widget_get_height (windows[0].header));
+	debugf ("term: %dx%d / %dx%d, window: %dx%d / %dx%d", term_width, term_height, term_width % char_width,
+			term_height % char_height, window_width, window_height, window_width % char_width, window_width % char_height);
+
+	debugf ("bounds: %dx%d, target: %dx%d, term: %dx%d, diff: %dx%d, char: %dx%d", bounds_width, bounds_height, target_width,
+			target_height, term_width, term_height, diff_width, diff_height, char_width, char_height);
 #endif
 
-		if (target_width != width || target_height != height) {
-			// Set both the window 'default' size, and the toplevel size.
-			// Without the default size being set, there are problems on x11
-			// with the correct size not getting set, which causes some very
-			// odd loops, resulting in monitor sized windows.
-			gtk_window_set_default_size (GTK_WINDOW (user_data), target_width, target_height);
-			gdk_toplevel_size_set_size (size, target_width, target_height);
-		}
+	if (target_width != surface_width || target_height != surface_height) {
+		debugf ("terminal: %dx%d -> %dx%d (%d x %d), char: %dx%d", term_raw_width, term_raw_height, term_width, term_height,
+				term_raw_width - term_width, term_raw_height - term_height, char_width, char_height);
+		debugf ("window: %dx%d, margin: %dx%d", window_width, window_height, margin_width, margin_height);
+		debugf ("surface: %dx%d -> %dx%d (%dx%d)", surface_width, surface_height, target_width, target_height, diff_width,
+				diff_height);
+		debugf ("");
+
+		// Set both the window 'default' size, and the toplevel size.
+		// Without the default size being set, there are problems on x11
+		// with the correct size not getting set, which causes some very
+		// odd loops, resulting in monitor sized windows.
+		// gtk_window_set_default_size (GTK_WINDOW (user_data), target_width, target_height);
+
+		// We used to set both the window size and the toplevel size here.
+		// But that doesn't work when the two are, in fact, different numbers.
+		// We can either resize to match the window, or to the toplevel, but we can't do both.
+		// For now, we pick the toplevel.
+		gdk_toplevel_size_set_size (size, target_width, target_height);
 	}
 }
 
@@ -1285,8 +1382,10 @@ int new_window (void)
 	debugf ("setting default size: %dx%d", start_width, start_height);
 	gtk_window_set_default_size (GTK_WINDOW (window), start_width, start_height);
 
+	/*
 	debugf ("Setting size request: 24x24");
 	gtk_widget_set_size_request (GTK_WIDGET (window), 24, 24);
+	*/
 
 	debugf ("");
 	notebook = gtk_notebook_new ();
