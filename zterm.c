@@ -105,14 +105,16 @@ static void print_widget_size (GtkWidget *widget, const char *name)
 	int			   x, y;
 	GtkRequisition minimum, natural;
 
-	debugf ("%s realized: %d, scale factor: %d", name, gtk_widget_get_realized (widget), gtk_widget_get_scale_factor (widget));
+	debugf ("%s realized: %d, scale factor: %d, request_mode: %d", name, gtk_widget_get_realized (widget),
+			gtk_widget_get_scale_factor (widget), gtk_widget_get_request_mode (widget));
 	gtk_widget_get_preferred_size (widget, &minimum, &natural);
-	debugf ("%s preferred minimum width x height: %dx%d", name, minimum.width, minimum.height);
-	debugf ("%s preferred natural width x height: %dx%d", name, natural.width, natural.height);
+	debugf ("%s preferred, minimum %dx%d, natural %dx%d", name, minimum.width, minimum.height, natural.width, natural.height);
 	gtk_widget_get_size_request (widget, &x, &y);
-	debugf ("%s size request width x height: %dx%d", name, x, y);
-	debugf ("%s allocated width x height: %dx%d (%x x %x)", name, gtk_widget_get_width (widget), gtk_widget_get_height (widget),
-			gtk_widget_get_width (widget), gtk_widget_get_height (widget));
+	debugf ("%s size request: %dx%d, size: %dx%d", name, x, y, gtk_widget_get_width (widget), gtk_widget_get_height (widget));
+	debugf ("  margin: top: %d, bottom: %d, start: %d, end: %d", gtk_widget_get_margin_top (widget),
+			gtk_widget_get_margin_bottom (widget), gtk_widget_get_margin_start (widget), gtk_widget_get_margin_end (widget));
+	debugf ("  halign: %d, valign: %d", gtk_widget_get_halign (widget), gtk_widget_get_valign (widget));
+	// debugf ("%dx%d", gtk_widget_get_allocated_width (widget), gtk_widget_get_allocated_height (widget));
 }
 
 static void temu_reorder (void)
@@ -1205,7 +1207,7 @@ void add_button (GtkWidget *widget, int window_i)
 }
 
 #undef FUNC_DEBUG
-#define FUNC_DEBUG false
+#define FUNC_DEBUG true
 
 // Attempt to ensure that our window size is correct for our font.
 // This is definitely inferior to geometry hints, but geometry hints no longer
@@ -1334,7 +1336,10 @@ void window_compute_size (GdkToplevel *self, GdkToplevelSize *size, gpointer use
 
 	if (target_width != surface_width || target_height != surface_height) {
 		debugf ("terminal: %dx%d -> %dx%d (%d x %d), char: %dx%d", term_raw_width, term_raw_height, term_width, term_height,
-				term_raw_width - term_width, term_raw_height - term_height, char_width, char_height);
+				term_width - term_raw_width, term_height - term_raw_height, char_width, char_height);
+		debugf ("  %d(%d)x%d(%d) -> %d(%d)x%d(%d)", term_raw_width / char_width, term_raw_width % char_width,
+				term_raw_height / char_height, term_raw_height % char_height, term_width / char_width, term_width % char_width,
+				term_height / char_height, term_height % char_height);
 		debugf ("window: %dx%d, margin: %dx%d", window_width, window_height, margin_width, margin_height);
 		debugf ("surface: %dx%d -> %dx%d (%dx%d)", surface_width, surface_height, target_width, target_height, diff_width,
 				diff_height);
