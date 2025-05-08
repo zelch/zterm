@@ -215,7 +215,7 @@ typedef struct {
 static void z_menu_append (GMenu *menu, ZActionEntry *actions, int *n_actions, char *prefix, char *label, char *_name,
 						   void (*function) (GSimpleAction *, GVariant *, gpointer), long int _user_data)
 {
-	char buf[70] = {0};
+	char buf[256] = {0};
 	snprintf (buf, sizeof (buf) - 1, "%s%s", prefix, _name);
 	g_menu_append (menu, label, buf);
 	debugf ("label: %s, action: %s, name: %s", label, buf, _name);
