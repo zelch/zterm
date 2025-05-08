@@ -78,7 +78,7 @@ typedef struct terms_s {
 		char	 **argv; // NULL terminated, only evaluated if cmd is NULL.
 		char	 **env;	 // If this term has a unique environment.
 		char	  *hyperlink_uri;
-		char	   title[64];
+		char	   title[128];
 		GtkWidget *term;
 	} *active;
 
