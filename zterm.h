@@ -131,7 +131,7 @@ int _fprintf (bool print, FILE *io, const char *fmt, ...) __attribute__ ((format
 #	define debugf(format, ...)                                                                                                  \
 		_fnullf (stderr, "Debug: %s %d (%s): " format "\n", __FILE__, __LINE__, __func__ __VA_OPT__ (, ) __VA_ARGS__)
 #endif
-int		 _fnullf (const FILE *io, const char *fmt, ...);
+int		 _fnullf (const FILE *io, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 void	 do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 bool	 term_find (GtkWidget *term, int *i);
 void	 term_set_window (int n, int window_i);
