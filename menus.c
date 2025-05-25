@@ -197,8 +197,7 @@ static void menu_closed (GtkPopover *menu, gpointer user_data)
 // It really must be a macro, not a function, so that alloca gets called with
 // the caller function's stack.
 // And we're using the gcc statement expression syntax, because nothing else
-// gives us the ability to have temporary variables, return values, and the
-// ability to have a return value.
+// gives us the ability to have both temporary variables and return values.
 #define dupstr(str)                                                                                                              \
 	({                                                                                                                           \
 		char *in  = str;                                                                                                         \
