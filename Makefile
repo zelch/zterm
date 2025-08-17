@@ -49,13 +49,13 @@ zterm.app: zterm Info.plist PkgInfo Linux_terminal.svg Makefile Linux_terminal.i
 	cp Linux_terminal.icns zterm.app/Contents/Resources/
 
 clean:
-	rm -rf *.o zterm zterm.app .cflags .syntastic_c_config compile_flags.txt compile_flags.json tags
+	rm -rf *.o zterm zterm.app .cflags .syntastic_c_config compile_flags.txt compile_flags.json compile_commands.json tags
 
-.PHONY: update_cflags .syntastic_c_config compile_flags.txt
-update_cflags: .syntastic_c_config compile_flags.txt
+.PHONY: update_cflags compile_flags.txt
+update_cflags: compile_flags.txt
 	@bash ./maybe_update .cflags "$(CFLAGS)"
 
-.syntastic_c_config compile_flags.txt:
+compile_flags.txt:
 	@bash ./maybe_update $@ "$$(echo "${CFLAGS}" | sed 's/ /\n/g')"
 
 # vim: set ts=8 sw=8:

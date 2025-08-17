@@ -1,4 +1,7 @@
 .syntastic_c_config
+compile_commands.json
+compile_flags.txt
+.cflags
 zterm
 zterm.app
 *.o
