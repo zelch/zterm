@@ -6,6 +6,7 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include <pwd.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,6 +94,82 @@ terms_t	 terms;
 window_t windows[MAX_WINDOWS];
 
 GtkApplication *app;
+
+static cmd_t *initial_cmd = NULL;
+
+static void free_cli_exec (exec_t **cli_exec_ptr)
+{
+	if (cli_exec_ptr == NULL || *cli_exec_ptr == NULL) {
+		return;
+	}
+	debugf ("running free_cli_exec on %p", cli_exec_ptr);
+	exec_t *cli_exec = *cli_exec_ptr;
+
+	if (cli_exec->argv != NULL) {
+		g_strfreev (cli_exec->argv);
+		cli_exec->argv = NULL;
+	}
+	if (cli_exec->env != NULL) {
+		g_strfreev (cli_exec->env);
+		cli_exec->env = NULL;
+	}
+
+	g_free (*cli_exec_ptr);
+	*cli_exec_ptr = NULL;
+}
+
+static void free_cmd (cmd_t **cmd_ptr)
+{
+	if (cmd_ptr == NULL || *cmd_ptr == NULL) {
+		return;
+	}
+	cmd_t *cmd = *cmd_ptr;
+	free_cli_exec (&cmd->cli_exec);
+
+	free (*cmd_ptr);
+	*cmd_ptr = NULL;
+}
+
+static bool switch_cmd (cmd_t *cmd)
+{
+	if (!terms.active) {
+		initial_cmd = cmd;
+		return true;
+	}
+
+	if (cmd->n < 0 || cmd->n >= terms.n_active) {
+		errorf ("Requested terminal %ld is out of range (max %d).", cmd->n + 1, terms.n_active);
+		return false;
+	}
+
+	debugf ("Switching to terminal %ld on window %d", cmd->n + 1, cmd->window_i);
+	if (cmd->cli_exec != NULL) {
+		if (cmd->cli_exec->argv != NULL) {
+			for (int i = 0; cmd->cli_exec->argv[i] != NULL; i++) {
+				debugf ("  argv[%d]: '%s'", i, cmd->cli_exec->argv[i]);
+			}
+		}
+		term_switch (cmd->n, cmd->cli_exec->argv, cmd->cli_exec->env, cmd->window_i);
+	} else {
+		bind_t *found = NULL;
+
+		for (bind_t *cur = terms.keys; cur; cur = cur->next) {
+			if (cmd->n >= cur->base && cmd->n <= (cur->base + (cur->key_max - cur->key_min))) {
+				found = cur;
+				break;
+			}
+		}
+
+		if (found != NULL) {
+			term_switch (cmd->n, found->argv, found->env, 0);
+		} else {
+			term_switch (cmd->n, NULL, NULL, cmd->window_i);
+		}
+	}
+
+	free_cmd (&cmd);
+	return true;
+}
 
 static void		window_pressed_event (GtkGestureClick *gesture, gint n_press, gdouble x, double y, gpointer user_data);
 static gboolean button_event (GtkGesture *gesture, double x, double y, int64_t term_n, window_t *window);
@@ -495,47 +572,65 @@ static gboolean term_spawn (gpointer data)
 	int n		 = (long int) data;
 	int realized = gtk_widget_get_realized (terms.active[n].term);
 
-	debugf ("For terminal %d, spawned: %d, realized: %d, cmd: %s.", n, terms.active[n].spawned, realized, terms.active[n].cmd);
+	debugf ("For terminal %d, spawned: %d, realized: %d.", n, terms.active[n].spawned, realized);
+	term_instance_t *active = &terms.active[n];
+	if (active->argv != NULL) {
+		for (int i = 0; active->argv[i] != NULL; i++) {
+			debugf ("  argv[%d]: '%s'", i, active->argv[i]);
+		}
+	}
 
 	if (!realized) {
 		return true;
 	}
 
-	if (!terms.active[n].spawned) {
+	if (!active->spawned) {
 		char **env = environ;
-		if (terms.active[n].env != NULL) {
-			env = terms.active[n].env;
+		if (active->env != NULL) {
+			env = active->env;
 		}
 
-		if (terms.active[n].cmd) {
-			char *argv[] = {"/bin/sh", "-c", terms.active[n].cmd, NULL};
-			debugf ("Spawning with args: %s %s %s", argv[0], argv[1], argv[2]);
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT,
-									  NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
-		} else if (terms.active[n].argv != NULL && terms.active[n].argv[0] != NULL) {
-			debugf ("Spawning with: %p '%s'", terms.active[n].argv, terms.active[n].argv[0]);
-			for (int i = 0; terms.active[n].argv[i] != NULL; i++) {
-				debugf ("argv[%d]: '%s'", i, terms.active[n].argv[i]);
+		if (active->argv && active->argv[0] != NULL && active->argv[1] == NULL) {
+			int argc = 0;
+			for (int i = 0; active->argv != NULL && active->argv[i] != NULL; i++) {
+				argc++;
 			}
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, terms.active[n].argv, env,
-									  G_SPAWN_DEFAULT, NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
+			char **argv = g_new0 (char *, 4 + argc);
+			argv[0]		= "/bin/sh";
+			argv[1]		= "-c";
+			debugf ("Spawning '%s' '%s' '%s' '%s'...", argv[0], argv[1], argv[2], argv[3]);
+			for (int i = 0; i < argc; i++) {
+				argv[2 + i] = active->argv[i];
+			}
+			for (int i = 0; argv[i] != NULL; i++) {
+				debugf ("  argv[%d]: '%s'", i, argv[i]);
+			}
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
+									  NULL, -1, NULL, spawn_callback, NULL);
+			g_free (argv);
+		} else if (active->argv != NULL && active->argv[0] != NULL) {
+			debugf ("Spawning with: %p '%s'", active->argv, active->argv[0]);
+			for (int i = 0; active->argv[i] != NULL; i++) {
+				debugf ("argv[%d]: '%s'", i, active->argv[i]);
+			}
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, active->argv, env, G_SPAWN_DEFAULT,
+									  NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
 
 		} else {
 			struct passwd *pass = getpwuid (getuid ());
 
 			char *argv[] = {pass->pw_shell, "--login", NULL};
-			debugf ("term: %p, shell: '%s'", VTE_TERMINAL (terms.active[n].term), pass->pw_shell);
+			debugf ("term: %p, shell: '%s'", VTE_TERMINAL (active->term), pass->pw_shell);
 			debugf ("Spawning with args: %s %s", argv[0], argv[1]);
-			vte_terminal_spawn_async (VTE_TERMINAL (terms.active[n].term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT,
-									  NULL, NULL, NULL, 5000, NULL, spawn_callback, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
+									  NULL, 5000, NULL, spawn_callback, NULL);
 		}
 
-		terms.active[n].spawned++;
+		active->spawned++;
 
 		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
-		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_ON);
-		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (terms.active[n].term), VTE_CURSOR_BLINK_OFF);
-
+		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (active->term), VTE_CURSOR_BLINK_ON);
+		vte_terminal_set_cursor_blink_mode (VTE_TERMINAL (active->term), VTE_CURSOR_BLINK_OFF);
 		return false;
 	}
 
@@ -544,31 +639,45 @@ static gboolean term_spawn (gpointer data)
 
 static void term_show (GtkWidget *widget, void *data)
 {
-	int n = (long int) data;
+	int				 n		= (long int) data;
+	term_instance_t *active = &terms.active[n];
 
-	debugf ("Show for terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+	if (active->argv != NULL) {
+		debugf ("Show for terminal %d, cmd: %s.", n, active->argv[0]);
+	} else {
+		debugf ("Show for terminal %d, no command.", n);
+	}
 }
 
 static void term_realized (GtkWidget *widget, void *data)
 {
-	int n = (long int) data;
+	int				 n		= (long int) data;
+	term_instance_t *active = &terms.active[n];
 
-	debugf ("For terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
+	if (active->argv != NULL) {
+		debugf ("Realized for terminal %d, cmd: %s.", n, active->argv[0]);
+	} else {
+		debugf ("Realized for terminal %d, no command.", n);
+	}
 
-	if (!terms.active[n].spawned) {
+	if (!active->spawned) {
 		g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, &term_spawn, data, NULL);
 	}
 }
 
 static void term_map (GtkWidget *widget, void *data)
 {
-	int n = (long int) data;
+	int				 n		= (long int) data;
+	term_instance_t *active = &terms.active[n];
 
-	debugf ("For terminal %d, spawned: %d, cmd: %s.", n, terms.active[n].spawned, terms.active[n].cmd);
-	// print_widget_size(GTK_WIDGET(widget), "term");
+	if (active->argv != NULL) {
+		debugf ("Mapped for terminal %d, cmd: %s.", n, active->argv[0]);
+	} else {
+		debugf ("Mapped for terminal %d, no command.", n);
+	}
 }
 
-static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle *bbox, gpointer user_data)
+static void term_hover_uri_changed (VteTerminal *term, gchar *uri, GdkRectangle *bound_box, gpointer user_data)
 {
 	int64_t n = (int64_t) user_data;
 
@@ -727,7 +836,7 @@ static gboolean term_termprops_changed (VteTerminal *term, int const *props, int
 }
 #endif
 
-void term_switch (long n, char *cmd, char **argv, char **env, int window_i)
+void term_switch (long n, char **argv, char **env, int window_i)
 {
 	if (n >= terms.n_active) {
 		errorf ("ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.", n, terms.n_active);
@@ -758,9 +867,12 @@ void term_switch (long n, char *cmd, char **argv, char **env, int window_i)
 		g_signal_connect (G_OBJECT (term), "termprops_changed", G_CALLBACK (term_termprops_changed), (void *) n);
 #endif
 
-		terms.active[n].cmd	 = cmd;
-		terms.active[n].argv = argv;
-		terms.active[n].env	 = env;
+		if (argv != NULL) {
+			terms.active[n].argv = g_strdupv ((gchar **) argv);
+		}
+		if (env != NULL) {
+			terms.active[n].env = g_strdupv (env);
+		}
 		terms.active[n].term = term;
 		terms.alive++;
 
@@ -939,7 +1051,7 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 			if ((state & key_bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (keyval - cur->key_min), cur->cmd, cur->argv, cur->env, window - &windows[0]);
+						term_switch (cur->base + (keyval - cur->key_min), cur->argv, cur->env, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
 						debugf ("Cut text");
@@ -1491,8 +1603,10 @@ void destroy_window (int i)
 
 static void activate (GtkApplication *app, gpointer user_data)
 {
-	bind_t *cur;
-	exec_t *exec = (exec_t *) user_data;
+	if (terms.active) {
+		debugf ("activate called when already activated");
+		return;
+	}
 
 	temu_parse_config ();
 	if (!terms.n_active) {
@@ -1501,28 +1615,17 @@ static void activate (GtkApplication *app, gpointer user_data)
 	}
 	terms.active = calloc (terms.n_active, sizeof (*terms.active));
 
-	if (exec->cmd || exec->argv) {
-		term_switch (0, exec->cmd, exec->argv, exec->env, 0);
-	} else {
-		for (cur = terms.keys; cur; cur = cur->next) {
-			if (cur->base == 0) {
-				break;
-			}
-		}
-
-		if (cur != NULL) {
-			term_switch (0, cur->cmd, cur->argv, cur->env, 0);
-		} else {
-			term_switch (0, NULL, NULL, NULL, 0);
-		}
+	if (!initial_cmd) {
+		initial_cmd = g_new0 (cmd_t, 1);
 	}
+
+	switch_cmd (initial_cmd);
 }
 
 int main (int argc, char *argv[], char *envp[])
 {
-	exec_t exec = {NULL};
-	int	   i;
-	char  *shell;
+	int	  i;
+	char *shell;
 
 	tzset ();
 
@@ -1546,24 +1649,21 @@ int main (int argc, char *argv[], char *envp[])
 	terms.bold_is_bright	  = true;
 	terms.mouse_autohide	  = true;
 
+	if (argc >= 1) {
+		initial_cmd					= g_new0 (cmd_t, 1);
+		initial_cmd->cli_exec		= g_new0 (exec_t, 1);
+		initial_cmd->cli_exec->argv = g_strdupv (argv);
+	}
+
 	if (chdir (getenv ("HOME")) != 0) {
 		errorf ("Unable to chdir to %s: %s", getenv ("HOME"), strerror (errno));
 	}
 
-	if (argc > 1) {
-		debugf ("argc: %d", argc);
-		exec.argv = calloc (argc + 1, sizeof (char *));
-		for (i = 0; i < argc; i++) {
-			exec.argv[i] = argv[i + 1];
-		}
-		exec.env = envp;
-	}
+	g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
 
-	g_signal_connect (app, "activate", G_CALLBACK (activate), &exec);
+	int status = g_application_run (G_APPLICATION (app), argc, argv);
 
-	g_application_run (G_APPLICATION (app), 0, NULL);
-
-	debugf ("Exiting, can free here. (%d)", terms.n_active);
+	debugf ("Exiting, status %d, can free here. (%d)", status, terms.n_active);
 	for (i = 0; i < terms.n_active; i++) {
 		if (terms.active[i].term) {
 			int page_num = gtk_notebook_page_num (windows[terms.active[i].window].notebook, GTK_WIDGET (terms.active[i].term));
@@ -1587,16 +1687,15 @@ int main (int argc, char *argv[], char *envp[])
 		bind_t *keys, *next;
 		for (keys = terms.keys; keys; keys = next) {
 			next = keys->next;
-			if (keys->cmd) {
-				free (keys->cmd);
-				keys->cmd = NULL;
+			if (keys->argv != NULL) {
+				g_strfreev ((char **) keys->argv);
 			}
 			free (keys);
 		}
 		terms.keys = NULL;
 	}
 
-	return 0;
+	return status;
 }
 
 // vim: set ts=4 sw=4 noexpandtab :

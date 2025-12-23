@@ -145,7 +145,7 @@ void do_move_to_window (GSimpleAction *self, GVariant *parameter, gpointer data)
 
 	if (term_find (widget, &i)) {
 		term_set_window (i, new_window_i);
-		term_switch (i, NULL, NULL, NULL, window_i);
+		term_switch (i, NULL, NULL, window_i);
 	}
 }
 
@@ -154,7 +154,7 @@ void do_switch_terminal (GSimpleAction *self, GVariant *parameter, gpointer data
 	long int i		  = ((long int) data) >> 8;
 	long int window_i = ((long int) data) & ((1 << 8) - 1);
 
-	term_switch (i, NULL, NULL, NULL, window_i);
+	term_switch (i, NULL, NULL, window_i);
 }
 
 void do_set_window_color_scheme (GSimpleAction *self, GVariant *parameter, gpointer data)

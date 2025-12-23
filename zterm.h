@@ -28,17 +28,21 @@ typedef struct bind_s {
 	guint		   key_min, key_max;
 	guint		   base;
 	struct bind_s *next;
-	char		  *cmd;
 	char		 **argv;
 	char		 **env;
 	bind_actions_t action;
 } bind_t;
 
 typedef struct {
-	char  *cmd;
 	char **argv;
 	char **env;
 } exec_t;
+
+typedef struct {
+	long	n;
+	int		window_i;
+	exec_t *cli_exec;
+} cmd_t;
 
 typedef struct bind_button_s {
 	guint				  state;
@@ -69,18 +73,19 @@ typedef struct window_s {
 	char *menu_hyperlink_uri;
 } window_t;
 
+typedef struct term_instance_s {
+	int		   spawned;
+	int		   moving;
+	int		   window;
+	char	 **argv; // NULL terminated.
+	char	 **env;	 // If this term has a unique environment.
+	char	  *hyperlink_uri;
+	char	   title[256];
+	GtkWidget *term;
+} term_instance_t;
+
 typedef struct terms_s {
-	struct {
-		int		   spawned;
-		int		   moving;
-		int		   window;
-		char	  *cmd;
-		char	 **argv; // NULL terminated, only evaluated if cmd is NULL.
-		char	 **env;	 // If this term has a unique environment.
-		char	  *hyperlink_uri;
-		char	   title[256];
-		GtkWidget *term;
-	} *active;
+	term_instance_t *active;
 
 	gint   n_active; // Total number of configured terms.
 	gint   alive;	 // Total number of 'alive' terms.
@@ -135,7 +140,7 @@ int		 _fnullf (const FILE *io, const char *fmt, ...) __attribute__ ((format (pri
 void	 do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 bool	 term_find (GtkWidget *term, int *i);
 void	 term_set_window (int n, int window_i);
-void	 term_switch (long n, char *cmd, char **argv, char **env, int window_i);
+void	 term_switch (long n, char **argv, char **env, int window_i);
 void	 temu_parse_config (void);
 void	 term_config (GtkWidget *term, int window_i);
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);

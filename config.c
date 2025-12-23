@@ -41,8 +41,10 @@ static void temu_parse_bind_switch (char **subs)
 	else
 		bind->key_max = bind->key_min;
 
-	if (subs[6])
-		bind->cmd = strdup (subs[6]);
+	if (subs[6]) {
+		bind->argv	  = g_new0 (char *, 2);
+		bind->argv[0] = g_strdup (subs[6]);
+	}
 
 	// We need to find the highest terminal number that this binding can use.
 	// We then make sure that n_active is, at minimum, that number.
