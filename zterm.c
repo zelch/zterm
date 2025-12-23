@@ -641,12 +641,12 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 {
 	const char	  *resolved_name;
 	int			   prop = 0;
-	gboolean	   bvalue;
-	int64_t		   ivalue;
-	uint64_t	   uivalue;
-	double		   dvalue;
+	gboolean	   b_value;
+	int64_t		   i_value;
+	uint64_t	   ui_value;
+	double		   d_value;
 	GdkRGBA		   color_value;
-	const char	  *svalue;
+	const char	  *s_value;
 	const uint8_t *data_value;
 	size_t		   value_len;
 
@@ -662,20 +662,20 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 				debugf ("termprop: %s, type: VALUELESS %d, term: %ld", name, type, n);
 				break;
 			case VTE_PROPERTY_BOOL:
-				vte_terminal_get_termprop_bool_by_id (term, prop, &bvalue);
-				debugf ("termprop: %s, type: BOOL %d, value: %d, term: %ld", name, type, bvalue, n);
+				vte_terminal_get_termprop_bool_by_id (term, prop, &b_value);
+				debugf ("termprop: %s, type: BOOL %d, value: %d, term: %ld", name, type, b_value, n);
 				break;
 			case VTE_PROPERTY_INT:
-				vte_terminal_get_termprop_int_by_id (term, prop, &ivalue);
-				debugf ("termprop: %s, type: INT %d, value: %ld, term: %ld", name, type, ivalue, n);
+				vte_terminal_get_termprop_int_by_id (term, prop, &i_value);
+				debugf ("termprop: %s, type: INT %d, value: %ld, term: %ld", name, type, i_value, n);
 				break;
 			case VTE_PROPERTY_UINT:
-				vte_terminal_get_termprop_uint_by_id (term, prop, &uivalue);
-				debugf ("termprop: %s, type: UINT %d, value: %ld, term: %ld", name, type, uivalue, n);
+				vte_terminal_get_termprop_uint_by_id (term, prop, &ui_value);
+				debugf ("termprop: %s, type: UINT %d, value: %ld, term: %ld", name, type, ui_value, n);
 				break;
 			case VTE_PROPERTY_DOUBLE:
-				vte_terminal_get_termprop_double_by_id (term, prop, &dvalue);
-				debugf ("termprop: %s, type: DOUBLE %d, value: %f, term: %ld", name, type, dvalue, n);
+				vte_terminal_get_termprop_double_by_id (term, prop, &d_value);
+				debugf ("termprop: %s, type: DOUBLE %d, value: %f, term: %ld", name, type, d_value, n);
 				break;
 			case VTE_PROPERTY_RGB:
 			case VTE_PROPERTY_RGBA:
@@ -683,8 +683,8 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 				debugf ("termprop: %s, type: RGBA %d, value: _, term: %ld", name, type, n);
 				break;
 			case VTE_PROPERTY_STRING:
-				svalue = vte_terminal_get_termprop_string_by_id (term, prop, &value_len);
-				debugf ("termprop: %s, type: STRING %d, value: %s, len: %ld, term: %ld", name, type, svalue, value_len, n);
+				s_value = vte_terminal_get_termprop_string_by_id (term, prop, &value_len);
+				debugf ("termprop: %s, type: STRING %d, value: %s, len: %ld, term: %ld", name, type, s_value, value_len, n);
 				break;
 			case VTE_PROPERTY_DATA:
 			case VTE_PROPERTY_UUID:
@@ -697,9 +697,9 @@ static void term_termprop_changed (VteTerminal *term, int id, VtePropertyType ty
 					debugf ("Unable to get URI.");
 					break;
 				}
-				svalue = g_uri_to_string (uri_value);
-				debugf ("termprop: %s, type: URI %d, value: %s, term: %ld", name, type, svalue, n);
-				free ((void *) svalue);
+				s_value = g_uri_to_string (uri_value);
+				debugf ("termprop: %s, type: URI %d, value: %s, term: %ld", name, type, s_value, n);
+				free ((void *) s_value);
 				g_uri_unref (uri_value);
 				break;
 		}
