@@ -1032,9 +1032,13 @@ void term_switch (long n, char **argv, char **env, int window_i)
 
 		if (argv != NULL) {
 			terms.active[n].argv = g_strdupv ((gchar **) argv);
+		} else {
+			terms.active[n].argv = NULL;
 		}
 		if (env != NULL) {
 			terms.active[n].env = g_strdupv (env);
+		} else {
+			terms.active[n].env = NULL;
 		}
 		terms.active[n].term = term;
 		terms.alive++;
