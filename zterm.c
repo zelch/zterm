@@ -385,7 +385,7 @@ void term_set_window (int n, int window_i)
 {
 	GtkWidget *term = terms.active[n].term;
 
-	// Create a new window if we are passed a non-existant window.
+	// Create a new window if we are passed a non-existent window.
 	if (!windows[window_i].window) {
 		window_i = new_window ();
 		debugf ("Setting term %d to NEW window %d.", n, window_i);

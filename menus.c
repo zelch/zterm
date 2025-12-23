@@ -104,7 +104,7 @@ void do_t_fullscreen (GSimpleAction *self, GVariant *parameter, gpointer data)
 	}
 }
 
-void do_t_tabbar (GSimpleAction *self, GVariant *parameter, gpointer data)
+void do_t_tab_bar (GSimpleAction *self, GVariant *parameter, gpointer data)
 {
 	long int i = (long int) data;
 
@@ -293,7 +293,7 @@ static void rebuild_window_menu (long int window_n)
 	GMenu *config = g_menu_new ();
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Decorations", "decorations", do_t_decorate, window_n);
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Fullscreen", "fullscreen", do_t_fullscreen, window_n);
-	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Tab bar", "tab_bar", do_t_tabbar, window_n);
+	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Tab bar", "tab_bar", do_t_tab_bar, window_n);
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Reload config file", "reload_config", do_reload_config,
 				   window_n);
 	g_menu_append_section (main, "Config", G_MENU_MODEL (config));
