@@ -9,7 +9,7 @@ static int zregcomp (regex_t *restrict preg, const char *restrict regex, int cfl
 		char errbuf[128] = {0};
 
 		regerror (ret, preg, errbuf, sizeof (errbuf) - 1);
-		errorf ("recomp failed: %d (%s) for regex '%s'", ret, errbuf, regex);
+		errorf ("regcomp failed: %d (%s) for regex '%s'", ret, errbuf, regex);
 	}
 
 	return ret;
