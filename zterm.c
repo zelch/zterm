@@ -283,10 +283,11 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 		debugf ("Found remaining arguments '%s': '%s'", G_OPTION_REMAINING, remaining);
 	}
 
-	cmd_t			  *cmd	= g_new0 (cmd_t, 1);
-	int				   argc = 0;
-	char			 **argv = g_application_command_line_get_arguments (cmdline, &argc);
-	const char *const *env	= g_application_command_line_get_environ (cmdline);
+	cmd_t			  *cmd		   = g_new0 (cmd_t, 1);
+	int				   argc		   = 0;
+	char			 **argv		   = g_application_command_line_get_arguments (cmdline, &argc);
+	const char *const *env		   = g_application_command_line_get_environ (cmdline);
+	bool			   have_term_n = false;
 	debugf ("argc: %d, argv: %p", argc, argv);
 
 	if (argc > 1) {
@@ -323,6 +324,18 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 			}
 
 			debugf ("Switching to terminal %ld.", cmd->n + 1);
+			have_term_n = true;
+		}
+	}
+	if (!have_term_n) {
+		for (int i = 0; i < terms.n_active; i++) {
+			if (!terms.active[i].spawned) {
+				cmd->n		= i;
+				have_term_n = true;
+
+				debugf ("Found unused terminal %d to switch to.", i + 1);
+				break;
+			}
 		}
 	}
 
