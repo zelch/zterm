@@ -95,7 +95,107 @@ window_t windows[MAX_WINDOWS];
 
 GtkApplication *app;
 
+static const GOptionEntry cli_options[] = {
+  {"switch", 's', 0, G_OPTION_ARG_STRING, NULL, "Switch to terminal by number, key, or PTS", "TARGET"},
+  {NULL},
+};
+
 static cmd_t *initial_cmd = NULL;
+
+static bool switch_target_is_number (const char *target, long *out)
+{
+	char *end = NULL;
+	long  num = strtol (target, &end, 10);
+
+	if (target[0] == '\0' || (end && *end != '\0')) {
+		return false;
+	}
+
+	if (num > 0) {
+		num -= 1;
+	}
+
+	if (num < 0) {
+		return false;
+	}
+
+	*out = num;
+	return true;
+}
+
+static bool switch_target_is_key (const char *target, long *out)
+{
+	guint			key	  = 0;
+	GdkModifierType state = 0;
+
+	gtk_accelerator_parse (target, &key, &state);
+	if (!key) {
+		return false;
+	}
+
+	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
+		if (cur->action != BIND_ACT_SWITCH) {
+			continue;
+		}
+
+		if ((state & key_bind_mask) != cur->state) {
+			continue;
+		}
+
+		if (key < cur->key_min || key > cur->key_max) {
+			continue;
+		}
+
+		long n = cur->base + (key - cur->key_min);
+
+		*out = n;
+		return true;
+	}
+
+	return false;
+}
+
+static bool switch_target_is_pts (const char *target, long *out)
+{
+	const char *needle = target;
+
+	if (g_str_has_prefix (target, "/dev/")) {
+		needle = target + 5;
+	}
+
+	if (!terms.active) {
+		return false;
+	}
+
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i].term == NULL) {
+			continue;
+		}
+
+		VtePty *pty = vte_terminal_get_pty (VTE_TERMINAL (terms.active[i].term));
+		if (!pty) {
+			continue;
+		}
+
+		int	  fd  = vte_pty_get_fd (pty);
+		char *pts = ptsname (fd);
+
+		if (!pts) {
+			continue;
+		}
+
+		if (g_str_has_prefix (pts, "/dev/")) {
+			pts += 5;
+		}
+
+		if (!strcmp (pts, needle)) {
+			*out = i;
+			return true;
+		}
+	}
+
+	return false;
+}
 
 static void free_cli_exec (exec_t **cli_exec_ptr)
 {
@@ -169,6 +269,69 @@ static bool switch_cmd (cmd_t *cmd)
 
 	free_cmd (&cmd);
 	return true;
+}
+
+static int command_line (GApplication *application, GApplicationCommandLine *cmdline, gpointer user_data)
+{
+
+	GVariantDict *dict			= g_application_command_line_get_options_dict (cmdline);
+	const char	 *switch_target = NULL;
+
+	debugf ("command_line called.");
+	const char *remaining;
+	if (g_variant_dict_lookup (dict, G_OPTION_REMAINING, "&s", &remaining)) {
+		debugf ("Found remaining arguments '%s': '%s'", G_OPTION_REMAINING, remaining);
+	}
+
+	cmd_t			  *cmd	= g_new0 (cmd_t, 1);
+	int				   argc = 0;
+	char			 **argv = g_application_command_line_get_arguments (cmdline, &argc);
+	const char *const *env	= g_application_command_line_get_environ (cmdline);
+	debugf ("argc: %d, argv: %p", argc, argv);
+
+	if (argc > 1) {
+		int base = 1;
+		if (!strcmp (argv[base], "--")) {
+			base++;
+		}
+
+		debugf ("Processing command line exec arguments.");
+		cmd->cli_exec		= g_new0 (exec_t, 1);
+		cmd->cli_exec->argv = g_strdupv ((char **) &argv[base]);
+		if (env != NULL) {
+			cmd->cli_exec->env = g_strdupv ((char **) env);
+		}
+		for (int i = 0; cmd->cli_exec->argv[i] != NULL; i++) {
+			debugf ("  argv[%d]: '%s'", i, cmd->cli_exec->argv[i]);
+		}
+	}
+
+	g_strfreev (argv);
+
+	if (g_variant_dict_lookup (dict, "switch", "&s", &switch_target)) {
+		debugf ("Found switch argument: '%s'", switch_target);
+		if (switch_target) {
+			if (switch_target_is_number (switch_target, &cmd->n)) {
+				/* switch_lookup_command_for_index (remote_cmd->n, &cmd, &argv, &env); */
+			} else if (switch_target_is_key (switch_target, &cmd->n)) {
+				// Already set.
+			} else if (switch_target_is_pts (switch_target, &cmd->n)) {
+			} else {
+				errorf ("Unable to resolve switch target '%s'.", switch_target);
+				g_application_command_line_set_exit_status (cmdline, 1);
+				return 1;
+			}
+
+			debugf ("Switching to terminal %ld.", cmd->n + 1);
+		}
+	}
+
+	switch_cmd (cmd);
+
+	/* g_application_command_line_done (cmdline); */
+
+	g_application_activate (application);
+	return 0;
 }
 
 static void		window_pressed_event (GtkGestureClick *gesture, gint n_press, gdouble x, double y, gpointer user_data);
@@ -1632,7 +1795,9 @@ int main (int argc, char *argv[], char *envp[])
 	g_set_application_name ("zterm");
 	app = gtk_application_new ("org.aehallh.zterm", 0);
 	g_application_set_application_id (G_APPLICATION (app), "com.aehallh.zterm");
-	g_application_set_flags (G_APPLICATION (app), G_APPLICATION_NON_UNIQUE);
+	g_application_add_main_option_entries (G_APPLICATION (app), cli_options);
+	g_signal_connect (app, "command-line", G_CALLBACK (command_line), NULL);
+	g_application_set_flags (G_APPLICATION (app), G_APPLICATION_HANDLES_COMMAND_LINE);
 
 	memset (&terms, 0, sizeof (terms));
 	terms.envp = envp;
