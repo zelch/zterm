@@ -45,6 +45,17 @@ static void temu_parse_bind_switch (char **subs)
 		bind->argv	  = g_new0 (char *, 2);
 		bind->argv[0] = g_strdup (subs[6]);
 	}
+	for (int i = 7; subs[i]; i++) {
+		int argc = 0;
+
+		if (bind->argv) {
+			for (argc = 0; bind->argv[argc]; argc++) {
+			}
+		}
+		bind->argv			 = g_renew (char *, bind->argv, argc + 2);
+		bind->argv[argc]	 = g_strdup (subs[i]);
+		bind->argv[argc + 1] = NULL;
+	}
 
 	// We need to find the highest terminal number that this binding can use.
 	// We then make sure that n_active is, at minimum, that number.
@@ -258,7 +269,7 @@ void temu_parse_config (void)
 
 	zregcomp (&bind_action, "^bind:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
 	zregcomp (&bind_button, "^bind_button:[ \t]+([a-zA-Z_]+)[ \t]+([^\\s]+)[ \t]+([0-9_]+)$", REG_ENHANCED | REG_EXTENDED);
-	zregcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?))?$",
+	zregcomp (&bind_switch, "^bind:[ \t]+([0-9]+)[ \t]+([^\\s]+)[ \t]+([a-zA-Z0-9_]+)(-([a-zA-Z0-9_]+))?([ \t]+(.*?)+)?$",
 			  REG_ENHANCED | REG_EXTENDED);
 
 	zregcomp (&bind_ignore, "^ignore_mod:[ \t]+([^ \t]+)$", REG_ENHANCED | REG_EXTENDED);
