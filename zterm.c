@@ -629,7 +629,6 @@ void term_set_window (int n, int window_i)
 				gtk_notebook_prev_page (windows[i].notebook);
 				debugf ("%d pages for notebook %p of window %d", gtk_notebook_get_n_pages (windows[i].notebook),
 						windows[i].notebook, i);
-				// gtk_notebook_remove_page(windows[i].notebook, gtk_notebook_page_num(windows[i].notebook, GTK_WIDGET(term)));
 				gtk_notebook_detach_tab (windows[i].notebook, GTK_WIDGET (term));
 				debugf ("%d pages for notebook %p of window %d", gtk_notebook_get_n_pages (windows[i].notebook),
 						windows[i].notebook, i);
