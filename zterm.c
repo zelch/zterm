@@ -97,6 +97,7 @@ GtkApplication *app;
 
 static const GOptionEntry cli_options[] = {
   {"switch", 's', 0, G_OPTION_ARG_STRING, NULL, "Switch to terminal by number, key, or PTS", "TARGET"},
+  {"list", 'l', 0, G_OPTION_ARG_NONE, NULL, "List terminals", NULL},
   {NULL},
 };
 
@@ -276,6 +277,7 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 
 	GVariantDict *dict			= g_application_command_line_get_options_dict (cmdline);
 	const char	 *switch_target = NULL;
+	gboolean	  list_terms	= FALSE;
 
 	debugf ("command_line called.");
 	const char *remaining;
@@ -337,6 +339,38 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 				break;
 			}
 		}
+	}
+
+	if (g_variant_dict_lookup (dict, "list", "b", &list_terms) && list_terms) {
+		g_application_command_line_print (cmdline, "Printing terminal list...\n");
+		for (int window_i = 0; window_i < MAX_WINDOWS; window_i++) {
+			if (windows[window_i].window) {
+				g_application_command_line_print (cmdline, "Window %d:\n", window_i);
+				g_application_command_line_print (cmdline, "  %-2s  %-6s  %-20s  %s\n", "#", "PTS", "Binding", "Title");
+				for (int i = 0; i < terms.n_active; i++) {
+					if (terms.active[i].term && terms.active[i].window == window_i) {
+						for (bind_t *cur = terms.keys; cur; cur = cur->next) {
+							if (cur->action == BIND_ACT_SWITCH) {
+								if (i >= cur->base && i <= (cur->base + (cur->key_max - cur->key_min))) {
+									gchar  *binding = gtk_accelerator_name (cur->key_min + (i - cur->base), cur->state);
+									VtePty *pty		= vte_terminal_get_pty (VTE_TERMINAL (terms.active[i].term));
+									int		fd		= vte_pty_get_fd (pty);
+									char   *pts		= ptsname (fd);
+									if (g_str_has_prefix (pts, "/dev/")) {
+										pts += 5;
+									}
+
+									g_application_command_line_print (cmdline, "  %-2d  %-6s  %-20s  %s\n", i + 1, pts, binding,
+																	  terms.active[i].title);
+									break;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return 0;
 	}
 
 	switch_cmd (cmd);
@@ -1809,9 +1843,14 @@ int main (int argc, char *argv[], char *envp[])
 
 	tzset ();
 
-	g_set_application_name ("zterm");
-	app = gtk_application_new ("org.aehallh.zterm", 0);
-	g_application_set_application_id (G_APPLICATION (app), "com.aehallh.zterm");
+#ifdef DEBUF
+#	define ZTERM_NAME "zterm.debug"
+#else
+#	define ZTERM_NAME "zterm"
+#endif
+	g_set_application_name (ZTERM_NAME);
+	app = gtk_application_new ("org.aehallh" ZTERM_NAME, 0);
+	g_application_set_application_id (G_APPLICATION (app), "org.aehallh" ZTERM_NAME);
 	g_application_add_main_option_entries (G_APPLICATION (app), cli_options);
 	g_signal_connect (app, "command-line", G_CALLBACK (command_line), NULL);
 	g_application_set_flags (G_APPLICATION (app), G_APPLICATION_HANDLES_COMMAND_LINE);
