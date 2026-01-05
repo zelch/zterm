@@ -550,6 +550,19 @@ static gboolean term_died (VteTerminal *term, int status)
 		gtk_notebook_remove_page (windows[window_i].notebook, i);
 		debugf ("");
 	}
+	// Remove from any previous window.
+	for (int i = 0; i < MAX_WINDOWS; i++) {
+		if (windows[i].window) {
+			int page_num = gtk_notebook_page_num (windows[i].notebook, GTK_WIDGET (term));
+			if (page_num >= 0) {
+				debugf ("Removing term %d for notebook %p (page %d) from window %d. (%d pages in notebook)", n,
+						windows[i].notebook, page_num, i, gtk_notebook_get_n_pages (windows[i].notebook));
+				gtk_notebook_remove_page (windows[i].notebook, page_num);
+				debugf ("%d pages for notebook %p of window %d", gtk_notebook_get_n_pages (windows[i].notebook),
+						windows[i].notebook, i);
+			}
+		}
+	}
 
 	prune_windows ();
 	debugf ("");
