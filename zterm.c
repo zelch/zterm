@@ -285,10 +285,11 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 		debugf ("Found remaining arguments '%s': '%s'", G_OPTION_REMAINING, remaining);
 	}
 
-	cmd_t			  *cmd	= g_new0 (cmd_t, 1);
-	int				   argc = 0;
-	char			 **argv = g_application_command_line_get_arguments (cmdline, &argc);
-	const char *const *env	= g_application_command_line_get_environ (cmdline);
+	cmd_t			  *cmd		   = g_new0 (cmd_t, 1);
+	int				   argc		   = 0;
+	char			 **argv		   = g_application_command_line_get_arguments (cmdline, &argc);
+	const char *const *env		   = g_application_command_line_get_environ (cmdline);
+	bool			   have_term_n = false;
 	debugf ("argc: %d, argv: %p", argc, argv);
 
 	if (argc > 1) {
@@ -325,6 +326,18 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 			}
 
 			debugf ("Switching to terminal %ld.", cmd->n + 1);
+			have_term_n = true;
+		}
+	}
+	if (!have_term_n) {
+		for (int i = 0; i < terms.n_active; i++) {
+			if (!terms.active[i].spawned) {
+				cmd->n		= i;
+				have_term_n = true;
+
+				debugf ("Found unused terminal %d to switch to.", i + 1);
+				break;
+			}
 		}
 	}
 
@@ -1084,9 +1097,13 @@ void term_switch (long n, char **argv, char **env, int window_i)
 
 		if (argv != NULL) {
 			terms.active[n].argv = g_strdupv ((gchar **) argv);
+		} else {
+			terms.active[n].argv = NULL;
 		}
 		if (env != NULL) {
 			terms.active[n].env = g_strdupv (env);
+		} else {
+			terms.active[n].env = NULL;
 		}
 		terms.active[n].term = term;
 		terms.alive++;
