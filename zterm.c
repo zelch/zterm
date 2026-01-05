@@ -1859,9 +1859,7 @@ int main (int argc, char *argv[], char *envp[])
 	terms.font_scale		  = 1;
 	terms.scroll_on_output	  = false;
 	terms.scroll_on_keystroke = true;
-	terms.rewrap_on_resize	  = true;
 	terms.scrollback_lines	  = 512;
-	terms.allow_bold		  = false;
 	terms.bold_is_bright	  = true;
 	terms.mouse_autohide	  = true;
 

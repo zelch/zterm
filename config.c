@@ -369,15 +369,8 @@ void temu_parse_config (void)
 					terms.scroll_on_output = atoi (subs[1]);
 				} else if (!strcmp (subs[0], "scroll_on_keystroke")) {
 					terms.scroll_on_keystroke = atoi (subs[1]);
-				} else if (!strcmp (subs[0], "rewrap_on_resize")) {
-					terms.rewrap_on_resize = atoi (subs[1]);
-					if (!terms.rewrap_on_resize) {
-						errorf ("NOT SUPPORTED: rewrap_on_resize = 0");
-					}
 				} else if (!strcmp (subs[0], "scrollback_lines")) {
 					terms.scrollback_lines = atoi (subs[1]);
-				} else if (!strcmp (subs[0], "allow_bold")) {
-					terms.allow_bold = atoi (subs[1]);
 				} else if (!strcmp (subs[0], "bold_is_bright")) {
 					terms.bold_is_bright = atoi (subs[1]);
 				} else if (!strcmp (subs[0], "mouse_autohide")) {

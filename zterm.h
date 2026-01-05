@@ -100,9 +100,7 @@ typedef struct terms_s {
 	gdouble		   font_scale;
 	gboolean	   scroll_on_output;
 	gboolean	   scroll_on_keystroke;
-	gboolean	   rewrap_on_resize;
 	glong		   scrollback_lines;
-	gboolean	   allow_bold;
 	gboolean	   bold_is_bright;
 	gboolean	   mouse_autohide;
 
