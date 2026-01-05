@@ -15,47 +15,33 @@ static int zregcomp (regex_t *restrict preg, const char *restrict regex, int cfl
 	return ret;
 }
 
-static void temu_parse_bind_switch (char **subs)
+static void zterm_parse_bind_switch (int base, char *state, char *key_min, char *key_max, char **argv, char **env)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
 	bind->next	 = terms.keys;
 	terms.keys	 = bind;
 
 	bind->action = BIND_ACT_SWITCH;
-	bind->base	 = strtol (subs[0], NULL, 0);
-	bind->state	 = strtol (subs[1], NULL, 0);
+	bind->base = base, bind->state = strtol (state, NULL, 0);
 	// The new style is actually a GTK accelerator string, but with only the modifier component.
 	if (bind->state == 0) {
-		gtk_accelerator_parse (subs[1], NULL, &bind->state);
+		gtk_accelerator_parse (state, NULL, &bind->state);
 		if (bind->state) {
-			debugf ("Parsing '%s' as accelerator, result: 0x%x", subs[1], bind->state);
+			debugf ("Parsing '%s' as accelerator, result: 0x%x", state, bind->state);
 		} else {
-			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s-%s %s", subs[1], subs[0], subs[1],
-					subs[2], subs[4], subs[6]);
+			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %d %s %s-%s", state, base, state, key_min,
+					key_max);
 			return;
 		}
 	}
-	bind->key_min = gdk_keyval_from_name (subs[2]);
-	if (subs[4])
-		bind->key_max = gdk_keyval_from_name (subs[4]);
+	bind->key_min = gdk_keyval_from_name (key_min);
+	if (key_max)
+		bind->key_max = gdk_keyval_from_name (key_max);
 	else
 		bind->key_max = bind->key_min;
 
-	if (subs[6]) {
-		bind->argv	  = g_new0 (char *, 2);
-		bind->argv[0] = g_strdup (subs[6]);
-	}
-	for (int i = 7; subs[i]; i++) {
-		int argc = 0;
-
-		if (bind->argv) {
-			for (argc = 0; bind->argv[argc]; argc++) {
-			}
-		}
-		bind->argv			 = g_renew (char *, bind->argv, argc + 2);
-		bind->argv[argc]	 = g_strdup (subs[i]);
-		bind->argv[argc + 1] = NULL;
-	}
+	bind->argv = argv;
+	bind->env  = env;
 
 	// We need to find the highest terminal number that this binding can use.
 	// We then make sure that n_active is, at minimum, that number.
@@ -65,27 +51,38 @@ static void temu_parse_bind_switch (char **subs)
 	}
 }
 
-static void temu_parse_bind_action (char **subs)
+static void temu_parse_bind_switch (char **subs)
+{
+	int	   base = strtol (subs[0], NULL, 0);
+	char **argv = NULL;
+	if (subs[6]) {
+		argv = &subs[6];
+	}
+
+	zterm_parse_bind_switch (base, subs[1], subs[2], subs[4], argv, NULL);
+}
+
+static void zterm_parse_bind_action (char *action, char *state, char *key)
 {
 	char	bind_str[128] = {0};
 	bind_t *bind		  = calloc (1, sizeof (bind_t));
 
-	if (!strcasecmp (subs[0], "CUT")) {
+	if (!strcasecmp (action, "CUT")) {
 		bind->action = BIND_ACT_CUT;
-	} else if (!strcasecmp (subs[0], "CUT_HTML")) {
+	} else if (!strcasecmp (action, "CUT_HTML")) {
 		bind->action = BIND_ACT_CUT_HTML;
-	} else if (!strcasecmp (subs[0], "CUT_URI")) {
+	} else if (!strcasecmp (action, "CUT_URI")) {
 		bind->action = BIND_ACT_CUT_URI;
-	} else if (!strcasecmp (subs[0], "PASTE")) {
+	} else if (!strcasecmp (action, "PASTE")) {
 		bind->action = BIND_ACT_PASTE;
-	} else if (!strcasecmp (subs[0], "MENU")) {
+	} else if (!strcasecmp (action, "MENU")) {
 		bind->action = BIND_ACT_MENU;
-	} else if (!strcasecmp (subs[0], "NEXT_TERM")) {
+	} else if (!strcasecmp (action, "NEXT_TERM")) {
 		bind->action = BIND_ACT_NEXT_TERM;
-	} else if (!strcasecmp (subs[0], "PREV_TERM")) {
+	} else if (!strcasecmp (action, "PREV_TERM")) {
 		bind->action = BIND_ACT_PREV_TERM;
 	} else {
-		errorf ("Unknown bind action '%s'.", subs[0]);
+		errorf ("Unknown bind action '%s'.", action);
 		free (bind);
 		return;
 	}
@@ -94,72 +91,75 @@ static void temu_parse_bind_action (char **subs)
 	terms.keys = bind;
 
 	// The new style is actually a GTK accelerator string, but with only the modifier component.
-	snprintf (bind_str, sizeof (bind_str) - 1, "%s%s", subs[1], subs[2]);
+	snprintf (bind_str, sizeof (bind_str) - 1, "%s%s", state, key);
 
 	gtk_accelerator_parse (bind_str, &bind->key_max, &bind->state);
 	debugf ("Parsing '%s' as accelerator, result: state: 0x%x, keyval: 0x%x", bind_str, bind->state, bind->key_max);
 	if (bind->key_max) {
 		bind->key_min = bind->key_max;
 	} else {
-		int ret		  = gtk_accelerator_parse (subs[1], NULL, &bind->state);
-		bind->key_min = bind->key_max = strtol (subs[2], NULL, 0);
+		int ret		  = gtk_accelerator_parse (state, NULL, &bind->state);
+		bind->key_min = bind->key_max = strtol (key, NULL, 0);
 		debugf ("Parsing '%s' as partial accelerator, result: state: 0x%x, keyval: 0x%x, ret: %d", bind_str, bind->state,
 				bind->key_max, ret);
 		if (!ret) {
-			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1],
-					subs[2]);
+			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", state, action, state, key);
 			return;
 		} else if (!bind->key_max) {
-			errorf ("Error: Unable to parse '%s' as key, skipping bind: %s %s %s", subs[2], subs[0], subs[1], subs[2]);
+			errorf ("Error: Unable to parse '%s' as key, skipping bind: %s %s %s", key, action, state, key);
 			return;
 		}
 	}
 
-	debugf ("Binding: keyval: 0x%x, state: 0x%x, action: %d (%s %s %s)", bind->key_min, bind->state, bind->action, subs[0],
-			subs[1], subs[2]);
+	debugf ("Binding: keyval: 0x%x, state: 0x%x, action: %d (%s %s %s)", bind->key_min, bind->state, bind->action, action, state,
+			key);
 }
 
-static void temu_parse_bind_button (char **subs)
+static void temu_parse_bind_action (char **subs)
+{
+	zterm_parse_bind_action (subs[0], subs[1], subs[2]);
+}
+
+static void zterm_parse_bind_button (char *action, char *state, int button)
 {
 	bind_button_t *bind = calloc (1, sizeof (bind_button_t));
 
 	debugf ();
-	if (!strcasecmp (subs[0], "OPEN_URI")) {
+	if (!strcasecmp (action, "OPEN_URI")) {
 		bind->action = BIND_ACT_OPEN_URI;
-	} else if (!strcasecmp (subs[0], "CUT_URI")) {
+	} else if (!strcasecmp (action, "CUT_URI")) {
 		bind->action = BIND_ACT_CUT_URI;
 	} else {
-		errorf ("Unknown bind action '%s'.", subs[0]);
+		errorf ("Unknown bind action '%s'.", action);
 		free (bind);
 		return;
 	}
 
-	bind->button = strtol (subs[2], NULL, 0);
+	bind->button = button;
 
 	bind->next	  = terms.buttons;
 	terms.buttons = bind;
 
-	int ret = gtk_accelerator_parse (subs[1], NULL, &bind->state);
-	debugf ("Parsing '%s' as partial accelerator, result: state: 0x%x, button: %d, ret: %d", subs[1], bind->state, bind->button,
+	int ret = gtk_accelerator_parse (state, NULL, &bind->state);
+	debugf ("Parsing '%s' as partial accelerator, result: state: 0x%x, button: %d, ret: %d", state, bind->state, bind->button,
 			ret);
 	if (!ret) {
-		bind->state = strtol (subs[1], NULL, 0);
+		bind->state = strtol (state, NULL, 0);
 		if (bind->state) {
-			debugf ("Parsing '%s' as numeric value, result: state: 0x%x, button: %d, ret: %d", subs[1], bind->state, bind->button,
+			debugf ("Parsing '%s' as numeric value, result: state: 0x%x, button: %d, ret: %d", state, bind->state, bind->button,
 					ret);
 			button_bind_mask |= bind->state;
 		} else {
-			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1],
-					subs[2]);
+			errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %d", state, action, state, button);
 			return;
 		}
 
-		errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %s", subs[1], subs[0], subs[1], subs[2]);
+		errorf ("Error: Unable to parse '%s' as GTK Accelerator, skipping bind: %s %s %d", state, action, state, button);
 		return;
 	}
 
-	debugf ("Binding: button: %d, state: 0x%x, action: %d (%s %s %s)", bind->button, bind->state, bind->action, subs[0], subs[1],
-			subs[2]);
+	debugf ("Binding: button: %d, state: 0x%x, action: %d (%s %s %d)", bind->button, bind->state, bind->action, action, state,
+			button);
 
 	gchar *name	 = gtk_accelerator_name (0, bind->state);
 	gchar *label = gtk_accelerator_get_label (0, bind->state);
@@ -168,13 +168,18 @@ static void temu_parse_bind_button (char **subs)
 	g_free (name);
 }
 
-static void temu_parse_bind_ignore (char **subs)
+static void temu_parse_bind_button (char **subs)
+{
+	zterm_parse_bind_button (subs[0], subs[1], strtol (subs[2], NULL, 0));
+}
+
+static void zterm_parse_bind_ignore (char *state_input)
 {
 	guint key, state;
 
-	gtk_accelerator_parse (subs[0], &key, &state);
+	gtk_accelerator_parse (state_input, &key, &state);
 
-	debugf ("Parsing '%s' as accelerator, result: state: 0x%x, keyval: 0x%x", subs[0], state, key);
+	debugf ("Parsing '%s' as accelerator, result: state: 0x%x, keyval: 0x%x", state_input, state, key);
 
 	if (key != 0 || state == 0) {
 		errorf ("Error: ignore value must only be states.");
@@ -183,6 +188,11 @@ static void temu_parse_bind_ignore (char **subs)
 
 	key_bind_mask &= ~state;
 	button_bind_mask &= ~state;
+}
+
+static void temu_parse_bind_ignore (char **subs)
+{
+	zterm_parse_bind_ignore (subs[0]);
 }
 
 static void temu_free_keys (void)
