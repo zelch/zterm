@@ -1875,12 +1875,6 @@ int main (int argc, char *argv[], char *envp[])
 	terms.bold_is_bright	  = true;
 	terms.mouse_autohide	  = true;
 
-	if (argc >= 1) {
-		initial_cmd					= g_new0 (cmd_t, 1);
-		initial_cmd->cli_exec		= g_new0 (exec_t, 1);
-		initial_cmd->cli_exec->argv = g_strdupv (argv);
-	}
-
 	if (chdir (getenv ("HOME")) != 0) {
 		errorf ("Unable to chdir to %s: %s", getenv ("HOME"), strerror (errno));
 	}
