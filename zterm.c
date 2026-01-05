@@ -730,6 +730,7 @@ void term_config (GtkWidget *term, int window_i)
 		} else {
 			debugf ("regex failed to compile '%s', we should add error handling.", pattern);
 		}
+		vte_regex_unref (regex);
 	}
 
 	if (terms.color_schemes[windows[window_i].color_scheme].name[0]) {
@@ -1784,13 +1785,19 @@ int new_window (void)
 void destroy_window (int i)
 {
 	if (windows[i].window) {
-		debugf ("Destroying window[%d].", i);
+		debugf ("Removing notebook pages for window[%d].", i);
+		for (int j = gtk_notebook_get_n_pages (windows[i].notebook); j >= 0; j--) {
+			gtk_notebook_remove_page (windows[i].notebook, j);
+		}
+
+		debugf ("Unmapping window[%d].", i);
+		gtk_widget_unmap (windows[i].window);
 		debugf ("unparent windows[%d].menu: %p", i, windows[i].menu);
 		gtk_widget_unparent (GTK_WIDGET (windows[i].menu));
-		debugf ("");
+		debugf ("Removing window[%d] from application.", i);
 		gtk_application_remove_window (app, GTK_WINDOW (windows[i].window));
+		debugf ("Destroying window[%d].", i);
 		gtk_window_destroy (GTK_WINDOW (windows[i].window));
-		debugf ("");
 		windows[i].notebook		  = NULL;
 		windows[i].window		  = NULL;
 		windows[i].menu			  = NULL;
