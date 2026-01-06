@@ -1867,7 +1867,7 @@ int main (int argc, char *argv[], char *envp[])
 
 	tzset ();
 
-#ifdef DEBUF
+#ifdef DEBUG
 #	define ZTERM_NAME "zterm.debug"
 #else
 #	define ZTERM_NAME "zterm"
