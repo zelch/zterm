@@ -439,13 +439,14 @@ static void temu_window_title_change (VteTerminal *terminal, long int n)
 	int			window_i	= terms.active[n].window;
 	int			notebook_i	= 0;
 	VtePty	   *pty			= vte_terminal_get_pty (terminal);
+	char	   *pts			= NULL;
 
 	if (pty == NULL) {
 		debugf ("pty not set for terminal %ld", n);
-		return;
+	} else {
+		int pty_fd = vte_pty_get_fd (pty);
+		pts		   = ptsname (pty_fd);
 	}
-	int	  pty_fd = vte_pty_get_fd (pty);
-	char *pts	 = ptsname (pty_fd);
 
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
