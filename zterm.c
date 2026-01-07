@@ -723,7 +723,11 @@ void term_config (GtkWidget *term, int window_i)
 			errorf ("Unable to load font '%s'", terms.font);
 		}
 	}
-	vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
+	if (terms.word_char_exceptions != NULL && terms.word_char_exceptions[0] != '\0') {
+		vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), terms.word_char_exceptions);
+	} else {
+		vte_terminal_set_word_char_exceptions (VTE_TERMINAL (term), "");
+	}
 	vte_terminal_set_audible_bell (VTE_TERMINAL (term), terms.audible_bell);
 	vte_terminal_set_font_scale (VTE_TERMINAL (term), terms.font_scale);
 	vte_terminal_set_scroll_on_output (VTE_TERMINAL (term), terms.scroll_on_output);
