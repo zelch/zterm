@@ -387,6 +387,7 @@ int				new_window (void);
 void			destroy_window (int i);
 void			add_button (GtkWidget *widget, int window_i);
 
+#if 0
 static void print_widget_size (GtkWidget *widget, const char *name)
 {
 	int			   x, y;
@@ -403,6 +404,7 @@ static void print_widget_size (GtkWidget *widget, const char *name)
 	debugf ("  halign: %d, valign: %d", gtk_widget_get_halign (widget), gtk_widget_get_valign (widget));
 	// debugf ("%dx%d", gtk_widget_get_allocated_width (widget), gtk_widget_get_allocated_height (widget));
 }
+#endif
 
 static void temu_reorder (void)
 {
@@ -1807,9 +1809,9 @@ int new_window (void)
 
 	debugf ("Window should be visible...");
 
-	debugf ("Old window present location...");
+	/* debugf ("Old window present location..."); */
 
-	print_widget_size (GTK_WIDGET (window), "window");
+	/* print_widget_size (GTK_WIDGET (window), "window"); */
 
 	GdkSurface	*surface  = gtk_native_get_surface (GTK_NATIVE (GTK_WINDOW (window)));
 	GdkToplevel *toplevel = GDK_TOPLEVEL (surface);
