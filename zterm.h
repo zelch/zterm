@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -84,6 +85,23 @@ typedef struct term_instance_s {
 	GtkWidget *term;
 } term_instance_t;
 
+typedef struct color_override_s {
+	int						 index;
+	GdkRGBA					 color;
+	struct color_override_s *next;
+} color_override_t;
+
+typedef struct env_var_s {
+	char			 *name;
+	char			 *value;
+	struct env_var_s *next;
+} env_var_t;
+
+typedef struct bind_ignore_s {
+	guint				  state;
+	struct bind_ignore_s *next;
+} bind_ignore_t;
+
 typedef struct terms_s {
 	term_instance_t *active;
 
@@ -92,17 +110,20 @@ typedef struct terms_s {
 	char **envp;
 
 	/* Configuration options. */
-	bind_t		  *keys;
-	bind_button_t *buttons;
-	char		  *font;
-	gboolean	   audible_bell;
-	char		   word_char_exceptions[64];
-	gdouble		   font_scale;
-	gboolean	   scroll_on_output;
-	gboolean	   scroll_on_keystroke;
-	glong		   scrollback_lines;
-	gboolean	   bold_is_bright;
-	gboolean	   mouse_autohide;
+	bind_t			 *keys;
+	bind_button_t	 *buttons;
+	color_override_t *color_overrides;
+	env_var_t		 *env_vars;
+	bind_ignore_t	 *ignores;
+	char			 *font;
+	bool			  audible_bell;
+	char			 *word_char_exceptions;
+	gdouble			  font_scale;
+	bool			  scroll_on_output;
+	bool			  scroll_on_keystroke;
+	glong			  scrollback_lines;
+	bool			  bold_is_bright;
+	bool			  mouse_autohide;
 
 	color_scheme_t color_schemes[MAX_COLOR_SCHEMES];
 } terms_t;
@@ -139,8 +160,10 @@ void	 do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 bool	 term_find (GtkWidget *term, int *i);
 void	 term_set_window (int n, int window_i);
 void	 term_switch (long n, char **argv, char **env, int window_i);
-void	 temu_parse_config (void);
+bool	 temu_parse_config (void);
 void	 term_config (GtkWidget *term, int window_i);
+bool	 zterm_parse_config ();
+void	 zterm_save_config ();
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void	 rebuild_menus (void);
 void	 rebuild_term_list (long int window_n);
