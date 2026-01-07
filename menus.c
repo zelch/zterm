@@ -234,6 +234,11 @@ void rebuild_term_list (long int window_n)
 	ZActionEntry add_actions[64];
 	int			 n_add_actions = 0;
 	int			 i, j;
+
+	if (!windows[window_n].window) {
+		return;
+	}
+
 	if (windows[window_n].menu_model_term_list != NULL) {
 		g_menu_remove_all (G_MENU (windows[window_n].menu_model_term_list));
 	} else {
