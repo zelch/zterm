@@ -499,8 +499,6 @@ static void prune_windows (void)
 	for (int i = 0; i < MAX_WINDOWS; i++) {
 		if (windows[i].window) {
 			int active_pages = gtk_notebook_get_n_pages (windows[i].notebook);
-			debugf ("%d pages for notebook %p of window %d", gtk_notebook_get_n_pages (windows[i].notebook), windows[i].notebook,
-					i);
 			active += active_pages;
 			if (active_pages <= 0) {
 				destroy_window (i);
