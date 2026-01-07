@@ -205,7 +205,7 @@ static void temu_parse_bind_ignore (char **subs)
 	zterm_parse_bind_ignore (subs[0]);
 }
 
-static void temu_free_keys (void)
+static void zterm_free_settings (void)
 {
 	while (terms.keys != NULL) {
 		bind_t *next = terms.keys->next;
@@ -333,7 +333,7 @@ bool temu_parse_config (void)
 	zregcomp (&env, "^env:[ \t]+([^=]*?)=(.*?)$", REG_ENHANCED | REG_EXTENDED);
 	zregcomp (&other, "^([^: ]*):[ \t]+(.*?)$", REG_ENHANCED | REG_EXTENDED);
 
-	temu_free_keys ();
+	zterm_free_settings ();
 	// FIXME: We need to correctly handle the case where this number changes with a reload, it's going to be a bit rough.
 	terms.n_active = 0;
 
