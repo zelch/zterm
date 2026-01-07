@@ -167,5 +167,6 @@ void	 zterm_save_config ();
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void	 rebuild_menus (void);
 void	 rebuild_term_list (long int window_n);
+void	 do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data);
 
 // vim: set ts=4 sw=4 noexpandtab :

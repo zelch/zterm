@@ -20,7 +20,7 @@ else
 	BEAR += --append --
 endif
 
-FILES = zterm.o menus.o config.o
+FILES = zterm.o menus.o prefs.o config.o
 
 all: update_cflags zterm ${EXTRA}
 

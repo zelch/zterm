@@ -299,6 +299,7 @@ static void rebuild_window_menu (long int window_n)
 	g_menu_append_section (main, "Terminals", G_MENU_MODEL (terminals));
 
 	GMenu *config = g_menu_new ();
+	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Preferences...", "preferences", do_preferences, window_n);
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Decorations", "decorations", do_t_decorate, window_n);
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Fullscreen", "fullscreen", do_t_fullscreen, window_n);
 	z_menu_append (config, add_actions, &n_add_actions, "menu.", "_Tab bar", "tab_bar", do_t_tab_bar, window_n);
