@@ -5,7 +5,10 @@ void do_reload_config (GSimpleAction *self, GVariant *parameter, gpointer user_d
 {
 	int old_n_active = terms.n_active;
 
-	temu_parse_config ();
+	if (!zterm_parse_config ()) {
+		errorf ("Unable to read new config, falling back to legacy config.");
+		temu_parse_config ();
+	}
 	if (!terms.n_active) {
 		errorf ("Unable to read config file, or no terminals defined.");
 		return;
