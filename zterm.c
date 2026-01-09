@@ -1881,7 +1881,7 @@ int main (int argc, char *argv[], char *envp[])
 #	define ZTERM_NAME "zterm"
 #endif
 	g_set_application_name (ZTERM_NAME);
-	app = gtk_application_new ("org.aehallh" ZTERM_NAME, 0);
+	app = gtk_application_new ("org.aehallh." ZTERM_NAME, 0);
 	g_application_set_application_id (G_APPLICATION (app), "org.aehallh" ZTERM_NAME);
 	g_application_add_main_option_entries (G_APPLICATION (app), cli_options);
 	g_signal_connect (app, "command-line", G_CALLBACK (command_line), NULL);
