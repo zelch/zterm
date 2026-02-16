@@ -813,6 +813,55 @@ bool zterm_parse_config ()
 		}
 	}
 
+	/* Parse terminals: each entry has "ranges" (list of targets) plus command, directory, env.
+	 * Each range element is either an integer (that index) or a group { start; end = N; }
+	 * with end defaulting to start. */
+	config_setting_t *terminals_list = config_lookup (&cfg, "terminals");
+	if (terminals_list != NULL && config_setting_type (terminals_list) == CONFIG_TYPE_LIST) {
+		int n = config_setting_length (terminals_list);
+		zterm_ensure_terminal_configs ();
+		for (int i = 0; i < n; i++) {
+			config_setting_t *entry		= config_setting_get_elem (terminals_list, i);
+			const char		 *directory = NULL;
+			config_setting_lookup_string (entry, "directory", &directory);
+			config_setting_t *cmd_setting = config_setting_get_member (entry, "command");
+			config_setting_t *env_setting = config_setting_get_member (entry, "env");
+			const char		**argv		  = (const char **) get_config_str_vec_from_setting (cmd_setting);
+			const char		**env		  = (const char **) get_config_str_vec_from_setting (env_setting);
+
+			config_setting_t *ranges_setting = config_setting_get_member (entry, "ranges");
+			if (ranges_setting != NULL && config_setting_type (ranges_setting) == CONFIG_TYPE_LIST) {
+				int nr = config_setting_length (ranges_setting);
+				for (int r = 0; r < nr; r++) {
+					config_setting_t *elem = config_setting_get_elem (ranges_setting, r);
+					if (config_setting_type (elem) == CONFIG_TYPE_INT) {
+						int idx = config_setting_get_int (elem);
+						if (idx >= 0 && idx < MAX_TABS) {
+							zterm_set_terminal_config (idx, argv, env, directory);
+						}
+					} else if (config_setting_type (elem) == CONFIG_TYPE_GROUP) {
+						int start = -1, end = -1;
+						config_setting_lookup_int (elem, "start", &start);
+						config_setting_lookup_int (elem, "end", &end);
+						if (end < 0) {
+							end = start;
+						}
+						if (start >= 0 && start <= end) {
+							for (int j = start; j <= end && j < MAX_TABS; j++) {
+								zterm_set_terminal_config (j, argv, env, directory);
+							}
+						}
+					}
+				}
+			}
+
+			if (argv)
+				g_strfreev ((char **) argv);
+			if (env)
+				g_strfreev ((char **) env);
+		}
+	}
+
 	/* Parse bind_action entries */
 	config_setting_t *bind_action_list = config_lookup (&cfg, "bind_action");
 	if (bind_action_list != NULL) {
