@@ -32,90 +32,53 @@ typedef struct {
 	bool   original_mouse_autohide;
 } PrefsDialog;
 
-static void apply_preferences (PrefsDialog *prefs)
+/* Read dialog into terms and optionally save. Used for both apply and preview. */
+static void apply_preferences_impl (PrefsDialog *prefs, bool save)
 {
-	/* Get font */
 	const char *font = gtk_editable_get_text (GTK_EDITABLE (prefs->font_entry));
 	if (font && strlen (font) > 0) {
 		if (terms.font)
 			free (terms.font);
 		terms.font = strdup (font);
+	} else if (terms.font) {
+		free (terms.font);
+		terms.font = NULL;
 	}
 
-	/* Get font scale */
 	terms.font_scale = gtk_spin_button_get_value (GTK_SPIN_BUTTON (prefs->font_scale_spin));
 
-	/* Get word char exceptions */
 	const char *word_chars = gtk_editable_get_text (GTK_EDITABLE (prefs->word_char_entry));
 	if (terms.word_char_exceptions)
 		free (terms.word_char_exceptions);
 	terms.word_char_exceptions = strdup (word_chars ? word_chars : "");
 
-	/* Get window size */
 	start_width	 = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->size_width_spin));
 	start_height = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->size_height_spin));
-
-	/* Get scrollback lines */
 	terms.scrollback_lines = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->scrollback_spin));
 
-	/* Get boolean settings */
 	terms.audible_bell		  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->audible_bell_check));
 	terms.scroll_on_output	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->scroll_on_output_check));
 	terms.scroll_on_keystroke = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->scroll_on_keystroke_check));
 	terms.bold_is_bright	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->bold_is_bright_check));
 	terms.mouse_autohide	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->mouse_autohide_check));
 
-	/* Apply settings to all terminals */
 	for (int i = 0; i < terms.n_active; i++) {
-		if (terms.active[i].term) {
+		if (terms.active[i].term)
 			term_config (terms.active[i].term, terms.active[i].window);
-		}
 	}
 
-	/* Save configuration */
-	zterm_save_config ();
+	if (save)
+		zterm_save_config ();
 }
 
-/* Apply settings without saving (for preview) */
+static void apply_preferences (PrefsDialog *prefs)
+{
+	apply_preferences_impl (prefs, true);
+}
+
 static void preview_preferences (PrefsDialog *prefs)
 {
-	/* Get font */
-	const char *font = gtk_editable_get_text (GTK_EDITABLE (prefs->font_entry));
-	if (font && strlen (font) > 0) {
-		if (terms.font)
-			free (terms.font);
-		terms.font = strdup (font);
-	}
-
-	/* Get font scale */
-	terms.font_scale = gtk_spin_button_get_value (GTK_SPIN_BUTTON (prefs->font_scale_spin));
-
-	/* Get word char exceptions */
-	const char *word_chars = gtk_editable_get_text (GTK_EDITABLE (prefs->word_char_entry));
-	if (terms.word_char_exceptions)
-		free (terms.word_char_exceptions);
-	terms.word_char_exceptions = strdup (word_chars ? word_chars : "");
-
-	/* Get window size (doesn't affect existing windows, only new ones) */
-	start_width	 = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->size_width_spin));
-	start_height = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->size_height_spin));
-
-	/* Get scrollback lines */
-	terms.scrollback_lines = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (prefs->scrollback_spin));
-
-	/* Get boolean settings */
-	terms.audible_bell		  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->audible_bell_check));
-	terms.scroll_on_output	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->scroll_on_output_check));
-	terms.scroll_on_keystroke = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->scroll_on_keystroke_check));
-	terms.bold_is_bright	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->bold_is_bright_check));
-	terms.mouse_autohide	  = gtk_check_button_get_active (GTK_CHECK_BUTTON (prefs->mouse_autohide_check));
-
-	/* Apply settings to all terminals */
-	for (int i = 0; i < terms.n_active; i++) {
-		if (terms.active[i].term) {
-			term_config (terms.active[i].term, terms.active[i].window);
-		}
-	}
+	apply_preferences_impl (prefs, false);
 }
 
 /* Revert to original settings */
@@ -231,6 +194,18 @@ static GtkWidget *create_label (const char *text)
 	return label;
 }
 
+/* Standard content box for preference dialogs: vertical, spacing 12, margins 12. Sets as window child. */
+static GtkWidget *prefs_dialog_main_box (GtkWindow *window)
+{
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (window, main_box);
+	return main_box;
+}
+
 static void font_dialog_cb (GObject *source, GAsyncResult *result, gpointer user_data)
 {
 	PrefsDialog			 *prefs		= (PrefsDialog *) user_data;
@@ -309,6 +284,47 @@ static void list_settings_reset (GtkButton *btn, ListSettingsOps *ops)
 {
 	ops->restore_working (ops->ctx);
 	ops->refresh_ui (ops->ctx);
+}
+
+/* Create standard list-settings button row: [Add] Reset Cancel Apply OK; append to parent. */
+static void prefs_list_settings_button_row (GtkWidget *parent, ListSettingsOps *ops, GCallback add_clicked, gpointer add_user_data)
+{
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (parent), button_box);
+	GtkWidget *add_btn   = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn    = gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), add_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+	if (add_clicked)
+		g_signal_connect (add_btn, "clicked", add_clicked, add_user_data);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), ops);
+}
+
+/* Create Cancel | OK button row for edit dialogs; append to parent. Callbacks are used swapped (receive data as first arg). */
+static void prefs_dialog_button_row_cancel_ok (GtkWidget *parent, GCallback cancel_cb, gpointer cancel_data,
+											   GCallback ok_cb, gpointer ok_data)
+{
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (parent), button_box);
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *ok_btn     = gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+	g_signal_connect_swapped (cancel_btn, "clicked", cancel_cb, cancel_data);
+	g_signal_connect_swapped (ok_btn, "clicked", ok_cb, ok_data);
 }
 
 /* Color Scheme Editor */
@@ -453,12 +469,7 @@ static void show_color_scheme_edit_dialog (int scheme_index, long int parent_win
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -677,12 +688,7 @@ static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Scrolled window for list */
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
@@ -697,29 +703,7 @@ static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
 
 	refresh_color_scheme_list (list_dialog);
 
-	/* Buttons: Add, then Reset | Cancel | Apply | OK */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (color_scheme_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
-	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (color_scheme_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 360);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -843,12 +827,7 @@ static void show_color_override_edit_dialog (int override_index, GdkRGBA *initia
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -871,18 +850,8 @@ static void show_color_override_edit_dialog (int override_index, GdkRGBA *initia
 	gtk_grid_attach (GTK_GRID (grid), edit->color_button, 1, row++, 1, 1);
 
 	/* Buttons */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (color_override_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (color_override_edit_ok), edit);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (color_override_edit_cancel), edit,
+									   G_CALLBACK (color_override_edit_ok), edit);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 480, 280);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1055,12 +1024,7 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Info label */
 	GtkWidget *info_label = gtk_label_new ("Override colors in the 256-color palette (0-255)");
@@ -1079,29 +1043,7 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 
 	refresh_color_override_list (list_dialog);
 
-	/* Buttons: Add, then Reset | Cancel | Apply | OK */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (color_override_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
-	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (color_override_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1192,12 +1134,7 @@ static void show_env_edit_dialog (EnvListDialog *list_dialog, const char *edit_s
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -1238,18 +1175,7 @@ static void show_env_edit_dialog (EnvListDialog *list_dialog, const char *edit_s
 		}
 	}
 
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (env_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (env_edit_ok), edit);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (env_edit_cancel), edit, G_CALLBACK (env_edit_ok), edit);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 420, 200);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1387,12 +1313,7 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *info_label = gtk_label_new ("Set or unset environment variables for all new terminal spawns. Set: name=value. "
 										   "Unset: variable is removed from spawn env.");
@@ -1411,27 +1332,7 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 
 	refresh_env_list (list_dialog);
 
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (env_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (env_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1522,12 +1423,7 @@ static void show_bind_ignore_edit_dialog (BindIgnoreListDialog *list_dialog, con
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -1543,18 +1439,8 @@ static void show_bind_ignore_edit_dialog (BindIgnoreListDialog *list_dialog, con
 	if (edit_string)
 		gtk_editable_set_text (GTK_EDITABLE (edit->state_entry), edit_string);
 
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (bind_ignore_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (bind_ignore_edit_ok), edit);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (bind_ignore_edit_cancel), edit,
+									   G_CALLBACK (bind_ignore_edit_ok), edit);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 420, 120);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1723,12 +1609,7 @@ static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *info_label =
 	  gtk_label_new ("Modifier states listed here are ignored when matching key and mouse bindings (e.g. Mod2 for NumLock).");
@@ -1747,27 +1628,7 @@ static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
 
 	refresh_bind_ignore_list (list_dialog);
 
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (bind_ignore_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (bind_ignore_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 480, 340);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -1915,12 +1776,7 @@ static void show_capture_dialog (GtkWidget *state_entry, GtkWidget *key_entry, G
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	capture->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 24);
-	gtk_widget_set_margin_end (main_box, 24);
-	gtk_widget_set_margin_top (main_box, 24);
-	gtk_widget_set_margin_bottom (main_box, 24);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Instruction/status label */
 	capture->label = gtk_label_new ("");
@@ -1929,19 +1785,8 @@ static void show_capture_dialog (GtkWidget *state_entry, GtkWidget *key_entry, G
 	gtk_box_append (GTK_BOX (main_box), capture->label);
 	update_capture_label (capture);
 
-	/* Buttons */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_CENTER);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (capture_dialog_close), capture);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (capture_dialog_ok), capture);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (capture_dialog_close), capture,
+									   G_CALLBACK (capture_dialog_ok), capture);
 
 	/* Key controller for the whole window */
 	if (capture_key) {
@@ -2367,12 +2212,7 @@ static void show_key_capture_for_bind (GtkWindow *parent, bind_t *bind, KeyBindL
 	cap->had_focus				= false;
 	cap->active_check_source_id = g_timeout_add (150, key_capture_check_active, cap);
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 24);
-	gtk_widget_set_margin_end (main_box, 24);
-	gtk_widget_set_margin_top (main_box, 24);
-	gtk_widget_set_margin_bottom (main_box, 24);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	cap->label = gtk_label_new ("");
 	gtk_label_set_justify (GTK_LABEL (cap->label), GTK_JUSTIFY_CENTER);
@@ -2789,12 +2629,7 @@ static void show_key_bind_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	list_dialog->bind_row_widgets = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
 	/* Create the GListStore and populate it */
@@ -2866,29 +2701,7 @@ static void show_key_bind_editor (GtkButton *button, gpointer user_data)
 
 	refresh_key_bind_list (list_dialog);
 
-	/* Buttons: Add, then Reset | Cancel | Apply | OK (GNOME convention) */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (key_bind_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
-	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (key_bind_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 740, 500);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -3175,12 +2988,7 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -3248,16 +3056,8 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	gtk_widget_set_hexpand (edit->env_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), edit->env_entry, 1, row++, 1, 1);
 
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (terminal_config_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (terminal_config_edit_ok), edit);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (terminal_config_edit_cancel), edit,
+									   G_CALLBACK (terminal_config_edit_ok), edit);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 560, 380);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -3620,12 +3420,7 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 	list_dialog->dialog = dialog;
 	g_object_set_data (G_OBJECT (dialog), "terminal_config_list_dialog", list_dialog);
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Filter row: checkbox and min–max (1-based in UI) */
 	GtkWidget *filter_row	  = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
@@ -3708,26 +3503,7 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	refresh_terminal_config_list (list_dialog);
 
-	/* Buttons: Add, then Reset | Cancel | Apply | OK (same pattern as Key Bindings, Color Schemes, etc.) */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (terminal_config_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (terminal_config_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 600, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -3841,12 +3617,7 @@ static void show_button_bind_edit_dialog (bind_button_t *editing_bind, long int 
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	edit->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	GtkWidget *grid = gtk_grid_new ();
 	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
@@ -3896,18 +3667,8 @@ static void show_button_bind_edit_dialog (bind_button_t *editing_bind, long int 
 	gtk_grid_attach (GTK_GRID (grid), button_num_box, 1, row++, 1, 1);
 
 	/* Buttons */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (button_bind_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (button_bind_edit_ok), edit);
+	prefs_dialog_button_row_cancel_ok (main_box, G_CALLBACK (button_bind_edit_cancel), edit,
+									   G_CALLBACK (button_bind_edit_ok), edit);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 500, 280);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -4065,12 +3826,7 @@ static void show_button_bind_editor (GtkButton *button, gpointer user_data)
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
 
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Scrolled window for list */
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
@@ -4085,29 +3841,7 @@ static void show_button_bind_editor (GtkButton *button, gpointer user_data)
 
 	refresh_button_bind_list (list_dialog);
 
-	/* Buttons: Add, then Reset | Cancel | Apply | OK */
-	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
-	gtk_widget_set_margin_top (button_box, 12);
-	gtk_box_append (GTK_BOX (main_box), button_box);
-
-	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
-	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
-	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), reset_btn);
-	gtk_box_append (GTK_BOX (button_box), cancel_btn);
-	gtk_box_append (GTK_BOX (button_box), apply_btn);
-	gtk_box_append (GTK_BOX (button_box), ok_btn);
-
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (button_bind_add_clicked), list_dialog);
-	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
-	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
-	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
-	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
-	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
+	prefs_list_settings_button_row (main_box, &list_dialog->ops, G_CALLBACK (button_bind_add_clicked), list_dialog);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 360);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -4141,12 +3875,7 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	prefs->dialog = dialog;
 
 	/* Create main vertical box */
-	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-	gtk_widget_set_margin_start (main_box, 12);
-	gtk_widget_set_margin_end (main_box, 12);
-	gtk_widget_set_margin_top (main_box, 12);
-	gtk_widget_set_margin_bottom (main_box, 12);
-	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+	GtkWidget *main_box = prefs_dialog_main_box (GTK_WINDOW (dialog));
 
 	/* Create grid for layout */
 	GtkWidget *grid = gtk_grid_new ();
