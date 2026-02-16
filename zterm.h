@@ -144,6 +144,8 @@ extern int start_height;
 extern unsigned int key_bind_mask;
 extern unsigned int button_bind_mask;
 
+void zterm_apply_bind_ignores (void);
+
 static inline const char **strdupv (const char **v)
 {
 	return (const char **) g_strdupv ((char **) v);

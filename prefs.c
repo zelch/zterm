@@ -1437,6 +1437,342 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
+/* ==================== Ignored Key Modifiers (bind_ignore) Editor ==================== */
+/* List of modifier states to ignore when matching key/mouse bindings (e.g. Mod2 for NumLock). */
+
+typedef struct {
+	GtkWidget *dialog;
+	GtkWidget *list_box;
+	GList	  *working_list;  /* GList of gchar* (state strings like "Mod2") */
+	GList	  *original_list;
+	ListSettingsOps ops;
+} BindIgnoreListDialog;
+
+typedef struct {
+	GtkWidget	   *dialog;
+	GtkWidget	   *state_entry;
+	char		   *edit_string; /* current row string we're replacing, or NULL for add */
+	BindIgnoreListDialog *list_dialog;
+} BindIgnoreEditDialog;
+
+static void refresh_bind_ignore_list (BindIgnoreListDialog *list_dialog);
+
+static bool bind_ignore_parse_state (const char *state_input, guint *out_state)
+{
+	guint key = 0, state = 0;
+	gtk_accelerator_parse (state_input, &key, &state);
+	if (key != 0 || state == 0)
+		return false;
+	*out_state = state;
+	return true;
+}
+
+static void bind_ignore_edit_dialog_free (BindIgnoreEditDialog *edit)
+{
+	gtk_window_destroy (GTK_WINDOW (edit->dialog));
+	g_free (edit->edit_string);
+	g_free (edit);
+}
+
+static void bind_ignore_edit_ok (BindIgnoreEditDialog *edit)
+{
+	char *input = g_strstrip (g_strdup (gtk_editable_get_text (GTK_EDITABLE (edit->state_entry))));
+	if (!input || input[0] == '\0') {
+		g_free (input);
+		GtkAlertDialog *alert = gtk_alert_dialog_new ("Enter a modifier state (e.g. Mod2, Control+Mod1).");
+		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+		g_object_unref (alert);
+		return;
+	}
+	guint state;
+	if (!bind_ignore_parse_state (input, &state)) {
+		g_free (input);
+		GtkAlertDialog *alert = gtk_alert_dialog_new (
+			"Invalid: value must be modifier state only (e.g. Mod2 or Control+Mod1), no key.");
+		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+		g_object_unref (alert);
+		return;
+	}
+	BindIgnoreListDialog *list_dialog = edit->list_dialog;
+	if (edit->edit_string) {
+		list_dialog->working_list = g_list_remove (list_dialog->working_list, edit->edit_string);
+		g_free (edit->edit_string);
+		edit->edit_string = NULL;
+	}
+	list_dialog->working_list = g_list_append (list_dialog->working_list, input);
+	refresh_bind_ignore_list (list_dialog);
+	bind_ignore_edit_dialog_free (edit);
+}
+
+static void bind_ignore_edit_cancel (BindIgnoreEditDialog *edit)
+{
+	bind_ignore_edit_dialog_free (edit);
+}
+
+static void show_bind_ignore_edit_dialog (BindIgnoreListDialog *list_dialog, const char *edit_string)
+{
+	BindIgnoreEditDialog *edit = g_new0 (BindIgnoreEditDialog, 1);
+	edit->list_dialog  = list_dialog;
+	edit->edit_string  = edit_string ? g_strdup (edit_string) : NULL;
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), edit_string ? "Edit Ignored Modifiers" : "Add Ignored Modifiers");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (list_dialog->dialog));
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	edit->dialog = dialog;
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	GtkWidget *grid = gtk_grid_new ();
+	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+	gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
+	gtk_box_append (GTK_BOX (main_box), grid);
+
+	edit->state_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->state_entry), 28);
+	gtk_widget_set_hexpand (edit->state_entry, TRUE);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->state_entry), "e.g. Mod2 or Control+Mod1");
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Modifier state:"), 0, 0, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), edit->state_entry, 1, 0, 1, 1);
+	if (edit_string)
+		gtk_editable_set_text (GTK_EDITABLE (edit->state_entry), edit_string);
+
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (main_box), button_box);
+
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *ok_btn	 = gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+
+	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (bind_ignore_edit_cancel), edit);
+	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (bind_ignore_edit_ok), edit);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 420, 120);
+	gtk_window_present (GTK_WINDOW (dialog));
+}
+
+static void bind_ignore_add_clicked (GtkButton *button, gpointer user_data)
+{
+	show_bind_ignore_edit_dialog ((BindIgnoreListDialog *) user_data, NULL);
+}
+
+static void bind_ignore_edit_clicked (GtkButton *button, gpointer user_data)
+{
+	const char   *s = (const char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) user_data;
+	show_bind_ignore_edit_dialog (list_dialog, s);
+}
+
+static void bind_ignore_delete_clicked (GtkButton *button, gpointer user_data)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) user_data;
+	char		  *s		  = (char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
+	list_dialog->working_list = g_list_remove (list_dialog->working_list, s);
+	g_free (s);
+	refresh_bind_ignore_list (list_dialog);
+}
+
+static void refresh_bind_ignore_list (BindIgnoreListDialog *list_dialog)
+{
+	GtkWidget *child = gtk_widget_get_first_child (list_dialog->list_box);
+	while (child) {
+		GtkWidget *next = gtk_widget_get_next_sibling (child);
+		gtk_list_box_remove (GTK_LIST_BOX (list_dialog->list_box), child);
+		child = next;
+	}
+
+	for (GList *it = list_dialog->working_list; it; it = it->next) {
+		const char *s = (const char *) it->data;
+		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+		gtk_widget_set_margin_start (row_box, 6);
+		gtk_widget_set_margin_end (row_box, 6);
+		gtk_widget_set_margin_top (row_box, 3);
+		gtk_widget_set_margin_bottom (row_box, 3);
+
+		GtkWidget *label = gtk_label_new (s);
+		gtk_widget_set_halign (label, GTK_ALIGN_START);
+		gtk_widget_set_hexpand (label, TRUE);
+		gtk_label_set_selectable (GTK_LABEL (label), TRUE);
+		gtk_box_append (GTK_BOX (row_box), label);
+
+		GtkWidget *edit_btn = gtk_button_new_from_icon_name ("document-edit-symbolic");
+		gtk_widget_set_tooltip_text (edit_btn, "Edit");
+		g_object_set_data (G_OBJECT (edit_btn), "bind_ignore_string", (gpointer) s);
+		g_signal_connect (edit_btn, "clicked", G_CALLBACK (bind_ignore_edit_clicked), list_dialog);
+		gtk_box_append (GTK_BOX (row_box), edit_btn);
+
+		GtkWidget *delete_btn = gtk_button_new_from_icon_name ("edit-delete-symbolic");
+		gtk_widget_set_tooltip_text (delete_btn, "Delete");
+		g_object_set_data (G_OBJECT (delete_btn), "bind_ignore_string", (gpointer) s);
+		g_signal_connect (delete_btn, "clicked", G_CALLBACK (bind_ignore_delete_clicked), list_dialog);
+		gtk_box_append (GTK_BOX (row_box), delete_btn);
+
+		gtk_list_box_append (GTK_LIST_BOX (list_dialog->list_box), row_box);
+	}
+}
+
+static void bind_ignore_commit (void *ctx)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
+	/* Free existing terms.ignores */
+	while (terms.ignores) {
+		bind_ignore_t *next = terms.ignores->next;
+		free (terms.ignores);
+		terms.ignores = next;
+	}
+	/* Build new list from working_list (in reverse so order matches config) */
+	bind_ignore_t *head = NULL;
+	for (GList *it = g_list_last (list_dialog->working_list); it; it = it->prev) {
+		guint state;
+		if (!bind_ignore_parse_state ((const char *) it->data, &state))
+			continue;
+		bind_ignore_t *ignore = calloc (1, sizeof (bind_ignore_t));
+		ignore->state = state;
+		ignore->next  = head;
+		head		  = ignore;
+	}
+	terms.ignores = head;
+	zterm_apply_bind_ignores ();
+}
+
+static void bind_ignore_snapshot (void *ctx)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
+	g_list_free_full (list_dialog->original_list, g_free);
+	list_dialog->original_list = g_list_copy_deep (list_dialog->working_list, (GCopyFunc) g_strdup, g_free);
+}
+
+static void bind_ignore_restore_config (void *ctx)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
+	/* Restore terms.ignores from original_list */
+	while (terms.ignores) {
+		bind_ignore_t *next = terms.ignores->next;
+		free (terms.ignores);
+		terms.ignores = next;
+	}
+	bind_ignore_t *head = NULL;
+	for (GList *it = g_list_last (list_dialog->original_list); it; it = it->prev) {
+		guint state;
+		if (!bind_ignore_parse_state ((const char *) it->data, &state))
+			continue;
+		bind_ignore_t *ignore = calloc (1, sizeof (bind_ignore_t));
+		ignore->state = state;
+		ignore->next  = head;
+		head		  = ignore;
+	}
+	terms.ignores = head;
+	zterm_apply_bind_ignores ();
+}
+
+static void bind_ignore_restore_working (void *ctx)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
+	g_list_free_full (list_dialog->working_list, g_free);
+	list_dialog->working_list = g_list_copy_deep (list_dialog->original_list, (GCopyFunc) g_strdup, g_free);
+}
+
+static void bind_ignore_refresh_ui (void *ctx)
+{
+	refresh_bind_ignore_list ((BindIgnoreListDialog *) ctx);
+}
+
+static void bind_ignore_destroy (void *ctx)
+{
+	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
+	GtkWidget			*dialog	 = list_dialog->dialog;
+	g_list_free_full (list_dialog->working_list, g_free);
+	g_list_free_full (list_dialog->original_list, g_free);
+	g_free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
+}
+
+static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
+{
+	PrefsDialog	   *prefs	  = (PrefsDialog *) user_data;
+	BindIgnoreListDialog *list_dialog = g_new0 (BindIgnoreListDialog, 1);
+	list_dialog->working_list  = NULL;
+	list_dialog->original_list = NULL;
+	for (bind_ignore_t *cur = terms.ignores; cur; cur = cur->next) {
+		gchar *state_str = gtk_accelerator_name (0, cur->state);
+		list_dialog->working_list = g_list_append (list_dialog->working_list, state_str);
+	}
+	list_dialog->original_list = g_list_copy_deep (list_dialog->working_list, (GCopyFunc) g_strdup, g_free);
+	list_dialog->ops.ctx			  = list_dialog;
+	list_dialog->ops.commit		  = bind_ignore_commit;
+	list_dialog->ops.snapshot		  = bind_ignore_snapshot;
+	list_dialog->ops.restore_config   = bind_ignore_restore_config;
+	list_dialog->ops.restore_working  = bind_ignore_restore_working;
+	list_dialog->ops.refresh_ui		  = bind_ignore_refresh_ui;
+	list_dialog->ops.destroy		  = bind_ignore_destroy;
+	list_dialog->ops.after_commit	  = NULL;
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), "Ignored Key Modifiers");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (prefs->dialog));
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	list_dialog->dialog = dialog;
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	GtkWidget *info_label = gtk_label_new (
+		"Modifier states listed here are ignored when matching key and mouse bindings (e.g. Mod2 for NumLock).");
+	gtk_label_set_wrap (GTK_LABEL (info_label), TRUE);
+	gtk_box_append (GTK_BOX (main_box), info_label);
+
+	GtkWidget *scrolled = gtk_scrolled_window_new ();
+	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+	gtk_widget_set_vexpand (scrolled, TRUE);
+	gtk_widget_set_size_request (scrolled, 420, 200);
+	gtk_box_append (GTK_BOX (main_box), scrolled);
+
+	list_dialog->list_box = gtk_list_box_new ();
+	gtk_list_box_set_selection_mode (GTK_LIST_BOX (list_dialog->list_box), GTK_SELECTION_NONE);
+	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), list_dialog->list_box);
+
+	refresh_bind_ignore_list (list_dialog);
+
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (main_box), button_box);
+
+	GtkWidget *add_btn   = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	= gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), add_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+
+	g_signal_connect (add_btn, "clicked", G_CALLBACK (bind_ignore_add_clicked), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 480, 340);
+	gtk_window_present (GTK_WINDOW (dialog));
+}
+
 /* ==================== Key/Button Capture Helper ==================== */
 
 typedef struct {
@@ -2560,6 +2896,58 @@ static void show_key_bind_editor (GtkButton *button, gpointer user_data)
 
 /* ==================== Terminal Configuration Editor ==================== */
 
+/* Clone/free for terminal_config_t array [0..MAX_TABS-1]. Used for working/original copies in list dialog. */
+static void clear_terminal_config_slot (terminal_config_t *tc)
+{
+	if (tc->argv) {
+		g_strfreev ((char **) tc->argv);
+		tc->argv = NULL;
+	}
+	if (tc->env) {
+		g_strfreev ((char **) tc->env);
+		tc->env = NULL;
+	}
+	free ((char *) tc->working_directory);
+	tc->working_directory = NULL;
+}
+
+static terminal_config_t *terminal_config_array_clone (terminal_config_t *src)
+{
+	if (!src)
+		return NULL;
+	terminal_config_t *dst = calloc (MAX_TABS, sizeof (terminal_config_t));
+	for (int i = 0; i < MAX_TABS; i++) {
+		if (src[i].argv)
+			dst[i].argv = (const char **) g_strdupv ((gchar **) src[i].argv);
+		if (src[i].env)
+			dst[i].env = (const char **) g_strdupv ((gchar **) src[i].env);
+		if (src[i].working_directory)
+			dst[i].working_directory = strdup (src[i].working_directory);
+	}
+	return dst;
+}
+
+static void terminal_config_array_free (terminal_config_t *arr)
+{
+	if (!arr)
+		return;
+	for (int i = 0; i < MAX_TABS; i++)
+		clear_terminal_config_slot (&arr[i]);
+	free (arr);
+}
+
+/* Set one slot in an array (caller's array; used for working copy edits). */
+static void set_terminal_config_slot (terminal_config_t *arr, int index, const char **argv, const char **env,
+									   const char *working_directory)
+{
+	if (!arr || index < 0 || index >= MAX_TABS)
+		return;
+	clear_terminal_config_slot (&arr[index]);
+	arr[index].argv			  = argv ? (const char **) g_strdupv ((gchar **) argv) : NULL;
+	arr[index].env			  = env ? (const char **) g_strdupv ((gchar **) env) : NULL;
+	arr[index].working_directory = working_directory ? strdup (working_directory) : NULL;
+}
+
 static bool terminal_config_entry_equal (terminal_config_t *a, terminal_config_t *b)
 {
 	if ((a->argv == NULL) != (b->argv == NULL))
@@ -2647,6 +3035,11 @@ TerminalConfigItem *terminal_config_item_new (int start, int end)
 typedef struct TerminalConfigListDialog_s TerminalConfigListDialog;
 
 typedef struct {
+	TerminalConfigListDialog *list_dialog;
+	int						  column_type;
+} TerminalConfigCellBindData;
+
+typedef struct {
 	GtkWidget *dialog;
 	GtkWidget *ranges_entry;
 	GtkWidget *cmd_entry;
@@ -2659,15 +3052,19 @@ typedef struct {
 } TerminalConfigEditDialog;
 
 struct TerminalConfigListDialog_s {
-	GtkWidget  *dialog;
-	GtkWidget  *column_view;
-	GtkWidget  *filter_check;
-	GtkWidget  *filter_min_spin;
-	GtkWidget  *filter_max_spin;
-	GListStore *store;
-	long int	window_n;
-	int			filter_start; /* -1 = show all */
-	int			filter_end;
+	GtkWidget	   *dialog;
+	GtkWidget	   *column_view;
+	GtkWidget	   *filter_check;
+	GtkWidget	   *filter_min_spin;
+	GtkWidget	   *filter_max_spin;
+	GListStore	   *store;
+	long int		window_n;
+	int				filter_start; /* -1 = show all */
+	int				filter_end;
+	terminal_config_t *working_configs;  /* working copy; list edits this */
+	terminal_config_t *original_configs; /* snapshot for Reset/Cancel */
+	ListSettingsOps	ops;
+	TerminalConfigCellBindData cell_bind_data[4]; /* 0=ranges, 1=command, 2=directory, 3=env; must outlive stack for bind callbacks */
 };
 
 static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog);
@@ -2725,28 +3122,38 @@ static void terminal_config_edit_ok (TerminalConfigEditDialog *edit)
 	}
 	const char *dir = (dir_str && strlen (dir_str) > 0) ? dir_str : NULL;
 
-	zterm_ensure_terminal_configs ();
+	TerminalConfigListDialog *list =
+		edit->list_dialog
+			? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (edit->list_dialog), "terminal_config_list_dialog")
+			: NULL;
 
-	/* If editing, clear the old range first */
-	if (edit->edit_start >= 0) {
-		for (int i = edit->edit_start; i <= edit->edit_end && i < MAX_TABS; i++)
-			zterm_set_terminal_config (i, NULL, NULL, NULL);
-	}
-
-	for (int i = 0; i < n_indices; i++)
-		zterm_set_terminal_config (indices[i], (const char **) argv, (const char **) env, dir);
-
-	if (argv)
-		g_strfreev (argv);
-	if (env)
-		g_strfreev (env);
-
-	zterm_save_config ();
-	if (edit->list_dialog) {
-		TerminalConfigListDialog *list =
-		  (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (edit->list_dialog), "terminal_config_list_dialog");
-		if (list)
-			refresh_terminal_config_list (list);
+	if (list && list->working_configs) {
+		/* Apply to working copy only; list Apply/OK will commit and save */
+		if (edit->edit_start >= 0) {
+			for (int i = edit->edit_start; i <= edit->edit_end && i < MAX_TABS; i++)
+				set_terminal_config_slot (list->working_configs, i, NULL, NULL, NULL);
+		}
+		for (int i = 0; i < n_indices; i++)
+			set_terminal_config_slot (list->working_configs, indices[i], (const char **) argv, (const char **) env, dir);
+		if (argv)
+			g_strfreev (argv);
+		if (env)
+			g_strfreev (env);
+		refresh_terminal_config_list (list);
+	} else {
+		/* Standalone edit (no list dialog): apply to terms and save immediately */
+		zterm_ensure_terminal_configs ();
+		if (edit->edit_start >= 0) {
+			for (int i = edit->edit_start; i <= edit->edit_end && i < MAX_TABS; i++)
+				zterm_set_terminal_config (i, NULL, NULL, NULL);
+		}
+		for (int i = 0; i < n_indices; i++)
+			zterm_set_terminal_config (indices[i], (const char **) argv, (const char **) env, dir);
+		if (argv)
+			g_strfreev (argv);
+		if (env)
+			g_strfreev (env);
+		zterm_save_config ();
 	}
 	gtk_window_destroy (GTK_WINDOW (edit->dialog));
 	free (edit);
@@ -2806,8 +3213,13 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	edit->cmd_entry = gtk_entry_new ();
 	gtk_editable_set_width_chars (GTK_EDITABLE (edit->cmd_entry), 28);
 	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->cmd_entry), "e.g. /bin/zsh -l");
-	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS && terms.terminal_configs[edit_start].argv) {
-		gchar *cmd_str = g_strjoinv (" ", (gchar **) terms.terminal_configs[edit_start].argv);
+	TerminalConfigListDialog *list_for_edit =
+		list_dialog ? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (list_dialog), "terminal_config_list_dialog") : NULL;
+	terminal_config_t *config_src = (list_for_edit && list_for_edit->working_configs)
+		? list_for_edit->working_configs
+		: terms.terminal_configs;
+	if (edit_start >= 0 && config_src && edit_start < MAX_TABS && config_src[edit_start].argv) {
+		gchar *cmd_str = g_strjoinv (" ", (gchar **) config_src[edit_start].argv);
 		gtk_editable_set_text (GTK_EDITABLE (edit->cmd_entry), cmd_str);
 		g_free (cmd_str);
 	}
@@ -2818,9 +3230,8 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	edit->directory_entry = gtk_entry_new ();
 	gtk_editable_set_width_chars (GTK_EDITABLE (edit->directory_entry), 32);
 	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->directory_entry), "e.g. /home/user/project");
-	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS &&
-		terms.terminal_configs[edit_start].working_directory) {
-		gtk_editable_set_text (GTK_EDITABLE (edit->directory_entry), terms.terminal_configs[edit_start].working_directory);
+	if (edit_start >= 0 && config_src && edit_start < MAX_TABS && config_src[edit_start].working_directory) {
+		gtk_editable_set_text (GTK_EDITABLE (edit->directory_entry), config_src[edit_start].working_directory);
 	}
 	gtk_widget_set_hexpand (edit->directory_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), edit->directory_entry, 1, row++, 1, 1);
@@ -2829,8 +3240,8 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	edit->env_entry = gtk_entry_new ();
 	gtk_editable_set_width_chars (GTK_EDITABLE (edit->env_entry), 24);
 	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->env_entry), "e.g. VAR=val");
-	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS && terms.terminal_configs[edit_start].env) {
-		gchar *env_str = g_strjoinv (" ", (gchar **) terms.terminal_configs[edit_start].env);
+	if (edit_start >= 0 && config_src && edit_start < MAX_TABS && config_src[edit_start].env) {
+		gchar *env_str = g_strjoinv (" ", (gchar **) config_src[edit_start].env);
 		gtk_editable_set_text (GTK_EDITABLE (edit->env_entry), env_str);
 		g_free (env_str);
 	}
@@ -2862,29 +3273,38 @@ static void terminal_config_delete_clicked (GtkButton *button, gpointer user_dat
 {
 	TerminalConfigItem		 *item		  = (TerminalConfigItem *) g_object_get_data (G_OBJECT (button), "terminal_config_item");
 	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) user_data;
-	if (!item || !terms.terminal_configs)
+	if (!item)
 		return;
-	zterm_ensure_terminal_configs ();
-	for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
-		zterm_set_terminal_config (i, NULL, NULL, NULL);
-	zterm_save_config ();
-	refresh_terminal_config_list (list_dialog);
+	if (list_dialog->working_configs) {
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			set_terminal_config_slot (list_dialog->working_configs, i, NULL, NULL, NULL);
+		refresh_terminal_config_list (list_dialog);
+	} else {
+		if (!terms.terminal_configs)
+			return;
+		zterm_ensure_terminal_configs ();
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, NULL, NULL, NULL);
+		zterm_save_config ();
+		refresh_terminal_config_list (list_dialog);
+	}
 }
 
 static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog)
 {
 	g_list_store_remove_all (list_dialog->store);
-	if (!terms.terminal_configs)
+	terminal_config_t *src = list_dialog->working_configs ? list_dialog->working_configs : terms.terminal_configs;
+	if (!src)
 		return;
 	int fs		 = list_dialog->filter_start;
 	int fe		 = list_dialog->filter_end;
 	int filtered = (fs >= 0);
 	for (int i = 0; i < MAX_TABS; i++) {
-		terminal_config_t *tc = &terms.terminal_configs[i];
+		terminal_config_t *tc = &src[i];
 		if (tc->argv == NULL && tc->working_directory == NULL && tc->env == NULL)
 			continue;
 		int end_i = i;
-		while (end_i + 1 < MAX_TABS && terminal_config_entry_equal (tc, &terms.terminal_configs[end_i + 1]))
+		while (end_i + 1 < MAX_TABS && terminal_config_entry_equal (tc, &src[end_i + 1]))
 			end_i++;
 		if (filtered && (end_i < fs || i > fe))
 			; /* skip: no overlap with [fs, fe] */
@@ -2898,19 +3318,59 @@ static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog)
 	}
 }
 
-static void terminal_config_list_close (TerminalConfigListDialog *list_dialog)
+/* ListSettingsOps for Terminal Configuration: Apply/Reset/Cancel/OK pattern */
+static void terminal_config_commit (void *ctx)
 {
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) ctx;
+	zterm_ensure_terminal_configs ();
+	for (int i = 0; i < MAX_TABS; i++) {
+		terminal_config_t *w = &list_dialog->working_configs[i];
+		zterm_set_terminal_config (i, w->argv, w->env, w->working_directory);
+	}
+}
+
+static void terminal_config_snapshot (void *ctx)
+{
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) ctx;
+	terminal_config_array_free (list_dialog->original_configs);
+	list_dialog->original_configs = terminal_config_array_clone (list_dialog->working_configs);
+}
+
+static void terminal_config_restore_config (void *ctx)
+{
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) ctx;
+	zterm_ensure_terminal_configs ();
+	for (int i = 0; i < MAX_TABS; i++) {
+		terminal_config_t *o = &list_dialog->original_configs[i];
+		zterm_set_terminal_config (i, o->argv, o->env, o->working_directory);
+	}
+}
+
+static void terminal_config_restore_working (void *ctx)
+{
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) ctx;
+	terminal_config_array_free (list_dialog->working_configs);
+	list_dialog->working_configs = terminal_config_array_clone (list_dialog->original_configs);
+}
+
+static void terminal_config_refresh_ui (void *ctx)
+{
+	refresh_terminal_config_list ((TerminalConfigListDialog *) ctx);
+}
+
+static void terminal_config_destroy (void *ctx)
+{
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) ctx;
+	terminal_config_array_free (list_dialog->working_configs);
+	list_dialog->working_configs = NULL;
+	terminal_config_array_free (list_dialog->original_configs);
+	list_dialog->original_configs = NULL;
 	gtk_window_destroy (GTK_WINDOW (list_dialog->dialog));
 	free (list_dialog);
 }
 
-/* In-place editable cell: entry that commits on apply (Enter) or focus leave. column_type: 0=ranges, 1=command, 2=directory,
+/* In-place editable cell: entry that commits on activate (Enter) or focus leave. column_type: 0=ranges, 1=command, 2=directory,
  * 3=env */
-typedef struct {
-	TerminalConfigListDialog *list_dialog;
-	int						  column_type;
-} TerminalConfigCellBindData;
-
 static void terminal_config_entry_focus_leave (GtkEventControllerFocus *ctrl, gpointer unused)
 {
 	GtkWidget *entry = gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (ctrl));
@@ -2922,7 +3382,7 @@ static void setup_terminal_config_entry_factory (GtkSignalListItemFactory *facto
 	GtkWidget *entry = gtk_entry_new ();
 	gtk_editable_set_width_chars (GTK_EDITABLE (entry), 12);
 	gtk_widget_set_hexpand (entry, TRUE);
-	g_signal_connect (entry, "apply", G_CALLBACK (terminal_config_cell_editing_done), NULL);
+	g_signal_connect (entry, "activate", G_CALLBACK (terminal_config_cell_editing_done), NULL);
 	GtkEventController *focus = gtk_event_controller_focus_new ();
 	g_signal_connect (focus, "leave", G_CALLBACK (terminal_config_entry_focus_leave), NULL);
 	gtk_widget_add_controller (entry, focus);
@@ -2936,8 +3396,11 @@ static void terminal_config_editable_cell_bind (GtkSignalListItemFactory *factor
 	TerminalConfigItem		   *item	  = gtk_list_item_get_item (list_item);
 	char						display[512];
 	display[0] = '\0';
-	if (item && terms.terminal_configs && item->start < MAX_TABS) {
-		terminal_config_t *tc = &terms.terminal_configs[item->start];
+	terminal_config_t *src = bind_data->list_dialog->working_configs
+		? bind_data->list_dialog->working_configs
+		: terms.terminal_configs;
+	if (item && src && item->start < MAX_TABS) {
+		terminal_config_t *tc = &src[item->start];
 		switch (bind_data->column_type) {
 			case 0: {
 				GString *s = g_string_new ("");
@@ -2977,16 +3440,20 @@ static void terminal_config_editable_cell_bind (GtkSignalListItemFactory *factor
 static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, TerminalConfigItem *item, int column_type,
 										const char *new_text)
 {
-	zterm_ensure_terminal_configs ();
-	if (!item || item->start < 0 || item->start >= MAX_TABS || !terms.terminal_configs)
+	terminal_config_t *arr = list_dialog->working_configs;
+	bool use_working = (arr != NULL);
+	if (!use_working) {
+		zterm_ensure_terminal_configs ();
+		arr = terms.terminal_configs;
+	}
+	if (!item || item->start < 0 || item->start >= MAX_TABS || !arr)
 		return;
-	terminal_config_t *tc		= &terms.terminal_configs[item->start];
+	terminal_config_t *tc		= &arr[item->start];
 	gchar			 **argv_new = NULL;
 	gchar			 **env_new	= NULL;
 	const char		  *dir_new	= NULL;
 
 	if (column_type == 0) {
-		/* Ranges: parse new range, copy current config, clear old range, set new range */
 		int indices[MAX_TABS];
 		int n = 0;
 		if (!new_text || !parse_ranges_string (new_text, indices, MAX_TABS, &n) || n == 0) {
@@ -2998,10 +3465,18 @@ static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, T
 		gchar **argv_dup = tc->argv ? g_strdupv ((gchar **) tc->argv) : NULL;
 		gchar **env_dup	 = tc->env ? g_strdupv ((gchar **) tc->env) : NULL;
 		char   *dir_dup	 = tc->working_directory ? strdup (tc->working_directory) : NULL;
-		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
-			zterm_set_terminal_config (i, NULL, NULL, NULL);
-		for (int i = 0; i < n; i++)
-			zterm_set_terminal_config (indices[i], (const char **) argv_dup, (const char **) env_dup, dir_dup);
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++) {
+			if (use_working)
+				set_terminal_config_slot (arr, i, NULL, NULL, NULL);
+			else
+				zterm_set_terminal_config (i, NULL, NULL, NULL);
+		}
+		for (int i = 0; i < n; i++) {
+			if (use_working)
+				set_terminal_config_slot (arr, indices[i], (const char **) argv_dup, (const char **) env_dup, dir_dup);
+			else
+				zterm_set_terminal_config (indices[i], (const char **) argv_dup, (const char **) env_dup, dir_dup);
+		}
 		g_strfreev (argv_dup);
 		g_strfreev (env_dup);
 		free (dir_dup);
@@ -3019,13 +3494,21 @@ static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, T
 				return;
 			}
 		}
-		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
-			zterm_set_terminal_config (i, (const char **) argv_new, tc->env, tc->working_directory);
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++) {
+			if (use_working)
+				set_terminal_config_slot (arr, i, (const char **) argv_new, tc->env, tc->working_directory);
+			else
+				zterm_set_terminal_config (i, (const char **) argv_new, tc->env, tc->working_directory);
+		}
 		g_strfreev (argv_new);
 	} else if (column_type == 2) {
 		dir_new = (new_text && strlen (new_text) > 0) ? new_text : NULL;
-		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
-			zterm_set_terminal_config (i, tc->argv, tc->env, dir_new);
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++) {
+			if (use_working)
+				set_terminal_config_slot (arr, i, tc->argv, tc->env, dir_new);
+			else
+				zterm_set_terminal_config (i, tc->argv, tc->env, dir_new);
+		}
 	} else if (column_type == 3) {
 		if (new_text && strlen (new_text) > 0) {
 			gint	argc = 0;
@@ -3040,11 +3523,16 @@ static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, T
 				return;
 			}
 		}
-		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
-			zterm_set_terminal_config (i, tc->argv, (const char **) env_new, tc->working_directory);
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++) {
+			if (use_working)
+				set_terminal_config_slot (arr, i, tc->argv, (const char **) env_new, tc->working_directory);
+			else
+				zterm_set_terminal_config (i, tc->argv, (const char **) env_new, tc->working_directory);
+		}
 		g_strfreev (env_new);
 	}
-	zterm_save_config ();
+	if (!use_working)
+		zterm_save_config ();
 	refresh_terminal_config_list (list_dialog);
 }
 
@@ -3107,6 +3595,17 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 	list_dialog->window_n				  = window_n;
 	list_dialog->filter_start			  = filter_start;
 	list_dialog->filter_end				  = filter_end;
+	zterm_ensure_terminal_configs ();
+	list_dialog->working_configs			  = terminal_config_array_clone (terms.terminal_configs);
+	list_dialog->original_configs			  = terminal_config_array_clone (terms.terminal_configs);
+	list_dialog->ops.ctx					  = list_dialog;
+	list_dialog->ops.commit				  = terminal_config_commit;
+	list_dialog->ops.snapshot				  = terminal_config_snapshot;
+	list_dialog->ops.restore_config		  = terminal_config_restore_config;
+	list_dialog->ops.restore_working		  = terminal_config_restore_working;
+	list_dialog->ops.refresh_ui			  = terminal_config_refresh_ui;
+	list_dialog->ops.destroy				  = terminal_config_destroy;
+	list_dialog->ops.after_commit			  = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	if (filter_start >= 0) {
@@ -3157,14 +3656,14 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 	list_dialog->column_view  = gtk_column_view_new (GTK_SELECTION_MODEL (selection));
 	gtk_column_view_set_show_column_separators (GTK_COLUMN_VIEW (list_dialog->column_view), TRUE);
 
-	TerminalConfigCellBindData bind_ranges	  = {list_dialog, 0};
-	TerminalConfigCellBindData bind_command	  = {list_dialog, 1};
-	TerminalConfigCellBindData bind_directory = {list_dialog, 2};
-	TerminalConfigCellBindData bind_env		  = {list_dialog, 3};
+	list_dialog->cell_bind_data[0] = (TerminalConfigCellBindData){list_dialog, 0};
+	list_dialog->cell_bind_data[1] = (TerminalConfigCellBindData){list_dialog, 1};
+	list_dialog->cell_bind_data[2] = (TerminalConfigCellBindData){list_dialog, 2};
+	list_dialog->cell_bind_data[3] = (TerminalConfigCellBindData){list_dialog, 3};
 
 	GtkListItemFactory *ranges_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (ranges_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
-	g_signal_connect (ranges_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_ranges);
+	g_signal_connect (ranges_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &list_dialog->cell_bind_data[0]);
 	GtkColumnViewColumn *ranges_col = gtk_column_view_column_new ("Terminals", ranges_factory);
 	gtk_column_view_column_set_resizable (ranges_col, TRUE);
 	gtk_column_view_column_set_fixed_width (ranges_col, 100);
@@ -3172,7 +3671,7 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	GtkListItemFactory *command_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (command_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
-	g_signal_connect (command_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_command);
+	g_signal_connect (command_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &list_dialog->cell_bind_data[1]);
 	GtkColumnViewColumn *command_col = gtk_column_view_column_new ("Command", command_factory);
 	gtk_column_view_column_set_resizable (command_col, TRUE);
 	gtk_column_view_column_set_expand (command_col, TRUE);
@@ -3180,7 +3679,7 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	GtkListItemFactory *directory_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (directory_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
-	g_signal_connect (directory_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_directory);
+	g_signal_connect (directory_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &list_dialog->cell_bind_data[2]);
 	GtkColumnViewColumn *directory_col = gtk_column_view_column_new ("Directory", directory_factory);
 	gtk_column_view_column_set_resizable (directory_col, TRUE);
 	gtk_column_view_column_set_expand (directory_col, TRUE);
@@ -3188,7 +3687,7 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	GtkListItemFactory *env_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (env_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
-	g_signal_connect (env_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_env);
+	g_signal_connect (env_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &list_dialog->cell_bind_data[3]);
 	GtkColumnViewColumn *env_col = gtk_column_view_column_new ("Environment", env_factory);
 	gtk_column_view_column_set_resizable (env_col, TRUE);
 	gtk_column_view_column_set_fixed_width (env_col, 140);
@@ -3209,16 +3708,26 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	refresh_terminal_config_list (list_dialog);
 
+	/* Buttons: Add, then Reset | Cancel | Apply | OK (same pattern as Key Bindings, Color Schemes, etc.) */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
-	GtkWidget *add_btn	 = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *close_btn = gtk_button_new_with_mnemonic ("_Close");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), close_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
 	g_signal_connect (add_btn, "clicked", G_CALLBACK (terminal_config_add_clicked), list_dialog);
-	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (terminal_config_list_close), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
 
 	gtk_window_set_default_size (GTK_WINDOW (dialog), 600, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
@@ -3749,6 +4258,12 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	GtkWidget *key_bind_btn = gtk_button_new_with_label ("Edit Key Bindings...");
 	g_signal_connect (key_bind_btn, "clicked", G_CALLBACK (show_key_bind_editor), prefs);
 	gtk_grid_attach (GTK_GRID (grid), key_bind_btn, 1, row++, 2, 1);
+
+	/* Ignored key modifiers (bind_ignore) button */
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Ignored key modifiers:"), 0, row, 1, 1);
+	GtkWidget *bind_ignore_btn = gtk_button_new_with_label ("Edit...");
+	g_signal_connect (bind_ignore_btn, "clicked", G_CALLBACK (show_bind_ignore_editor), prefs);
+	gtk_grid_attach (GTK_GRID (grid), bind_ignore_btn, 1, row++, 2, 1);
 
 	/* Terminal Configuration button */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Terminal Configuration:"), 0, row, 1, 1);

@@ -82,11 +82,22 @@ int start_height = 768;
 int char_width	= 0;
 int char_height = 0;
 
-unsigned int key_bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^
-							 (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
+#define BASE_BIND_MASK                                                                                                            \
+	((unsigned int)((GDK_MODIFIER_MASK & ~GDK_LOCK_MASK)                                                                         \
+				   ^ (GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK)))
 
-unsigned int button_bind_mask = (GDK_MODIFIER_MASK & ~GDK_LOCK_MASK) ^
-								(GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK | GDK_BUTTON4_MASK | GDK_BUTTON5_MASK);
+unsigned int key_bind_mask	 = BASE_BIND_MASK;
+unsigned int button_bind_mask = BASE_BIND_MASK;
+
+void zterm_apply_bind_ignores (void)
+{
+	key_bind_mask	 = BASE_BIND_MASK;
+	button_bind_mask = BASE_BIND_MASK;
+	for (bind_ignore_t *cur = terms.ignores; cur; cur = cur->next) {
+		key_bind_mask &= ~cur->state;
+		button_bind_mask &= ~cur->state;
+	}
+}
 
 terms_t	 terms;
 window_t windows[MAX_WINDOWS];
