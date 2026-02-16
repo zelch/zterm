@@ -207,11 +207,11 @@ static void free_cli_exec (exec_t **cli_exec_ptr)
 	exec_t *cli_exec = *cli_exec_ptr;
 
 	if (cli_exec->argv != NULL) {
-		g_strfreev (cli_exec->argv);
+		strfreev (cli_exec->argv);
 		cli_exec->argv = NULL;
 	}
 	if (cli_exec->env != NULL) {
-		g_strfreev (cli_exec->env);
+		strfreev (cli_exec->env);
 		cli_exec->env = NULL;
 	}
 
@@ -286,7 +286,7 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 
 	cmd_t			  *cmd		   = g_new0 (cmd_t, 1);
 	int				   argc		   = 0;
-	char			 **argv		   = g_application_command_line_get_arguments (cmdline, &argc);
+	const char		 **argv		   = (const char **) g_application_command_line_get_arguments (cmdline, &argc);
 	const char *const *env		   = g_application_command_line_get_environ (cmdline);
 	bool			   have_term_n = false;
 	debugf ("argc: %d, argv: %p", argc, argv);
@@ -299,16 +299,16 @@ static int command_line (GApplication *application, GApplicationCommandLine *cmd
 
 		debugf ("Processing command line exec arguments.");
 		cmd->cli_exec		= g_new0 (exec_t, 1);
-		cmd->cli_exec->argv = g_strdupv ((char **) &argv[base]);
+		cmd->cli_exec->argv = strdupv ((const char **) &argv[base]);
 		if (env != NULL) {
-			cmd->cli_exec->env = g_strdupv ((char **) env);
+			cmd->cli_exec->env = strdupv ((const char **) env);
 		}
 		for (int i = 0; cmd->cli_exec->argv[i] != NULL; i++) {
 			debugf ("  argv[%d]: '%s'", i, cmd->cli_exec->argv[i]);
 		}
 	}
 
-	g_strfreev (argv);
+	strfreev (argv);
 
 	if (g_variant_dict_lookup (dict, "switch", "&s", &switch_target)) {
 		debugf ("Found switch argument: '%s'", switch_target);
@@ -834,7 +834,7 @@ static gboolean term_spawn (gpointer data)
 			argv[1]		= "-c";
 			debugf ("Spawning '%s' '%s' '%s' '%s'...", argv[0], argv[1], argv[2], argv[3]);
 			for (int i = 0; i < argc; i++) {
-				argv[2 + i] = active->argv[i];
+				argv[2 + i] = (char *) active->argv[i];
 			}
 			for (int i = 0; argv[i] != NULL; i++) {
 				debugf ("  argv[%d]: '%s'", i, argv[i]);
@@ -1102,12 +1102,12 @@ void term_switch (long n, const char **argv, const char **env, const char *worki
 #endif
 
 		if (argv != NULL) {
-			terms.active[n].argv = g_strdupv ((gchar **) argv);
+			terms.active[n].argv = strdupv (argv);
 		} else {
 			terms.active[n].argv = NULL;
 		}
 		if (env != NULL) {
-			terms.active[n].env = g_strdupv (env);
+			terms.active[n].env = strdupv (env);
 		} else {
 			terms.active[n].env = NULL;
 		}

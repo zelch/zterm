@@ -35,8 +35,8 @@ typedef struct bind_s {
 } bind_t;
 
 typedef struct {
-	char **argv;
-	char **env;
+	const char **argv;
+	const char **env;
 } exec_t;
 
 typedef struct {
@@ -75,15 +75,15 @@ typedef struct window_s {
 } window_t;
 
 typedef struct term_instance_s {
-	int		   spawned;
-	int		   moving;
-	int		   window;
-	char	 **argv; // NULL terminated.
-	char	 **env;	 // If this term has a unique environment.
+	int			 spawned;
+	int			 moving;
+	int			 window;
+	const char **argv;				// NULL terminated.
+	const char **env;				// If this term has a unique environment.
 	const char	*working_directory; /* Working directory for spawn (NULL = default) */
-	char	  *hyperlink_uri;
-	char	   title[256];
-	GtkWidget *term;
+	char		*hyperlink_uri;
+	char		 title[256];
+	GtkWidget	*term;
 } term_instance_t;
 
 typedef struct color_override_s {
