@@ -141,6 +141,16 @@ extern int start_height;
 extern unsigned int key_bind_mask;
 extern unsigned int button_bind_mask;
 
+static inline const char **strdupv (const char **v)
+{
+	return (const char **) g_strdupv ((char **) v);
+}
+
+static inline void strfreev (const char **v)
+{
+	return g_strfreev ((char **) v);
+}
+
 int _fprintf (bool print, FILE *io, const char *fmt, ...) __attribute__ ((format (printf, 3, 4)));
 
 #define errorf(format, ...)                                                                                                      \
