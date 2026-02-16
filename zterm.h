@@ -29,10 +29,15 @@ typedef struct bind_s {
 	guint		   key_min, key_max;
 	guint		   base;
 	struct bind_s *next;
-	char		 **argv;
-	char		 **env;
 	bind_actions_t action;
 } bind_t;
+
+/* Per-terminal configuration: command, env, and working directory. Separate from key bindings. */
+typedef struct terminal_config_s {
+	const char **argv;				/* NULL = use default shell */
+	const char **env;				/* NULL = use inherited env */
+	const char	*working_directory; /* NULL = use cwd */
+} terminal_config_t;
 
 typedef struct {
 	const char **argv;
@@ -92,12 +97,6 @@ typedef struct color_override_s {
 	struct color_override_s *next;
 } color_override_t;
 
-typedef struct env_var_s {
-	char			 *name;
-	char			 *value;
-	struct env_var_s *next;
-} env_var_t;
-
 typedef struct bind_ignore_s {
 	guint				  state;
 	struct bind_ignore_s *next;
@@ -106,15 +105,17 @@ typedef struct bind_ignore_s {
 typedef struct terms_s {
 	term_instance_t *active;
 
-	gint   n_active; // Total number of configured terms.
-	gint   alive;	 // Total number of 'alive' terms.
-	char **envp;
+	gint		   n_active; // Total number of configured terms.
+	gint		   alive;	 // Total number of 'alive' terms.
+	char		  **envp;
+	const char	 **startup_env; /* Copy of environ at process start (before config). */
 
 	/* Configuration options. */
 	bind_t			 *keys;
+	terminal_config_t *terminal_configs; /* [0..MAX_TABS-1], per-terminal command/env/directory */
 	bind_button_t	 *buttons;
 	color_override_t *color_overrides;
-	env_var_t		 *env_vars;
+	const char		**env; /* Global env: "KEY=value" or "!VAR", same format as per-terminal env */
 	bind_ignore_t	 *ignores;
 	char			 *font;
 	bool			  audible_bell;
@@ -175,6 +176,11 @@ bool	 temu_parse_config (void);
 void	 term_config (GtkWidget *term, int window_i);
 bool	 zterm_parse_config ();
 void	 zterm_save_config ();
+void zterm_free_terminal_configs (void);
+void zterm_ensure_terminal_configs (void);
+void zterm_set_terminal_config (int index, const char **argv, const char **env, const char *working_directory);
+void zterm_set_terminal_config_range (int base, int count, const char **argv, const char **env);
+void zterm_set_global_env (const char **env);
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void	 rebuild_menus (void);
 void	 rebuild_term_list (long int window_n);

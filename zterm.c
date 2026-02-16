@@ -18,8 +18,6 @@
 #define PCRE2_CODE_UNIT_WIDTH 0
 #include <pcre2.h>
 
-extern char **environ;
-
 GdkRGBA colors[256] = {
 #include "256colors.h"
 };
@@ -252,19 +250,8 @@ static bool switch_cmd (cmd_t *cmd)
 		}
 		term_switch (cmd->n, cmd->cli_exec->argv, cmd->cli_exec->env, NULL, cmd->window_i);
 	} else {
-		bind_t *found = NULL;
-
-		for (bind_t *cur = terms.keys; cur; cur = cur->next) {
-			if (cmd->n >= cur->base && cmd->n <= (cur->base + (cur->key_max - cur->key_min))) {
-				found = cur;
-				break;
-			}
-		}
-
-		if (found != NULL) {
-			term_switch (cmd->n, found->argv, found->env, NULL, cmd->window_i);
-			term_switch (cmd->n, NULL, NULL, cmd->window_i);
-		}
+		/* Use tab config for this index (no explicit argv from CLI) */
+		term_switch (cmd->n, NULL, NULL, NULL, cmd->window_i);
 	}
 
 	free_cmd (&cmd);
@@ -799,6 +786,46 @@ static void spawn_callback (VteTerminal *term, GPid pid, GError *error, gpointer
 	}
 }
 
+/* Apply overlay entries ("KEY=value" or "!VAR") to env.
+ * g_environ_setenv/unsetenv take ownership of the env array (they free it) and return
+ * a new array; we assign back so the caller of apply_env_overlay still owns one env. */
+static void apply_env_overlay (char ***env, const char **overlay)
+{
+	if (overlay == NULL)
+		return;
+	for (int i = 0; overlay[i] != NULL; i++) {
+		if (overlay[i][0] == '!' && overlay[i][1] != '\0') {
+			*env = g_environ_unsetenv (*env, overlay[i] + 1);
+		} else {
+			const char *eq = strchr (overlay[i], '=');
+			if (eq != NULL && eq > overlay[i]) {
+				char *key = g_strndup (overlay[i], (gsize) (eq - overlay[i]));
+				*env	  = g_environ_setenv (*env, key, eq + 1, TRUE);
+				g_free (key);
+			}
+		}
+	}
+}
+
+/* Build merged env for terminal n. Priority (later overrides):
+ * 1) Env at program start (unchanged by config).
+ * 2) Global config: set and unset ("KEY=value" and "!VAR", same format as per-terminal).
+ * 3) Per-terminal config: set and unset ("KEY=value" and "!VAR" in env array).
+ * Return value is a new env array; caller must g_strfreev it (term_spawn does). */
+static char **build_spawn_env (int n)
+{
+	/* Base: we own this (g_strdupv or g_get_environ() both return caller-owned) */
+	char **env = terms.startup_env != NULL ? g_strdupv ((char **) terms.startup_env) : g_get_environ ();
+
+	/* 2. Global config overlay */
+	apply_env_overlay (&env, terms.env);
+
+	/* 3. Per-terminal overlay */
+	apply_env_overlay (&env, terms.active[n].env);
+
+	return env;
+}
+
 static gboolean term_spawn (gpointer data)
 {
 	int n		 = (long int) data;
@@ -817,9 +844,9 @@ static gboolean term_spawn (gpointer data)
 	}
 
 	if (!active->spawned) {
-		char **env = environ;
-		if (active->env != NULL) {
-			env = active->env;
+		char **env = build_spawn_env (n);
+		for (int i = 0; env[i] != NULL; i++) {
+			debugf ("  env[%d]: '%s'", i, env[i]);
 		}
 
 		const char *cwd = active->working_directory;
@@ -839,16 +866,18 @@ static gboolean term_spawn (gpointer data)
 			for (int i = 0; argv[i] != NULL; i++) {
 				debugf ("  argv[%d]: '%s'", i, argv[i]);
 			}
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
-									  NULL, -1, NULL, spawn_callback, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env,
+									  G_SPAWN_DEFAULT | VTE_SPAWN_NO_PARENT_ENVV, NULL, NULL, NULL, -1, NULL, spawn_callback,
+									  NULL);
 			g_free (argv);
 		} else if (active->argv != NULL && active->argv[0] != NULL) {
 			debugf ("Spawning with: %p '%s'", active->argv, active->argv[0]);
 			for (int i = 0; active->argv[i] != NULL; i++) {
 				debugf ("argv[%d]: '%s'", i, active->argv[i]);
 			}
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, active->argv, env, G_SPAWN_DEFAULT,
-									  NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, (char **) active->argv, env,
+									  G_SPAWN_DEFAULT | VTE_SPAWN_NO_PARENT_ENVV, NULL, NULL, NULL, -1, NULL, spawn_callback,
+									  NULL);
 
 		} else {
 			struct passwd *pass = getpwuid (getuid ());
@@ -856,10 +885,12 @@ static gboolean term_spawn (gpointer data)
 			char *argv[] = {pass->pw_shell, "--login", NULL};
 			debugf ("term: %p, shell: '%s'", VTE_TERMINAL (active->term), pass->pw_shell);
 			debugf ("Spawning with args: %s %s", argv[0], argv[1]);
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
-									  NULL, 5000, NULL, spawn_callback, NULL);
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env,
+									  G_SPAWN_DEFAULT | VTE_SPAWN_NO_PARENT_ENVV, NULL, NULL, NULL, 5000, NULL, spawn_callback,
+									  NULL);
 		}
 
+		g_strfreev (env);
 		active->spawned++;
 
 		// Workaround a bug where the cursor may not be drawn when we first switch to a new terminal.
@@ -1075,6 +1106,13 @@ void term_switch (long n, const char **argv, const char **env, const char *worki
 	if (n >= terms.n_active) {
 		errorf ("ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.", n, terms.n_active);
 		return;
+	}
+
+	/* If not overridden by caller, use per-tab config (command, env, working directory) */
+	if (argv == NULL && terms.terminal_configs != NULL && n < MAX_TABS) {
+		argv			  = terms.terminal_configs[n].argv;
+		env				  = terms.terminal_configs[n].env;
+		working_directory = terms.terminal_configs[n].working_directory;
 	}
 
 	if (!terms.active[n].term) {
@@ -1293,7 +1331,7 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 			if ((state & key_bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (keyval - cur->key_min), cur->argv, cur->env, NULL, window - &windows[0]);
+						term_switch (cur->base + (keyval - cur->key_min), NULL, NULL, NULL, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
 						debugf ("Cut text");
@@ -1893,8 +1931,9 @@ int main (int argc, char *argv[], char *envp[])
 	g_application_set_flags (G_APPLICATION (app), G_APPLICATION_HANDLES_COMMAND_LINE);
 
 	memset (&terms, 0, sizeof (terms));
-	terms.envp = envp;
-	shell	   = vte_get_user_shell ();
+	terms.envp		  = envp;
+	terms.startup_env = (const char **) g_strdupv ((gchar **) envp);
+	shell			  = vte_get_user_shell ();
 	debugf ("Using VTE: %s (%s)", vte_get_features (), shell);
 	free (shell);
 	terms.audible_bell		  = true;
@@ -1937,12 +1976,15 @@ int main (int argc, char *argv[], char *envp[])
 		bind_t *keys, *next;
 		for (keys = terms.keys; keys; keys = next) {
 			next = keys->next;
-			if (keys->argv != NULL) {
-				g_strfreev ((char **) keys->argv);
-			}
 			free (keys);
 		}
 		terms.keys = NULL;
+	}
+	zterm_free_terminal_configs ();
+
+	if (terms.startup_env) {
+		g_strfreev ((char **) terms.startup_env);
+		terms.startup_env = NULL;
 	}
 
 	return status;

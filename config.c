@@ -6,6 +6,125 @@
 static config_t cfg;
 static bool		cfg_initialized = false;
 
+void zterm_free_terminal_configs (void)
+{
+	if (terms.terminal_configs == NULL) {
+		return;
+	}
+	for (int i = 0; i < MAX_TABS; i++) {
+		if (terms.terminal_configs[i].argv) {
+			g_strfreev ((char **) terms.terminal_configs[i].argv);
+			terms.terminal_configs[i].argv = NULL;
+		}
+		if (terms.terminal_configs[i].env) {
+			g_strfreev ((char **) terms.terminal_configs[i].env);
+			terms.terminal_configs[i].env = NULL;
+		}
+		free ((char *) terms.terminal_configs[i].working_directory);
+		terms.terminal_configs[i].working_directory = NULL;
+	}
+	free (terms.terminal_configs);
+	terms.terminal_configs = NULL;
+}
+
+void zterm_ensure_terminal_configs (void)
+{
+	if (terms.terminal_configs == NULL) {
+		terms.terminal_configs = calloc (MAX_TABS, sizeof (terminal_config_t));
+	}
+}
+
+static void clear_one_terminal_config (terminal_config_t *tc)
+{
+	if (tc->argv) {
+		g_strfreev ((char **) tc->argv);
+		tc->argv = NULL;
+	}
+	if (tc->env) {
+		g_strfreev ((char **) tc->env);
+		tc->env = NULL;
+	}
+	free ((char *) tc->working_directory);
+	tc->working_directory = NULL;
+}
+
+static bool same_terminal_config (terminal_config_t *a, terminal_config_t *b)
+{
+	if ((a->argv == NULL) != (b->argv == NULL))
+		return false;
+	if (a->argv != NULL && !g_strv_equal (a->argv, b->argv))
+		return false;
+	if ((a->env == NULL) != (b->env == NULL))
+		return false;
+	if (a->env != NULL && !g_strv_equal (a->env, b->env))
+		return false;
+	if (a->working_directory == NULL && b->working_directory == NULL) {
+		return true;
+	}
+	if (a->working_directory == NULL || b->working_directory == NULL) {
+		return false;
+	}
+	return strcmp (a->working_directory, b->working_directory) == 0;
+}
+
+static void add_terminal_config_to_list (config_setting_t *terminals_list, terminal_config_t *tc, int index, int end_index)
+{
+	config_setting_t *entry	 = config_setting_add (terminals_list, NULL, CONFIG_TYPE_GROUP);
+	config_setting_t *ranges = config_setting_add (entry, "ranges", CONFIG_TYPE_LIST);
+	if (index == end_index) {
+		config_setting_t *elem = config_setting_add (ranges, NULL, CONFIG_TYPE_INT);
+		config_setting_set_int (elem, index);
+	} else {
+		config_setting_t *range_group = config_setting_add (ranges, NULL, CONFIG_TYPE_GROUP);
+		config_setting_t *start_set	  = config_setting_add (range_group, "start", CONFIG_TYPE_INT);
+		config_setting_t *end_set	  = config_setting_add (range_group, "end", CONFIG_TYPE_INT);
+		config_setting_set_int (start_set, index);
+		config_setting_set_int (end_set, end_index);
+	}
+	if (tc->argv != NULL) {
+		config_setting_t *cmd = config_setting_add (entry, "command", CONFIG_TYPE_ARRAY);
+		for (int j = 0; tc->argv[j] != NULL; j++) {
+			config_setting_t *arg = config_setting_add (cmd, NULL, CONFIG_TYPE_STRING);
+			config_setting_set_string (arg, tc->argv[j]);
+		}
+	}
+	if (tc->working_directory != NULL) {
+		config_setting_t *dir = config_setting_add (entry, "directory", CONFIG_TYPE_STRING);
+		config_setting_set_string (dir, tc->working_directory);
+	}
+	if (tc->env != NULL) {
+		config_setting_t *env = config_setting_add (entry, "env", CONFIG_TYPE_ARRAY);
+		for (int j = 0; tc->env[j] != NULL; j++) {
+			config_setting_t *e = config_setting_add (env, NULL, CONFIG_TYPE_STRING);
+			config_setting_set_string (e, tc->env[j]);
+		}
+	}
+}
+
+void zterm_set_terminal_config (int index, const char **argv, const char **env, const char *working_directory)
+{
+	if (index < 0 || index >= MAX_TABS) {
+		return;
+	}
+	zterm_ensure_terminal_configs ();
+	terminal_config_t *tc = &terms.terminal_configs[index];
+	clear_one_terminal_config (tc);
+	tc->argv			  = argv ? (const gchar **) g_strdupv ((gchar **) argv) : NULL;
+	tc->env				  = env ? (const gchar **) g_strdupv ((gchar **) env) : NULL;
+	tc->working_directory = working_directory ? strdup (working_directory) : NULL;
+}
+
+void zterm_set_terminal_config_range (int base, int count, const char **argv, const char **env)
+{
+	if (count <= 0 || base < 0) {
+		return;
+	}
+	zterm_ensure_terminal_configs ();
+	for (int i = 0; i < count && (base + i) < MAX_TABS; i++) {
+		zterm_set_terminal_config (base + i, argv, env, NULL);
+	}
+}
+
 static int zregcomp (regex_t *restrict preg, const char *restrict regex, int cflags)
 {
 	int ret = regcomp (preg, regex, cflags);
@@ -19,7 +138,7 @@ static int zregcomp (regex_t *restrict preg, const char *restrict regex, int cfl
 	return ret;
 }
 
-static void zterm_parse_bind_switch (int base, char *state, char *key_min, char *key_max, char **argv, char **env)
+static void zterm_parse_bind_switch (int base, char *state, char *key_min, char *key_max)
 {
 	bind_t *bind = calloc (1, sizeof (bind_t));
 	bind->next	 = terms.keys;
@@ -44,9 +163,6 @@ static void zterm_parse_bind_switch (int base, char *state, char *key_min, char 
 	else
 		bind->key_max = bind->key_min;
 
-	bind->argv = argv;
-	bind->env  = env;
-
 	// We need to find the highest terminal number that this binding can use.
 	// We then make sure that n_active is, at minimum, that number.
 	{
@@ -57,13 +173,24 @@ static void zterm_parse_bind_switch (int base, char *state, char *key_min, char 
 
 static void temu_parse_bind_switch (char **subs)
 {
-	int	   base = strtol (subs[0], NULL, 0);
-	char **argv = NULL;
-	if (subs[6]) {
-		argv = &subs[6];
-	}
+	int base = strtol (subs[0], NULL, 0);
+	zterm_parse_bind_switch (base, subs[1], subs[2], subs[4]);
 
-	zterm_parse_bind_switch (base, subs[1], subs[2], subs[4], argv, NULL);
+	/* Legacy: optional command at end of line → store as terminal config for this binding's range */
+	if (subs[6] && subs[6][0]) {
+		int		key_min = gdk_keyval_from_name (subs[2]);
+		int		key_max = subs[4] ? gdk_keyval_from_name (subs[4]) : key_min;
+		int		count	= key_max - key_min + 1;
+		gint	argc;
+		char  **argv  = NULL;
+		GError *error = NULL;
+		if (g_shell_parse_argv (subs[6], &argc, &argv, &error)) {
+			zterm_ensure_terminal_configs ();
+			zterm_set_terminal_config_range (base, count, (const char **) argv, NULL);
+			g_strfreev (argv);
+		}
+		g_clear_error (&error);
+	}
 }
 
 static void zterm_parse_bind_action (char *action, char *state, char *key)
@@ -227,13 +354,17 @@ static void zterm_free_settings (void)
 		terms.color_overrides = next;
 	}
 
-	while (terms.env_vars != NULL) {
-		env_var_t *next = terms.env_vars->next;
-		free (terms.env_vars->name);
-		free (terms.env_vars->value);
-		free (terms.env_vars);
-		terms.env_vars = next;
+	if (terms.env) {
+		g_strfreev ((char **) terms.env);
+		terms.env = NULL;
 	}
+}
+
+void zterm_set_global_env (const char **env)
+{
+	if (terms.env)
+		g_strfreev ((char **) terms.env);
+	terms.env = env ? (const char **) g_strdupv ((char **) env) : NULL;
 }
 
 static void zterm_parse_color (int index, const char *value)
@@ -458,21 +589,26 @@ done:
 	return true;
 }
 
-char **get_config_str_vec (config_t *cfg, const char *path)
+static const char **get_config_str_vec_from_setting (config_setting_t *setting);
+
+const char **get_config_str_vec (config_t *cfg, const char *path)
 {
 	config_setting_t *setting = config_lookup (cfg, path);
+	return get_config_str_vec_from_setting (setting);
+}
+
+static const char **get_config_str_vec_from_setting (config_setting_t *setting)
+{
 	if (setting == NULL || config_setting_type (setting) != CONFIG_TYPE_ARRAY) {
 		return NULL;
 	}
-
 	int			 n	 = config_setting_length (setting);
 	const char **vec = g_new0 (const char *, n + 1);
 	for (int i = 0; i < n; i++) {
 		vec[i] = config_setting_get_string_elem (setting, i);
 	}
 	vec[n] = NULL;
-
-	return g_strdupv ((char **) vec);
+	return (const char **) g_strdupv ((char **) vec);
 }
 
 static void zterm_parse_env (const char *name, const char *value)
@@ -482,13 +618,6 @@ static void zterm_parse_env (const char *name, const char *value)
 	}
 
 	setenv (name, value, 1);
-
-	/* Track the env var for saving */
-	env_var_t *env = calloc (1, sizeof (env_var_t));
-	env->name	   = strdup (name);
-	env->value	   = strdup (value);
-	env->next	   = terms.env_vars;
-	terms.env_vars = env;
 }
 
 const char *zterm_config_file ()
@@ -521,16 +650,70 @@ bool zterm_parse_config ()
 		return false;
 	}
 
-	/* Parse environment variables */
+	zterm_free_terminal_configs ();
+
+	/* Clear previous global env; build terms.env as "KEY=value" / "!VAR" (same as per-terminal) */
+	if (terms.env) {
+		g_strfreev ((char **) terms.env);
+		terms.env = NULL;
+	}
 	config_setting_t *env_setting = config_lookup (&cfg, "env");
 	if (env_setting != NULL) {
-		int n = config_setting_length (env_setting);
-		for (int i = 0; i < n; i++) {
-			config_setting_t *item	= config_setting_get_elem (env_setting, i);
-			const char		 *name	= config_setting_name (item);
-			const char		 *value = config_setting_get_string (item);
-			zterm_parse_env (name, value);
+		GPtrArray *arr = g_ptr_array_new_with_free_func (g_free);
+		if (config_setting_type (env_setting) == CONFIG_TYPE_GROUP) {
+			int n = config_setting_length (env_setting);
+			for (int i = 0; i < n; i++) {
+				config_setting_t *item = config_setting_get_elem (env_setting, i);
+				const char		 *name = config_setting_name (item);
+				if (name == NULL)
+					continue;
+				if (config_setting_type (item) == CONFIG_TYPE_BOOL) {
+					int val = config_setting_get_bool (item);
+					if (!val)
+						g_ptr_array_add (arr, g_strdup_printf ("!%s", name));
+					else {
+						zterm_parse_env (name, "1");
+						g_ptr_array_add (arr, g_strdup_printf ("%s=1", name));
+					}
+				} else if (config_setting_type (item) == CONFIG_TYPE_STRING) {
+					const char *value = config_setting_get_string (item);
+					if (value != NULL) {
+						zterm_parse_env (name, value);
+						g_ptr_array_add (arr, g_strdup_printf ("%s=%s", name, value));
+					}
+				}
+			}
+		} else if (config_setting_type (env_setting) == CONFIG_TYPE_ARRAY) {
+			int n = config_setting_length (env_setting);
+			for (int i = 0; i < n; i++) {
+				const char *s = config_setting_get_string_elem (env_setting, i);
+				if (s == NULL)
+					continue;
+				if (s[0] == '!' && s[1] != '\0') {
+					const char *varname = s + 1;
+					const char *eq		= strchr (varname, '=');
+					size_t		len		= eq != NULL ? (size_t) (eq - varname) : strlen (varname);
+					if (len > 0)
+						g_ptr_array_add (arr, g_strdup_printf ("!%.*s", (int) len, varname));
+				} else {
+					const char *eq = strchr (s, '=');
+					if (eq != NULL && eq > s) {
+						char *name = g_strndup (s, (gsize) (eq - s));
+						zterm_parse_env (name, eq + 1);
+						g_free (name);
+						g_ptr_array_add (arr, g_strdup (s));
+					}
+				}
+			}
 		}
+		if (arr->len > 0) {
+			char **sv = g_new (char *, arr->len + 1);
+			for (guint i = 0; i < arr->len; i++)
+				sv[i] = g_strdup (g_ptr_array_index (arr, i));
+			sv[arr->len] = NULL;
+			terms.env	 = (const char **) sv;
+		}
+		g_ptr_array_free (arr, TRUE);
 	}
 
 	/* Parse simple settings */
@@ -659,7 +842,7 @@ bool zterm_parse_config ()
 		}
 	}
 
-	/* Parse bind_switch entries */
+	/* Parse bind_switch entries (key bindings only; terminal command/env come from "terminals" or legacy per-entry cmd/env) */
 	config_setting_t *bind_switch_list = config_lookup (&cfg, "bind_switch");
 	if (bind_switch_list != NULL) {
 		int n = config_setting_length (bind_switch_list);
@@ -677,13 +860,26 @@ bool zterm_parse_config ()
 
 			config_setting_lookup_string (bind, "key_max", &key_max);
 
-			char **argv = NULL;
-			char **env	= NULL;
+			zterm_parse_bind_switch (base, (char *) state, (char *) key_min, (char *) key_max);
 
-			argv = get_config_str_vec (&cfg, "cmd");
-			env	 = get_config_str_vec (&cfg, "env");
-
-			zterm_parse_bind_switch (base, (char *) state, (char *) key_min, (char *) key_max, argv, env);
+			/* Legacy: per-entry cmd/env in bind_switch → apply to terminal config for this binding's range */
+			config_setting_t *cmd_setting = config_setting_get_member (bind, "cmd");
+			config_setting_t *env_setting = config_setting_get_member (bind, "env");
+			if (cmd_setting != NULL || env_setting != NULL) {
+				const char **argv	   = get_config_str_vec_from_setting (cmd_setting);
+				const char **env	   = get_config_str_vec_from_setting (env_setting);
+				int			 key_min_k = gdk_keyval_from_name (key_min);
+				int			 key_max_k = key_max ? gdk_keyval_from_name (key_max) : key_min_k;
+				int			 count	   = key_max_k - key_min_k + 1;
+				if (count > 0) {
+					zterm_ensure_terminal_configs ();
+					zterm_set_terminal_config_range (base, count, argv, env);
+				}
+				if (argv)
+					g_strfreev ((char **) argv);
+				if (env)
+					g_strfreev ((char **) env);
+			}
 		}
 	}
 
@@ -918,23 +1114,26 @@ void zterm_save_config ()
 				config_setting_set_string (key_max, key_max_str);
 			}
 		}
+	}
 
-		/* Save argv if present */
-		if (cur->argv != NULL) {
-			config_setting_t *cmd = config_setting_add (bind, "cmd", CONFIG_TYPE_ARRAY);
-			for (int i = 0; cur->argv[i] != NULL; i++) {
-				config_setting_t *arg = config_setting_add (cmd, NULL, CONFIG_TYPE_STRING);
-				config_setting_set_string (arg, cur->argv[i]);
-			}
+	/* Save terminals: coalesce consecutive indices with identical config into start/end ranges */
+	if (terms.terminal_configs != NULL) {
+		config_setting_t *terminals_list = config_lookup (&cfg, "terminals");
+		if (terminals_list != NULL) {
+			config_setting_remove (config_root_setting (&cfg), "terminals");
 		}
-
-		/* Save env if present */
-		if (cur->env != NULL) {
-			config_setting_t *env = config_setting_add (bind, "env", CONFIG_TYPE_ARRAY);
-			for (int i = 0; cur->env[i] != NULL; i++) {
-				config_setting_t *e = config_setting_add (env, NULL, CONFIG_TYPE_STRING);
-				config_setting_set_string (e, cur->env[i]);
+		terminals_list = config_setting_add (config_root_setting (&cfg), "terminals", CONFIG_TYPE_LIST);
+		for (int i = 0; i < MAX_TABS; i++) {
+			terminal_config_t *tc = &terms.terminal_configs[i];
+			if (tc->argv == NULL && tc->working_directory == NULL && tc->env == NULL) {
+				continue;
 			}
+			int end_i = i;
+			while (end_i + 1 < MAX_TABS && same_terminal_config (tc, &terms.terminal_configs[end_i + 1])) {
+				end_i++;
+			}
+			add_terminal_config_to_list (terminals_list, tc, i, end_i);
+			i = end_i;
 		}
 	}
 
@@ -978,9 +1177,24 @@ void zterm_save_config ()
 		config_setting_remove (config_root_setting (&cfg), "env");
 	}
 	env_list = config_setting_add (config_root_setting (&cfg), "env", CONFIG_TYPE_GROUP);
-	for (env_var_t *cur = terms.env_vars; cur; cur = cur->next) {
-		config_setting_t *var = config_setting_add (env_list, cur->name, CONFIG_TYPE_STRING);
-		config_setting_set_string (var, cur->value);
+	if (terms.env) {
+		for (int i = 0; terms.env[i] != NULL; i++) {
+			const char *ent = terms.env[i];
+			if (ent[0] == '!' && ent[1] != '\0') {
+				config_setting_t *var = config_setting_add (env_list, ent + 1, CONFIG_TYPE_BOOL);
+				if (var != NULL)
+					config_setting_set_bool (var, 0);
+			} else {
+				const char *eq = strchr (ent, '=');
+				if (eq != NULL && eq > ent) {
+					char			 *name = g_strndup (ent, (gsize) (eq - ent));
+					config_setting_t *var  = config_setting_add (env_list, name, CONFIG_TYPE_STRING);
+					if (var != NULL)
+						config_setting_set_string (var, eq + 1);
+					g_free (name);
+				}
+			}
+		}
 	}
 
 	const char *filename = zterm_config_file ();
