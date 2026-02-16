@@ -1111,10 +1111,10 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 /* Same format as per-terminal: list of "KEY=value" or "!VAR" strings */
 
 typedef struct {
-	GtkWidget  *dialog;
-	GtkWidget  *list_box;
-	GList	  *working_env;  /* GList of gchar* */
-	GList	  *original_env;
+	GtkWidget	   *dialog;
+	GtkWidget	   *list_box;
+	GList		   *working_env; /* GList of gchar* */
+	GList		   *original_env;
 	ListSettingsOps ops;
 } EnvListDialog;
 
@@ -1131,9 +1131,9 @@ static void refresh_env_list (EnvListDialog *list_dialog);
 
 static char **env_list_to_strv (GList *list)
 {
-	guint n = g_list_length (list);
+	guint  n  = g_list_length (list);
 	char **sv = g_new (char *, n + 1);
-	guint i = 0;
+	guint  i  = 0;
 	for (GList *it = list; it; it = it->next)
 		sv[i++] = g_strdup ((const char *) it->data);
 	sv[i] = NULL;
@@ -1158,7 +1158,7 @@ static void env_edit_ok (EnvEditDialog *edit)
 		g_object_unref (alert);
 		return;
 	}
-	bool unset = gtk_check_button_get_active (GTK_CHECK_BUTTON (edit->unset_check));
+	bool		   unset	   = gtk_check_button_get_active (GTK_CHECK_BUTTON (edit->unset_check));
 	EnvListDialog *list_dialog = edit->list_dialog;
 
 	if (edit->edit_string) {
@@ -1166,8 +1166,8 @@ static void env_edit_ok (EnvEditDialog *edit)
 		g_free (edit->edit_string);
 	}
 
-	const char *value = gtk_editable_get_text (GTK_EDITABLE (edit->value_entry));
-	char *entry = unset ? g_strdup_printf ("!%s", name) : g_strdup_printf ("%s=%s", name, value ? value : "");
+	const char *value		 = gtk_editable_get_text (GTK_EDITABLE (edit->value_entry));
+	char	   *entry		 = unset ? g_strdup_printf ("!%s", name) : g_strdup_printf ("%s=%s", name, value ? value : "");
 	list_dialog->working_env = g_list_append (list_dialog->working_env, entry);
 	g_free (name);
 	refresh_env_list (list_dialog);
@@ -1182,8 +1182,8 @@ static void env_edit_cancel (EnvEditDialog *edit)
 static void show_env_edit_dialog (EnvListDialog *list_dialog, const char *edit_string)
 {
 	EnvEditDialog *edit = g_new0 (EnvEditDialog, 1);
-	edit->list_dialog  = list_dialog;
-	edit->edit_string  = (char *) edit_string; /* pointer into list, freed in env_edit_ok after remove */
+	edit->list_dialog	= list_dialog;
+	edit->edit_string	= (char *) edit_string; /* pointer into list, freed in env_edit_ok after remove */
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), edit_string ? "Edit Environment Variable" : "New Environment Variable");
@@ -1244,7 +1244,7 @@ static void show_env_edit_dialog (EnvListDialog *list_dialog, const char *edit_s
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
 	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	 = gtk_button_new_with_mnemonic ("_OK");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
 	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
@@ -1262,7 +1262,7 @@ static void env_add_clicked (GtkButton *button, gpointer user_data)
 
 static void env_edit_clicked (GtkButton *button, gpointer user_data)
 {
-	const char   *s = (const char *) g_object_get_data (G_OBJECT (button), "env_string");
+	const char	  *s		   = (const char *) g_object_get_data (G_OBJECT (button), "env_string");
 	EnvListDialog *list_dialog = (EnvListDialog *) user_data;
 	show_env_edit_dialog (list_dialog, s);
 }
@@ -1270,8 +1270,8 @@ static void env_edit_clicked (GtkButton *button, gpointer user_data)
 static void env_delete_clicked (GtkButton *button, gpointer user_data)
 {
 	EnvListDialog *list_dialog = (EnvListDialog *) user_data;
-	char		  *s		  = (char *) g_object_get_data (G_OBJECT (button), "env_string");
-	list_dialog->working_env = g_list_remove (list_dialog->working_env, s);
+	char		  *s		   = (char *) g_object_get_data (G_OBJECT (button), "env_string");
+	list_dialog->working_env   = g_list_remove (list_dialog->working_env, s);
 	g_free (s);
 	refresh_env_list (list_dialog);
 }
@@ -1286,8 +1286,8 @@ static void refresh_env_list (EnvListDialog *list_dialog)
 	}
 
 	for (GList *it = list_dialog->working_env; it; it = it->next) {
-		const char *s = (const char *) it->data;
-		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+		const char *s		= (const char *) it->data;
+		GtkWidget  *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 		gtk_widget_set_margin_start (row_box, 6);
 		gtk_widget_set_margin_end (row_box, 6);
 		gtk_widget_set_margin_top (row_box, 3);
@@ -1318,7 +1318,7 @@ static void refresh_env_list (EnvListDialog *list_dialog)
 static void env_commit (void *ctx)
 {
 	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
-	char **sv = env_list_to_strv (list_dialog->working_env);
+	char		 **sv		   = env_list_to_strv (list_dialog->working_env);
 	zterm_set_global_env ((const char **) sv);
 	g_strfreev (sv);
 }
@@ -1333,7 +1333,7 @@ static void env_snapshot (void *ctx)
 static void env_restore_config (void *ctx)
 {
 	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
-	char **sv = env_list_to_strv (list_dialog->original_env);
+	char		 **sv		   = env_list_to_strv (list_dialog->original_env);
 	zterm_set_global_env ((const char **) sv);
 	g_strfreev (sv);
 }
@@ -1353,7 +1353,7 @@ static void env_refresh_ui (void *ctx)
 static void env_destroy (void *ctx)
 {
 	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
-	GtkWidget	 *dialog		= list_dialog->dialog;
+	GtkWidget	  *dialog	   = list_dialog->dialog;
 	g_list_free_full (list_dialog->working_env, g_free);
 	g_list_free_full (list_dialog->original_env, g_free);
 	g_free (list_dialog);
@@ -1362,23 +1362,23 @@ static void env_destroy (void *ctx)
 
 static void show_env_editor (GtkButton *button, gpointer user_data)
 {
-	PrefsDialog	  *prefs		= (PrefsDialog *) user_data;
+	PrefsDialog	  *prefs	   = (PrefsDialog *) user_data;
 	EnvListDialog *list_dialog = g_new0 (EnvListDialog, 1);
-	list_dialog->working_env  = NULL;
-	list_dialog->original_env = NULL;
+	list_dialog->working_env   = NULL;
+	list_dialog->original_env  = NULL;
 	if (terms.env) {
 		for (int i = 0; terms.env[i] != NULL; i++)
 			list_dialog->working_env = g_list_append (list_dialog->working_env, g_strdup (terms.env[i]));
 	}
-	list_dialog->original_env = g_list_copy_deep (list_dialog->working_env, (GCopyFunc) g_strdup, g_free);
-	list_dialog->ops.ctx			= list_dialog;
-	list_dialog->ops.commit		= env_commit;
-	list_dialog->ops.snapshot	= env_snapshot;
-	list_dialog->ops.restore_config  = env_restore_config;
+	list_dialog->original_env		 = g_list_copy_deep (list_dialog->working_env, (GCopyFunc) g_strdup, g_free);
+	list_dialog->ops.ctx			 = list_dialog;
+	list_dialog->ops.commit			 = env_commit;
+	list_dialog->ops.snapshot		 = env_snapshot;
+	list_dialog->ops.restore_config	 = env_restore_config;
 	list_dialog->ops.restore_working = env_restore_working;
-	list_dialog->ops.refresh_ui		= env_refresh_ui;
-	list_dialog->ops.destroy		= env_destroy;
-	list_dialog->ops.after_commit	= NULL;
+	list_dialog->ops.refresh_ui		 = env_refresh_ui;
+	list_dialog->ops.destroy		 = env_destroy;
+	list_dialog->ops.after_commit	 = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), "Global Environment");
@@ -1394,8 +1394,8 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 	gtk_widget_set_margin_bottom (main_box, 12);
 	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
 
-	GtkWidget *info_label = gtk_label_new (
-		"Set or unset environment variables for all new terminal spawns. Set: name=value. Unset: variable is removed from spawn env.");
+	GtkWidget *info_label = gtk_label_new ("Set or unset environment variables for all new terminal spawns. Set: name=value. "
+										   "Unset: variable is removed from spawn env.");
 	gtk_label_set_wrap (GTK_LABEL (info_label), TRUE);
 	gtk_box_append (GTK_BOX (main_box), info_label);
 
@@ -1416,11 +1416,11 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
-	GtkWidget *add_btn   = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
 	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	= gtk_button_new_with_mnemonic ("_OK");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
 	gtk_box_append (GTK_BOX (button_box), reset_btn);
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
@@ -1441,17 +1441,17 @@ static void show_env_editor (GtkButton *button, gpointer user_data)
 /* List of modifier states to ignore when matching key/mouse bindings (e.g. Mod2 for NumLock). */
 
 typedef struct {
-	GtkWidget *dialog;
-	GtkWidget *list_box;
-	GList	  *working_list;  /* GList of gchar* (state strings like "Mod2") */
-	GList	  *original_list;
+	GtkWidget	   *dialog;
+	GtkWidget	   *list_box;
+	GList		   *working_list; /* GList of gchar* (state strings like "Mod2") */
+	GList		   *original_list;
 	ListSettingsOps ops;
 } BindIgnoreListDialog;
 
 typedef struct {
-	GtkWidget	   *dialog;
-	GtkWidget	   *state_entry;
-	char		   *edit_string; /* current row string we're replacing, or NULL for add */
+	GtkWidget			 *dialog;
+	GtkWidget			 *state_entry;
+	char				 *edit_string; /* current row string we're replacing, or NULL for add */
 	BindIgnoreListDialog *list_dialog;
 } BindIgnoreEditDialog;
 
@@ -1487,8 +1487,8 @@ static void bind_ignore_edit_ok (BindIgnoreEditDialog *edit)
 	guint state;
 	if (!bind_ignore_parse_state (input, &state)) {
 		g_free (input);
-		GtkAlertDialog *alert = gtk_alert_dialog_new (
-			"Invalid: value must be modifier state only (e.g. Mod2 or Control+Mod1), no key.");
+		GtkAlertDialog *alert =
+		  gtk_alert_dialog_new ("Invalid: value must be modifier state only (e.g. Mod2 or Control+Mod1), no key.");
 		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
 		g_object_unref (alert);
 		return;
@@ -1512,8 +1512,8 @@ static void bind_ignore_edit_cancel (BindIgnoreEditDialog *edit)
 static void show_bind_ignore_edit_dialog (BindIgnoreListDialog *list_dialog, const char *edit_string)
 {
 	BindIgnoreEditDialog *edit = g_new0 (BindIgnoreEditDialog, 1);
-	edit->list_dialog  = list_dialog;
-	edit->edit_string  = edit_string ? g_strdup (edit_string) : NULL;
+	edit->list_dialog		   = list_dialog;
+	edit->edit_string		   = edit_string ? g_strdup (edit_string) : NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), edit_string ? "Edit Ignored Modifiers" : "Add Ignored Modifiers");
@@ -1549,7 +1549,7 @@ static void show_bind_ignore_edit_dialog (BindIgnoreListDialog *list_dialog, con
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
 	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *ok_btn	 = gtk_button_new_with_mnemonic ("_OK");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
 	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
@@ -1567,7 +1567,7 @@ static void bind_ignore_add_clicked (GtkButton *button, gpointer user_data)
 
 static void bind_ignore_edit_clicked (GtkButton *button, gpointer user_data)
 {
-	const char   *s = (const char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
+	const char			 *s			  = (const char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
 	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) user_data;
 	show_bind_ignore_edit_dialog (list_dialog, s);
 }
@@ -1575,8 +1575,8 @@ static void bind_ignore_edit_clicked (GtkButton *button, gpointer user_data)
 static void bind_ignore_delete_clicked (GtkButton *button, gpointer user_data)
 {
 	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) user_data;
-	char		  *s		  = (char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
-	list_dialog->working_list = g_list_remove (list_dialog->working_list, s);
+	char				 *s			  = (char *) g_object_get_data (G_OBJECT (button), "bind_ignore_string");
+	list_dialog->working_list		  = g_list_remove (list_dialog->working_list, s);
 	g_free (s);
 	refresh_bind_ignore_list (list_dialog);
 }
@@ -1591,8 +1591,8 @@ static void refresh_bind_ignore_list (BindIgnoreListDialog *list_dialog)
 	}
 
 	for (GList *it = list_dialog->working_list; it; it = it->next) {
-		const char *s = (const char *) it->data;
-		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+		const char *s		= (const char *) it->data;
+		GtkWidget  *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 		gtk_widget_set_margin_start (row_box, 6);
 		gtk_widget_set_margin_end (row_box, 6);
 		gtk_widget_set_margin_top (row_box, 3);
@@ -1636,9 +1636,9 @@ static void bind_ignore_commit (void *ctx)
 		if (!bind_ignore_parse_state ((const char *) it->data, &state))
 			continue;
 		bind_ignore_t *ignore = calloc (1, sizeof (bind_ignore_t));
-		ignore->state = state;
-		ignore->next  = head;
-		head		  = ignore;
+		ignore->state		  = state;
+		ignore->next		  = head;
+		head				  = ignore;
 	}
 	terms.ignores = head;
 	zterm_apply_bind_ignores ();
@@ -1666,9 +1666,9 @@ static void bind_ignore_restore_config (void *ctx)
 		if (!bind_ignore_parse_state ((const char *) it->data, &state))
 			continue;
 		bind_ignore_t *ignore = calloc (1, sizeof (bind_ignore_t));
-		ignore->state = state;
-		ignore->next  = head;
-		head		  = ignore;
+		ignore->state		  = state;
+		ignore->next		  = head;
+		head				  = ignore;
 	}
 	terms.ignores = head;
 	zterm_apply_bind_ignores ();
@@ -1689,7 +1689,7 @@ static void bind_ignore_refresh_ui (void *ctx)
 static void bind_ignore_destroy (void *ctx)
 {
 	BindIgnoreListDialog *list_dialog = (BindIgnoreListDialog *) ctx;
-	GtkWidget			*dialog	 = list_dialog->dialog;
+	GtkWidget			 *dialog	  = list_dialog->dialog;
 	g_list_free_full (list_dialog->working_list, g_free);
 	g_list_free_full (list_dialog->original_list, g_free);
 	g_free (list_dialog);
@@ -1698,23 +1698,23 @@ static void bind_ignore_destroy (void *ctx)
 
 static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
 {
-	PrefsDialog	   *prefs	  = (PrefsDialog *) user_data;
+	PrefsDialog			 *prefs		  = (PrefsDialog *) user_data;
 	BindIgnoreListDialog *list_dialog = g_new0 (BindIgnoreListDialog, 1);
-	list_dialog->working_list  = NULL;
-	list_dialog->original_list = NULL;
+	list_dialog->working_list		  = NULL;
+	list_dialog->original_list		  = NULL;
 	for (bind_ignore_t *cur = terms.ignores; cur; cur = cur->next) {
-		gchar *state_str = gtk_accelerator_name (0, cur->state);
+		gchar *state_str		  = gtk_accelerator_name (0, cur->state);
 		list_dialog->working_list = g_list_append (list_dialog->working_list, state_str);
 	}
-	list_dialog->original_list = g_list_copy_deep (list_dialog->working_list, (GCopyFunc) g_strdup, g_free);
-	list_dialog->ops.ctx			  = list_dialog;
-	list_dialog->ops.commit		  = bind_ignore_commit;
-	list_dialog->ops.snapshot		  = bind_ignore_snapshot;
-	list_dialog->ops.restore_config   = bind_ignore_restore_config;
-	list_dialog->ops.restore_working  = bind_ignore_restore_working;
-	list_dialog->ops.refresh_ui		  = bind_ignore_refresh_ui;
-	list_dialog->ops.destroy		  = bind_ignore_destroy;
-	list_dialog->ops.after_commit	  = NULL;
+	list_dialog->original_list		 = g_list_copy_deep (list_dialog->working_list, (GCopyFunc) g_strdup, g_free);
+	list_dialog->ops.ctx			 = list_dialog;
+	list_dialog->ops.commit			 = bind_ignore_commit;
+	list_dialog->ops.snapshot		 = bind_ignore_snapshot;
+	list_dialog->ops.restore_config	 = bind_ignore_restore_config;
+	list_dialog->ops.restore_working = bind_ignore_restore_working;
+	list_dialog->ops.refresh_ui		 = bind_ignore_refresh_ui;
+	list_dialog->ops.destroy		 = bind_ignore_destroy;
+	list_dialog->ops.after_commit	 = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), "Ignored Key Modifiers");
@@ -1730,8 +1730,8 @@ static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
 	gtk_widget_set_margin_bottom (main_box, 12);
 	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
 
-	GtkWidget *info_label = gtk_label_new (
-		"Modifier states listed here are ignored when matching key and mouse bindings (e.g. Mod2 for NumLock).");
+	GtkWidget *info_label =
+	  gtk_label_new ("Modifier states listed here are ignored when matching key and mouse bindings (e.g. Mod2 for NumLock).");
 	gtk_label_set_wrap (GTK_LABEL (info_label), TRUE);
 	gtk_box_append (GTK_BOX (main_box), info_label);
 
@@ -1752,11 +1752,11 @@ static void show_bind_ignore_editor (GtkButton *button, gpointer user_data)
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
-	GtkWidget *add_btn   = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *reset_btn = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
 	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
-	GtkWidget *apply_btn = gtk_button_new_with_mnemonic ("_Apply");
-	GtkWidget *ok_btn	= gtk_button_new_with_mnemonic ("_OK");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
 	gtk_box_append (GTK_BOX (button_box), reset_btn);
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
@@ -2938,13 +2938,13 @@ static void terminal_config_array_free (terminal_config_t *arr)
 
 /* Set one slot in an array (caller's array; used for working copy edits). */
 static void set_terminal_config_slot (terminal_config_t *arr, int index, const char **argv, const char **env,
-									   const char *working_directory)
+									  const char *working_directory)
 {
 	if (!arr || index < 0 || index >= MAX_TABS)
 		return;
 	clear_terminal_config_slot (&arr[index]);
-	arr[index].argv			  = argv ? (const char **) g_strdupv ((gchar **) argv) : NULL;
-	arr[index].env			  = env ? (const char **) g_strdupv ((gchar **) env) : NULL;
+	arr[index].argv				 = argv ? (const char **) g_strdupv ((gchar **) argv) : NULL;
+	arr[index].env				 = env ? (const char **) g_strdupv ((gchar **) env) : NULL;
 	arr[index].working_directory = working_directory ? strdup (working_directory) : NULL;
 }
 
@@ -3052,19 +3052,20 @@ typedef struct {
 } TerminalConfigEditDialog;
 
 struct TerminalConfigListDialog_s {
-	GtkWidget	   *dialog;
-	GtkWidget	   *column_view;
-	GtkWidget	   *filter_check;
-	GtkWidget	   *filter_min_spin;
-	GtkWidget	   *filter_max_spin;
-	GListStore	   *store;
-	long int		window_n;
-	int				filter_start; /* -1 = show all */
-	int				filter_end;
-	terminal_config_t *working_configs;  /* working copy; list edits this */
+	GtkWidget		  *dialog;
+	GtkWidget		  *column_view;
+	GtkWidget		  *filter_check;
+	GtkWidget		  *filter_min_spin;
+	GtkWidget		  *filter_max_spin;
+	GListStore		  *store;
+	long int		   window_n;
+	int				   filter_start; /* -1 = show all */
+	int				   filter_end;
+	terminal_config_t *working_configs;	 /* working copy; list edits this */
 	terminal_config_t *original_configs; /* snapshot for Reset/Cancel */
-	ListSettingsOps	ops;
-	TerminalConfigCellBindData cell_bind_data[4]; /* 0=ranges, 1=command, 2=directory, 3=env; must outlive stack for bind callbacks */
+	ListSettingsOps	   ops;
+	TerminalConfigCellBindData
+	  cell_bind_data[4]; /* 0=ranges, 1=command, 2=directory, 3=env; must outlive stack for bind callbacks */
 };
 
 static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog);
@@ -3123,9 +3124,9 @@ static void terminal_config_edit_ok (TerminalConfigEditDialog *edit)
 	const char *dir = (dir_str && strlen (dir_str) > 0) ? dir_str : NULL;
 
 	TerminalConfigListDialog *list =
-		edit->list_dialog
-			? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (edit->list_dialog), "terminal_config_list_dialog")
-			: NULL;
+	  edit->list_dialog
+		? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (edit->list_dialog), "terminal_config_list_dialog")
+		: NULL;
 
 	if (list && list->working_configs) {
 		/* Apply to working copy only; list Apply/OK will commit and save */
@@ -3214,10 +3215,9 @@ static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long
 	gtk_editable_set_width_chars (GTK_EDITABLE (edit->cmd_entry), 28);
 	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->cmd_entry), "e.g. /bin/zsh -l");
 	TerminalConfigListDialog *list_for_edit =
-		list_dialog ? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (list_dialog), "terminal_config_list_dialog") : NULL;
-	terminal_config_t *config_src = (list_for_edit && list_for_edit->working_configs)
-		? list_for_edit->working_configs
-		: terms.terminal_configs;
+	  list_dialog ? (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (list_dialog), "terminal_config_list_dialog") : NULL;
+	terminal_config_t *config_src =
+	  (list_for_edit && list_for_edit->working_configs) ? list_for_edit->working_configs : terms.terminal_configs;
 	if (edit_start >= 0 && config_src && edit_start < MAX_TABS && config_src[edit_start].argv) {
 		gchar *cmd_str = g_strjoinv (" ", (gchar **) config_src[edit_start].argv);
 		gtk_editable_set_text (GTK_EDITABLE (edit->cmd_entry), cmd_str);
@@ -3396,9 +3396,8 @@ static void terminal_config_editable_cell_bind (GtkSignalListItemFactory *factor
 	TerminalConfigItem		   *item	  = gtk_list_item_get_item (list_item);
 	char						display[512];
 	display[0] = '\0';
-	terminal_config_t *src = bind_data->list_dialog->working_configs
-		? bind_data->list_dialog->working_configs
-		: terms.terminal_configs;
+	terminal_config_t *src =
+	  bind_data->list_dialog->working_configs ? bind_data->list_dialog->working_configs : terms.terminal_configs;
 	if (item && src && item->start < MAX_TABS) {
 		terminal_config_t *tc = &src[item->start];
 		switch (bind_data->column_type) {
@@ -3440,8 +3439,8 @@ static void terminal_config_editable_cell_bind (GtkSignalListItemFactory *factor
 static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, TerminalConfigItem *item, int column_type,
 										const char *new_text)
 {
-	terminal_config_t *arr = list_dialog->working_configs;
-	bool use_working = (arr != NULL);
+	terminal_config_t *arr		   = list_dialog->working_configs;
+	bool			   use_working = (arr != NULL);
 	if (!use_working) {
 		zterm_ensure_terminal_configs ();
 		arr = terms.terminal_configs;
@@ -3596,16 +3595,16 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 	list_dialog->filter_start			  = filter_start;
 	list_dialog->filter_end				  = filter_end;
 	zterm_ensure_terminal_configs ();
-	list_dialog->working_configs			  = terminal_config_array_clone (terms.terminal_configs);
-	list_dialog->original_configs			  = terminal_config_array_clone (terms.terminal_configs);
-	list_dialog->ops.ctx					  = list_dialog;
-	list_dialog->ops.commit				  = terminal_config_commit;
-	list_dialog->ops.snapshot				  = terminal_config_snapshot;
-	list_dialog->ops.restore_config		  = terminal_config_restore_config;
-	list_dialog->ops.restore_working		  = terminal_config_restore_working;
-	list_dialog->ops.refresh_ui			  = terminal_config_refresh_ui;
-	list_dialog->ops.destroy				  = terminal_config_destroy;
-	list_dialog->ops.after_commit			  = NULL;
+	list_dialog->working_configs	 = terminal_config_array_clone (terms.terminal_configs);
+	list_dialog->original_configs	 = terminal_config_array_clone (terms.terminal_configs);
+	list_dialog->ops.ctx			 = list_dialog;
+	list_dialog->ops.commit			 = terminal_config_commit;
+	list_dialog->ops.snapshot		 = terminal_config_snapshot;
+	list_dialog->ops.restore_config	 = terminal_config_restore_config;
+	list_dialog->ops.restore_working = terminal_config_restore_working;
+	list_dialog->ops.refresh_ui		 = terminal_config_refresh_ui;
+	list_dialog->ops.destroy		 = terminal_config_destroy;
+	list_dialog->ops.after_commit	 = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	if (filter_start >= 0) {
@@ -3656,10 +3655,10 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 	list_dialog->column_view  = gtk_column_view_new (GTK_SELECTION_MODEL (selection));
 	gtk_column_view_set_show_column_separators (GTK_COLUMN_VIEW (list_dialog->column_view), TRUE);
 
-	list_dialog->cell_bind_data[0] = (TerminalConfigCellBindData){list_dialog, 0};
-	list_dialog->cell_bind_data[1] = (TerminalConfigCellBindData){list_dialog, 1};
-	list_dialog->cell_bind_data[2] = (TerminalConfigCellBindData){list_dialog, 2};
-	list_dialog->cell_bind_data[3] = (TerminalConfigCellBindData){list_dialog, 3};
+	list_dialog->cell_bind_data[0] = (TerminalConfigCellBindData) {list_dialog, 0};
+	list_dialog->cell_bind_data[1] = (TerminalConfigCellBindData) {list_dialog, 1};
+	list_dialog->cell_bind_data[2] = (TerminalConfigCellBindData) {list_dialog, 2};
+	list_dialog->cell_bind_data[3] = (TerminalConfigCellBindData) {list_dialog, 3};
 
 	GtkListItemFactory *ranges_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (ranges_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
@@ -3679,7 +3678,8 @@ static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int
 
 	GtkListItemFactory *directory_factory = gtk_signal_list_item_factory_new ();
 	g_signal_connect (directory_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
-	g_signal_connect (directory_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &list_dialog->cell_bind_data[2]);
+	g_signal_connect (directory_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind),
+					  &list_dialog->cell_bind_data[2]);
 	GtkColumnViewColumn *directory_col = gtk_column_view_column_new ("Directory", directory_factory);
 	gtk_column_view_column_set_resizable (directory_col, TRUE);
 	gtk_column_view_column_set_expand (directory_col, TRUE);
