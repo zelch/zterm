@@ -11,6 +11,7 @@
 
 #define MAX_WINDOWS 8
 #define MAX_COLOR_SCHEMES 8
+#define MAX_TABS 128
 
 typedef enum bind_actions {
 	BIND_ACT_SWITCH = 0,
@@ -181,6 +182,16 @@ void zterm_ensure_terminal_configs (void);
 void zterm_set_terminal_config (int index, const char **argv, const char **env, const char *working_directory);
 void zterm_set_terminal_config_range (int base, int count, const char **argv, const char **env);
 void zterm_set_global_env (const char **env);
+
+bind_t *key_bind_list_clone (bind_t *head);
+void key_bind_list_free (bind_t *head);
+bool key_bind_list_equal (bind_t *a, bind_t *b);
+color_override_t *color_override_list_clone (color_override_t *head);
+void color_override_list_free (color_override_t *head);
+bool color_override_list_equal (color_override_t *a, color_override_t *b);
+bind_button_t *button_bind_list_clone (bind_button_t *head);
+void button_bind_list_free (bind_button_t *head);
+bool button_bind_list_equal (bind_button_t *a, bind_button_t *b);
 gboolean process_uri (int64_t term_n, window_t *window, bind_actions_t action, double x, double y, bool menu);
 void	 rebuild_menus (void);
 void	 rebuild_term_list (long int window_n);

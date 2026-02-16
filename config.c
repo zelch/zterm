@@ -367,6 +367,110 @@ void zterm_set_global_env (const char **env)
 	terms.env = env ? (const char **) g_strdupv ((char **) env) : NULL;
 }
 
+bind_t *key_bind_list_clone (bind_t *head)
+{
+	bind_t	*new_head = NULL;
+	bind_t **tail	  = &new_head;
+	for (bind_t *cur = head; cur; cur = cur->next) {
+		bind_t *copy = calloc (1, sizeof (bind_t));
+		*copy		 = *cur;
+		copy->next	 = NULL;
+		*tail		 = copy;
+		tail		 = &copy->next;
+	}
+	return new_head;
+}
+
+void key_bind_list_free (bind_t *head)
+{
+	while (head) {
+		bind_t *next = head->next;
+		free (head);
+		head = next;
+	}
+}
+
+bool key_bind_list_equal (bind_t *a, bind_t *b)
+{
+	while (a && b) {
+		if (a->state != b->state || a->key_min != b->key_min || a->key_max != b->key_max || a->base != b->base ||
+			a->action != b->action)
+			return false;
+		a = a->next;
+		b = b->next;
+	}
+	return a == b;
+}
+
+color_override_t *color_override_list_clone (color_override_t *head)
+{
+	color_override_t  *new_head = NULL;
+	color_override_t **tail		= &new_head;
+	for (color_override_t *cur = head; cur; cur = cur->next) {
+		color_override_t *copy = calloc (1, sizeof (color_override_t));
+		*copy				   = *cur;
+		copy->next			   = NULL;
+		*tail				   = copy;
+		tail				   = &copy->next;
+	}
+	return new_head;
+}
+
+void color_override_list_free (color_override_t *head)
+{
+	while (head) {
+		color_override_t *next = head->next;
+		free (head);
+		head = next;
+	}
+}
+
+bool color_override_list_equal (color_override_t *a, color_override_t *b)
+{
+	while (a && b) {
+		if (a->index != b->index || a->color.red != b->color.red || a->color.green != b->color.green ||
+			a->color.blue != b->color.blue || a->color.alpha != b->color.alpha)
+			return false;
+		a = a->next;
+		b = b->next;
+	}
+	return a == b;
+}
+
+bind_button_t *button_bind_list_clone (bind_button_t *head)
+{
+	bind_button_t  *new_head = NULL;
+	bind_button_t **tail	 = &new_head;
+	for (bind_button_t *cur = head; cur; cur = cur->next) {
+		bind_button_t *copy = calloc (1, sizeof (bind_button_t));
+		*copy				= *cur;
+		copy->next			= NULL;
+		*tail				= copy;
+		tail				= &copy->next;
+	}
+	return new_head;
+}
+
+void button_bind_list_free (bind_button_t *head)
+{
+	while (head) {
+		bind_button_t *next = head->next;
+		free (head);
+		head = next;
+	}
+}
+
+bool button_bind_list_equal (bind_button_t *a, bind_button_t *b)
+{
+	while (a && b) {
+		if (a->state != b->state || a->button != b->button || a->action != b->action)
+			return false;
+		a = a->next;
+		b = b->next;
+	}
+	return a == b;
+}
+
 static void zterm_parse_color (int index, const char *value)
 {
 	if (index < 0 || index >= (int) (sizeof (colors) / sizeof (colors[0]))) {
