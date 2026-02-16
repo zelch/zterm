@@ -22,6 +22,7 @@ words = [
     "termprops",
     "timeval",
     "toplevel",
+    "unmapping",
     "unparent",
     "unrealize",
     "upto",
