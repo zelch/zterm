@@ -250,7 +250,7 @@ static bool switch_cmd (cmd_t *cmd)
 				debugf ("  argv[%d]: '%s'", i, cmd->cli_exec->argv[i]);
 			}
 		}
-		term_switch (cmd->n, cmd->cli_exec->argv, cmd->cli_exec->env, cmd->window_i);
+		term_switch (cmd->n, cmd->cli_exec->argv, cmd->cli_exec->env, NULL, cmd->window_i);
 	} else {
 		bind_t *found = NULL;
 
@@ -262,8 +262,7 @@ static bool switch_cmd (cmd_t *cmd)
 		}
 
 		if (found != NULL) {
-			term_switch (cmd->n, found->argv, found->env, 0);
-		} else {
+			term_switch (cmd->n, found->argv, found->env, NULL, cmd->window_i);
 			term_switch (cmd->n, NULL, NULL, cmd->window_i);
 		}
 	}
@@ -823,6 +822,8 @@ static gboolean term_spawn (gpointer data)
 			env = active->env;
 		}
 
+		const char *cwd = active->working_directory;
+
 		if (active->argv && active->argv[0] != NULL && active->argv[1] == NULL) {
 			int argc = 0;
 			for (int i = 0; active->argv != NULL && active->argv[i] != NULL; i++) {
@@ -838,7 +839,7 @@ static gboolean term_spawn (gpointer data)
 			for (int i = 0; argv[i] != NULL; i++) {
 				debugf ("  argv[%d]: '%s'", i, argv[i]);
 			}
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
 									  NULL, -1, NULL, spawn_callback, NULL);
 			g_free (argv);
 		} else if (active->argv != NULL && active->argv[0] != NULL) {
@@ -846,7 +847,7 @@ static gboolean term_spawn (gpointer data)
 			for (int i = 0; active->argv[i] != NULL; i++) {
 				debugf ("argv[%d]: '%s'", i, active->argv[i]);
 			}
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, active->argv, env, G_SPAWN_DEFAULT,
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, active->argv, env, G_SPAWN_DEFAULT,
 									  NULL, NULL, NULL, -1, NULL, spawn_callback, NULL);
 
 		} else {
@@ -855,7 +856,7 @@ static gboolean term_spawn (gpointer data)
 			char *argv[] = {pass->pw_shell, "--login", NULL};
 			debugf ("term: %p, shell: '%s'", VTE_TERMINAL (active->term), pass->pw_shell);
 			debugf ("Spawning with args: %s %s", argv[0], argv[1]);
-			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, NULL, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
+			vte_terminal_spawn_async (VTE_TERMINAL (active->term), VTE_PTY_DEFAULT, cwd, argv, env, G_SPAWN_DEFAULT, NULL, NULL,
 									  NULL, 5000, NULL, spawn_callback, NULL);
 		}
 
@@ -1069,7 +1070,7 @@ static gboolean term_termprops_changed (VteTerminal *term, int const *props, int
 }
 #endif
 
-void term_switch (long n, char **argv, char **env, int window_i)
+void term_switch (long n, const char **argv, const char **env, const char *working_directory, int window_i)
 {
 	if (n >= terms.n_active) {
 		errorf ("ERROR!  Attempting to switch to term %ld, while terms.n_active is %d.", n, terms.n_active);
@@ -1110,7 +1111,11 @@ void term_switch (long n, char **argv, char **env, int window_i)
 		} else {
 			terms.active[n].env = NULL;
 		}
-		terms.active[n].term = term;
+		if (terms.active[n].working_directory) {
+			free ((char *) terms.active[n].working_directory);
+		}
+		terms.active[n].working_directory = working_directory ? strdup (working_directory) : NULL;
+		terms.active[n].term			  = term;
 		terms.alive++;
 
 		term_set_window (n, window_i);
@@ -1288,7 +1293,7 @@ static gboolean term_key_event (GtkEventControllerKey *key_controller, guint key
 			if ((state & key_bind_mask) == cur->state) {
 				switch (cur->action) {
 					case BIND_ACT_SWITCH:
-						term_switch (cur->base + (keyval - cur->key_min), cur->argv, cur->env, window - &windows[0]);
+						term_switch (cur->base + (keyval - cur->key_min), cur->argv, cur->env, NULL, window - &windows[0]);
 						break;
 					case BIND_ACT_CUT:
 						debugf ("Cut text");

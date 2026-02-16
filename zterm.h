@@ -80,6 +80,7 @@ typedef struct term_instance_s {
 	int		   window;
 	char	 **argv; // NULL terminated.
 	char	 **env;	 // If this term has a unique environment.
+	const char	*working_directory; /* Working directory for spawn (NULL = default) */
 	char	  *hyperlink_uri;
 	char	   title[256];
 	GtkWidget *term;
@@ -169,7 +170,7 @@ int		 _fnullf (const FILE *io, const char *fmt, ...) __attribute__ ((format (pri
 void	 do_copy (GSimpleAction *self, GVariant *parameter, gpointer user_data);
 bool	 term_find (GtkWidget *term, int *i);
 void	 term_set_window (int n, int window_i);
-void	 term_switch (long n, char **argv, char **env, int window_i);
+void	 term_switch (long n, const char **argv, const char **env, const char *working_directory, int window_i);
 bool	 temu_parse_config (void);
 void	 term_config (GtkWidget *term, int window_i);
 bool	 zterm_parse_config ();
