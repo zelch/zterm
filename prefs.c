@@ -267,6 +267,50 @@ static void font_button_clicked (GtkButton *button, gpointer user_data)
 	}
 }
 
+/* ==================== Generic list-settings Apply/OK/Cancel/Reset ==================== */
+
+typedef struct ListSettingsOps {
+	void *ctx;
+	void (*commit) (void *ctx);
+	void (*snapshot) (void *ctx);
+	void (*restore_config) (void *ctx);
+	void (*restore_working) (void *ctx);
+	void (*refresh_ui) (void *ctx);
+	void (*destroy) (void *ctx);
+	void (*after_commit) (void *ctx); /* optional; may be NULL */
+} ListSettingsOps;
+
+static void list_settings_apply (GtkButton *btn, ListSettingsOps *ops)
+{
+	debugf ("ops: %p, btn: %p", ops, btn);
+	ops->commit (ops->ctx);
+	zterm_save_config ();
+	if (ops->after_commit)
+		ops->after_commit (ops->ctx);
+	ops->snapshot (ops->ctx);
+}
+
+static void list_settings_ok (GtkButton *btn, ListSettingsOps *ops)
+{
+	debugf ("ops: %p, btn: %p", ops, btn);
+	list_settings_apply (btn, ops);
+	ops->destroy (ops->ctx);
+}
+
+static void list_settings_cancel (GtkButton *btn, ListSettingsOps *ops)
+{
+	ops->restore_config (ops->ctx);
+	ops->restore_working (ops->ctx);
+	ops->refresh_ui (ops->ctx);
+	ops->destroy (ops->ctx);
+}
+
+static void list_settings_reset (GtkButton *btn, ListSettingsOps *ops)
+{
+	ops->restore_working (ops->ctx);
+	ops->refresh_ui (ops->ctx);
+}
+
 /* Color Scheme Editor */
 
 typedef struct {
@@ -275,17 +319,21 @@ typedef struct {
 	GtkWidget *fg_button;
 	GtkWidget *bg_button;
 	int		   scheme_index;
-	long int   parent_window; /* Parent window index */
-	GdkRGBA	   original_fg;	  /* For revert functionality */
+	long int   parent_window;
+	void	  *list_dialog; /* ColorSchemeListDialog* when from list: OK updates working_schemes only */
+	GdkRGBA	   original_fg;
 	GdkRGBA	   original_bg;
 	char	   original_name[32];
 	bool	   is_new_scheme;
 } ColorSchemeEditDialog;
 
 typedef struct {
-	GtkWidget *dialog;
-	GtkWidget *list_box;
-	long int   window_n;
+	GtkWidget	   *dialog;
+	GtkWidget	   *list_box;
+	long int		window_n;
+	color_scheme_t	working_schemes[MAX_COLOR_SCHEMES];
+	color_scheme_t	original_schemes[MAX_COLOR_SCHEMES];
+	ListSettingsOps ops;
 } ColorSchemeListDialog;
 
 static void refresh_color_scheme_list (ColorSchemeListDialog *list_dialog);
@@ -343,45 +391,51 @@ static void color_scheme_edit_cancel (ColorSchemeEditDialog *edit)
 static void color_scheme_edit_ok (ColorSchemeEditDialog *edit)
 {
 	const char *name = gtk_editable_get_text (GTK_EDITABLE (edit->name_entry));
+	if (!name || strlen (name) == 0) {
+		gtk_window_destroy (GTK_WINDOW (edit->dialog));
+		free (edit);
+		return;
+	}
+	int			   idx = edit->scheme_index;
+	const GdkRGBA *fg  = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (edit->fg_button));
+	const GdkRGBA *bg  = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (edit->bg_button));
 
-	if (name && strlen (name) > 0) {
-		int idx = edit->scheme_index;
-
-		/* Get colors from buttons */
-		const GdkRGBA *fg = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (edit->fg_button));
-		const GdkRGBA *bg = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (edit->bg_button));
-
-		/* Update or add the color scheme */
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) edit->list_dialog;
+	if (list_dialog) {
+		/* Update working copy only; list Apply/OK will save */
+		color_scheme_t *dest = &list_dialog->working_schemes[idx];
+		strlcpy (dest->name, name, sizeof (dest->name));
+		snprintf (dest->action, sizeof (dest->action), "color_scheme.%d", idx);
+		dest->foreground = *fg;
+		dest->background = *bg;
+		refresh_color_scheme_list (list_dialog);
+	} else {
 		strlcpy (terms.color_schemes[idx].name, name, sizeof (terms.color_schemes[idx].name));
 		snprintf (terms.color_schemes[idx].action, sizeof (terms.color_schemes[idx].action), "color_scheme.%d", idx);
 		terms.color_schemes[idx].foreground = *fg;
 		terms.color_schemes[idx].background = *bg;
-
-		/* Save and rebuild menus */
 		zterm_save_config ();
-		debugf ("Calling rebuild_menus");
 		rebuild_menus ();
 	}
-
 	gtk_window_destroy (GTK_WINDOW (edit->dialog));
 	free (edit);
 }
 
-static void show_color_scheme_edit_dialog (int scheme_index, long int parent_window)
+static void show_color_scheme_edit_dialog (int scheme_index, long int parent_window, ColorSchemeListDialog *list_dialog)
 {
 	ColorSchemeEditDialog *edit = g_new0 (ColorSchemeEditDialog, 1);
 	edit->scheme_index			= scheme_index;
 	edit->parent_window			= parent_window;
+	edit->list_dialog			= list_dialog;
 
-	/* Initialize colors and store originals for revert */
-	GdkRGBA foreground, background;
-	if (terms.color_schemes[scheme_index].name[0]) {
-		foreground = terms.color_schemes[scheme_index].foreground;
-		background = terms.color_schemes[scheme_index].background;
-		strlcpy (edit->original_name, terms.color_schemes[scheme_index].name, sizeof (edit->original_name));
+	const color_scheme_t *src = list_dialog ? list_dialog->working_schemes : terms.color_schemes;
+	GdkRGBA				  foreground, background;
+	if (src[scheme_index].name[0]) {
+		foreground = src[scheme_index].foreground;
+		background = src[scheme_index].background;
+		strlcpy (edit->original_name, src[scheme_index].name, sizeof (edit->original_name));
 		edit->is_new_scheme = false;
 	} else {
-		/* Default colors for new scheme */
 		gdk_rgba_parse (&foreground, "#ffffff");
 		gdk_rgba_parse (&background, "#000000");
 		edit->original_name[0] = '\0';
@@ -390,9 +444,8 @@ static void show_color_scheme_edit_dialog (int scheme_index, long int parent_win
 	edit->original_fg = foreground;
 	edit->original_bg = background;
 
-	/* Create dialog window */
 	GtkWidget *dialog = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (dialog), scheme_index < MAX_COLOR_SCHEMES && terms.color_schemes[scheme_index].name[0]
+	gtk_window_set_title (GTK_WINDOW (dialog), (scheme_index < MAX_COLOR_SCHEMES && src[scheme_index].name[0])
 												 ? "Edit Color Scheme"
 												 : "New Color Scheme");
 	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (windows[parent_window].window));
@@ -417,8 +470,8 @@ static void show_color_scheme_edit_dialog (int scheme_index, long int parent_win
 	/* Name */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Name:"), 0, row, 1, 1);
 	edit->name_entry = gtk_entry_new ();
-	gtk_editable_set_text (GTK_EDITABLE (edit->name_entry),
-						   terms.color_schemes[scheme_index].name[0] ? terms.color_schemes[scheme_index].name : "");
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->name_entry), 24);
+	gtk_editable_set_text (GTK_EDITABLE (edit->name_entry), src[scheme_index].name[0] ? src[scheme_index].name : "");
 	gtk_widget_set_hexpand (edit->name_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), edit->name_entry, 1, row++, 1, 1);
 
@@ -456,65 +509,50 @@ static void show_color_scheme_edit_dialog (int scheme_index, long int parent_win
 	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (color_scheme_edit_cancel), edit);
 	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (color_scheme_edit_ok), edit);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 400, -1);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 520, 320);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
 static void color_scheme_add_clicked (GtkButton *button, gpointer user_data)
 {
 	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) user_data;
-
-	/* Find first empty slot */
-	int idx = -1;
+	int					   idx		   = -1;
 	for (int i = 0; i < MAX_COLOR_SCHEMES; i++) {
-		if (!terms.color_schemes[i].name[0]) {
+		if (!list_dialog->working_schemes[i].name[0]) {
 			idx = i;
 			break;
 		}
 	}
-
-	if (idx == -1) {
-		/* No room for more schemes */
+	if (idx == -1)
 		return;
-	}
-
-	show_color_scheme_edit_dialog (idx, list_dialog->window_n);
+	show_color_scheme_edit_dialog (idx, list_dialog->window_n, list_dialog);
 }
 
 static void color_scheme_edit_clicked (GtkButton *button, gpointer user_data)
 {
 	int					   scheme_index = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "scheme_index"));
 	ColorSchemeListDialog *list_dialog	= (ColorSchemeListDialog *) user_data;
-
-	show_color_scheme_edit_dialog (scheme_index, list_dialog->window_n);
+	show_color_scheme_edit_dialog (scheme_index, list_dialog->window_n, list_dialog);
 }
 
 static void color_scheme_delete_clicked (GtkButton *button, gpointer user_data)
 {
 	int					   scheme_index = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "scheme_index"));
 	ColorSchemeListDialog *list_dialog	= (ColorSchemeListDialog *) user_data;
+	color_scheme_t		  *w			= list_dialog->working_schemes;
 
-	/* Clear the scheme */
-	memset (&terms.color_schemes[scheme_index], 0, sizeof (color_scheme_t));
-
-	/* Compact the array */
+	memset (&w[scheme_index], 0, sizeof (color_scheme_t));
 	for (int i = scheme_index; i < MAX_COLOR_SCHEMES - 1; i++) {
-		terms.color_schemes[i] = terms.color_schemes[i + 1];
-		if (terms.color_schemes[i].name[0]) {
-			snprintf (terms.color_schemes[i].action, sizeof (terms.color_schemes[i].action), "color_scheme.%d", i);
-		}
+		w[i] = w[i + 1];
+		if (w[i].name[0])
+			snprintf (w[i].action, sizeof (w[i].action), "color_scheme.%d", i);
 	}
-	memset (&terms.color_schemes[MAX_COLOR_SCHEMES - 1], 0, sizeof (color_scheme_t));
-
-	zterm_save_config ();
-	debugf ("Calling rebuild_menus");
-	rebuild_menus ();
+	memset (&w[MAX_COLOR_SCHEMES - 1], 0, sizeof (color_scheme_t));
 	refresh_color_scheme_list (list_dialog);
 }
 
 static void refresh_color_scheme_list (ColorSchemeListDialog *list_dialog)
 {
-	/* Clear existing children */
 	GtkWidget *child = gtk_widget_get_first_child (list_dialog->list_box);
 	while (child) {
 		GtkWidget *next = gtk_widget_get_next_sibling (child);
@@ -522,30 +560,27 @@ static void refresh_color_scheme_list (ColorSchemeListDialog *list_dialog)
 		child = next;
 	}
 
-	/* Add rows for each color scheme */
-	for (int i = 0; i < MAX_COLOR_SCHEMES && terms.color_schemes[i].name[0]; i++) {
+	const color_scheme_t *w = list_dialog->working_schemes;
+	for (int i = 0; i < MAX_COLOR_SCHEMES && w[i].name[0]; i++) {
 		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 		gtk_widget_set_margin_start (row_box, 6);
 		gtk_widget_set_margin_end (row_box, 6);
 		gtk_widget_set_margin_top (row_box, 3);
 		gtk_widget_set_margin_bottom (row_box, 3);
 
-		/* Color preview */
 		GtkWidget *preview = gtk_drawing_area_new ();
 		gtk_widget_set_size_request (preview, 60, 24);
 		gtk_drawing_area_set_draw_func (GTK_DRAWING_AREA (preview),
 										(GtkDrawingAreaDrawFunc) (void (*) (void)) gtk_widget_get_first_child, NULL, NULL);
 
-		/* Create a simple colored box using CSS */
 		char css_name[64];
-		snprintf (css_name, sizeof (css_name), "colorpreview%d", i);
+		snprintf (css_name, sizeof (css_name), "color_preview%d", i);
 		gtk_widget_set_name (preview, css_name);
 
 		char			css_str[256];
 		GtkCssProvider *provider = gtk_css_provider_new ();
 		snprintf (css_str, sizeof (css_str), "#%s { background-color: %s; border: 1px solid %s; }", css_name,
-				  gdk_rgba_to_string (&terms.color_schemes[i].background),
-				  gdk_rgba_to_string (&terms.color_schemes[i].foreground));
+				  gdk_rgba_to_string (&w[i].background), gdk_rgba_to_string (&w[i].foreground));
 		gtk_css_provider_load_from_string (provider, css_str);
 		gtk_style_context_add_provider_for_display (gdk_display_get_default (), GTK_STYLE_PROVIDER (provider),
 													GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -553,8 +588,7 @@ static void refresh_color_scheme_list (ColorSchemeListDialog *list_dialog)
 
 		gtk_box_append (GTK_BOX (row_box), preview);
 
-		/* Name label */
-		GtkWidget *name_label = gtk_label_new (terms.color_schemes[i].name);
+		GtkWidget *name_label = gtk_label_new (w[i].name);
 		gtk_widget_set_hexpand (name_label, TRUE);
 		gtk_widget_set_halign (name_label, GTK_ALIGN_START);
 		gtk_box_append (GTK_BOX (row_box), name_label);
@@ -577,10 +611,47 @@ static void refresh_color_scheme_list (ColorSchemeListDialog *list_dialog)
 	}
 }
 
-static void color_scheme_list_close (ColorSchemeListDialog *list_dialog)
+static void color_scheme_commit (void *ctx)
 {
-	gtk_window_destroy (GTK_WINDOW (list_dialog->dialog));
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) ctx;
+	memcpy (terms.color_schemes, list_dialog->working_schemes, sizeof (terms.color_schemes));
+}
+
+static void color_scheme_snapshot (void *ctx)
+{
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) ctx;
+	memcpy (list_dialog->original_schemes, list_dialog->working_schemes, sizeof (list_dialog->original_schemes));
+}
+
+static void color_scheme_restore_config (void *ctx)
+{
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) ctx;
+	memcpy (terms.color_schemes, list_dialog->original_schemes, sizeof (terms.color_schemes));
+}
+
+static void color_scheme_restore_working (void *ctx)
+{
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) ctx;
+	memcpy (list_dialog->working_schemes, list_dialog->original_schemes, sizeof (list_dialog->working_schemes));
+}
+
+static void color_scheme_refresh_ui (void *ctx)
+{
+	refresh_color_scheme_list ((ColorSchemeListDialog *) ctx);
+}
+
+static void color_scheme_destroy (void *ctx)
+{
+	ColorSchemeListDialog *list_dialog = (ColorSchemeListDialog *) ctx;
+	GtkWidget			  *dialog	   = list_dialog->dialog;
 	free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
+}
+
+static void color_scheme_after_commit (void *ctx)
+{
+	(void) ctx;
+	rebuild_menus ();
 }
 
 static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
@@ -588,6 +659,16 @@ static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
 	PrefsDialog			  *prefs	   = (PrefsDialog *) user_data;
 	ColorSchemeListDialog *list_dialog = g_new0 (ColorSchemeListDialog, 1);
 	list_dialog->window_n			   = prefs->window_n;
+	memcpy (list_dialog->working_schemes, terms.color_schemes, sizeof (terms.color_schemes));
+	memcpy (list_dialog->original_schemes, terms.color_schemes, sizeof (terms.color_schemes));
+	list_dialog->ops.ctx			 = list_dialog;
+	list_dialog->ops.commit			 = color_scheme_commit;
+	list_dialog->ops.snapshot		 = color_scheme_snapshot;
+	list_dialog->ops.restore_config	 = color_scheme_restore_config;
+	list_dialog->ops.restore_working = color_scheme_restore_working;
+	list_dialog->ops.refresh_ui		 = color_scheme_refresh_ui;
+	list_dialog->ops.destroy		 = color_scheme_destroy;
+	list_dialog->ops.after_commit	 = color_scheme_after_commit;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), "Color Schemes");
@@ -607,7 +688,7 @@ static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
 	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 	gtk_widget_set_vexpand (scrolled, TRUE);
-	gtk_widget_set_size_request (scrolled, 350, 200);
+	gtk_widget_set_size_request (scrolled, 420, 260);
 	gtk_box_append (GTK_BOX (main_box), scrolled);
 
 	list_dialog->list_box = gtk_list_box_new ();
@@ -616,21 +697,31 @@ static void show_color_scheme_editor (GtkButton *button, gpointer user_data)
 
 	refresh_color_scheme_list (list_dialog);
 
-	/* Buttons */
+	/* Buttons: Add, then Reset | Cancel | Apply | OK */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
-	GtkWidget *add_btn	 = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *close_btn = gtk_button_new_with_mnemonic ("_Close");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), close_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
 	g_signal_connect (add_btn, "clicked", G_CALLBACK (color_scheme_add_clicked), list_dialog);
-	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (color_scheme_list_close), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 500, 300);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 360);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
@@ -640,14 +731,18 @@ typedef struct {
 	GtkWidget *dialog;
 	GtkWidget *index_spin;
 	GtkWidget *color_button;
-	int		   override_index; /* -1 for new */
+	int		   override_index;
 	long int   parent_window;
+	void	  *list_dialog; /* ColorOverrideListDialog* when from list: OK updates working_overrides only */
 } ColorOverrideEditDialog;
 
 typedef struct {
-	GtkWidget *dialog;
-	GtkWidget *list_box;
-	long int   window_n;
+	GtkWidget		 *dialog;
+	GtkWidget		 *list_box;
+	long int		  window_n;
+	color_override_t *working_overrides;
+	color_override_t *original_overrides;
+	ListSettingsOps	  ops;
 } ColorOverrideListDialog;
 
 static void refresh_color_override_list (ColorOverrideListDialog *list_dialog);
@@ -658,16 +753,51 @@ static void color_override_edit_cancel (ColorOverrideEditDialog *edit)
 	free (edit);
 }
 
+/* Apply override list to colors[] and all terminals (used on commit/restore_config). */
+static void apply_color_overrides_to_terminals (color_override_t *list)
+{
+	for (color_override_t *cur = list; cur; cur = cur->next)
+		colors[cur->index] = cur->color;
+	for (int i = 0; i < terms.n_active; i++) {
+		if (terms.active[i].term)
+			term_config (terms.active[i].term, terms.active[i].window);
+	}
+}
+
 static void color_override_edit_ok (ColorOverrideEditDialog *edit)
 {
 	int			   index = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (edit->index_spin));
 	const GdkRGBA *color = gtk_color_dialog_button_get_rgba (GTK_COLOR_DIALOG_BUTTON (edit->color_button));
 
-	if (index >= 0 && index < 256) {
-		/* Update the color */
-		colors[index] = *color;
+	if (index < 0 || index >= 256) {
+		gtk_window_destroy (GTK_WINDOW (edit->dialog));
+		free (edit);
+		return;
+	}
 
-		/* Track the override */
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) edit->list_dialog;
+	if (list_dialog) {
+		color_override_t **p	 = &list_dialog->working_overrides;
+		color_override_t  *found = NULL;
+		for (color_override_t *cur = list_dialog->working_overrides; cur; cur = cur->next) {
+			if (cur->index == index) {
+				found = cur;
+				break;
+			}
+			p = &cur->next;
+		}
+		if (found) {
+			found->color = *color;
+		} else {
+			color_override_t *override = calloc (1, sizeof (color_override_t));
+			override->index			   = index;
+			override->color			   = *color;
+			override->next			   = *p;
+			*p						   = override;
+		}
+		refresh_color_override_list (list_dialog);
+	} else {
+		colors[index]			= *color;
 		color_override_t *found = NULL;
 		for (color_override_t *cur = terms.color_overrides; cur; cur = cur->next) {
 			if (cur->index == index) {
@@ -675,27 +805,18 @@ static void color_override_edit_ok (ColorOverrideEditDialog *edit)
 				break;
 			}
 		}
-
-		if (found) {
+		if (found)
 			found->color = *color;
-		} else {
+		else {
 			color_override_t *override = calloc (1, sizeof (color_override_t));
 			override->index			   = index;
 			override->color			   = *color;
 			override->next			   = terms.color_overrides;
 			terms.color_overrides	   = override;
 		}
-
-		/* Apply to all terminals */
-		for (int i = 0; i < terms.n_active; i++) {
-			if (terms.active[i].term) {
-				term_config (terms.active[i].term, terms.active[i].window);
-			}
-		}
-
+		apply_color_overrides_to_terminals (terms.color_overrides);
 		zterm_save_config ();
 	}
-
 	gtk_window_destroy (GTK_WINDOW (edit->dialog));
 	free (edit);
 }
@@ -706,6 +827,7 @@ static void show_color_override_edit_dialog (int override_index, GdkRGBA *initia
 	ColorOverrideEditDialog *edit = g_new0 (ColorOverrideEditDialog, 1);
 	edit->override_index		  = override_index;
 	edit->parent_window			  = parent_window;
+	edit->list_dialog			  = list_dialog;
 
 	GdkRGBA color;
 	if (initial_color) {
@@ -762,7 +884,7 @@ static void show_color_override_edit_dialog (int override_index, GdkRGBA *initia
 	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (color_override_edit_cancel), edit);
 	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (color_override_edit_ok), edit);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 400, -1);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 480, 280);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
@@ -777,7 +899,7 @@ static void color_override_edit_clicked (GtkButton *button, gpointer user_data)
 	int						 override_index = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "override_index"));
 	ColorOverrideListDialog *list_dialog	= (ColorOverrideListDialog *) user_data;
 
-	for (color_override_t *cur = terms.color_overrides; cur; cur = cur->next) {
+	for (color_override_t *cur = list_dialog->working_overrides; cur; cur = cur->next) {
 		if (cur->index == override_index) {
 			show_color_override_edit_dialog (override_index, &cur->color, list_dialog->window_n, list_dialog);
 			return;
@@ -790,9 +912,8 @@ static void color_override_delete_clicked (GtkButton *button, gpointer user_data
 	int						 override_index = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button), "override_index"));
 	ColorOverrideListDialog *list_dialog	= (ColorOverrideListDialog *) user_data;
 
-	/* Remove from linked list */
-	color_override_t **prev = &terms.color_overrides;
-	for (color_override_t *cur = terms.color_overrides; cur; cur = cur->next) {
+	color_override_t **prev = &list_dialog->working_overrides;
+	for (color_override_t *cur = list_dialog->working_overrides; cur; cur = cur->next) {
 		if (cur->index == override_index) {
 			*prev = cur->next;
 			free (cur);
@@ -800,8 +921,6 @@ static void color_override_delete_clicked (GtkButton *button, gpointer user_data
 		}
 		prev = &cur->next;
 	}
-
-	zterm_save_config ();
 	refresh_color_override_list (list_dialog);
 }
 
@@ -815,8 +934,7 @@ static void refresh_color_override_list (ColorOverrideListDialog *list_dialog)
 		child = next;
 	}
 
-	/* Add rows for each color override */
-	for (color_override_t *cur = terms.color_overrides; cur; cur = cur->next) {
+	for (color_override_t *cur = list_dialog->working_overrides; cur; cur = cur->next) {
 		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 		gtk_widget_set_margin_start (row_box, 6);
 		gtk_widget_set_margin_end (row_box, 6);
@@ -836,7 +954,7 @@ static void refresh_color_override_list (ColorOverrideListDialog *list_dialog)
 		gtk_widget_set_size_request (preview, 60, 24);
 
 		char css_name[64];
-		snprintf (css_name, sizeof (css_name), "coloroverride%d", cur->index);
+		snprintf (css_name, sizeof (css_name), "color_override%d", cur->index);
 		gtk_widget_set_name (preview, css_name);
 
 		char			css_str[256];
@@ -869,10 +987,49 @@ static void refresh_color_override_list (ColorOverrideListDialog *list_dialog)
 	}
 }
 
-static void color_override_list_close (ColorOverrideListDialog *list_dialog)
+static void color_override_commit (void *ctx)
 {
-	gtk_window_destroy (GTK_WINDOW (list_dialog->dialog));
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) ctx;
+	color_override_list_free (terms.color_overrides);
+	terms.color_overrides = color_override_list_clone (list_dialog->working_overrides);
+	apply_color_overrides_to_terminals (terms.color_overrides);
+}
+
+static void color_override_snapshot (void *ctx)
+{
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) ctx;
+	color_override_list_free (list_dialog->original_overrides);
+	list_dialog->original_overrides = color_override_list_clone (list_dialog->working_overrides);
+}
+
+static void color_override_restore_config (void *ctx)
+{
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) ctx;
+	color_override_list_free (terms.color_overrides);
+	terms.color_overrides = color_override_list_clone (list_dialog->original_overrides);
+	apply_color_overrides_to_terminals (terms.color_overrides);
+}
+
+static void color_override_restore_working (void *ctx)
+{
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) ctx;
+	color_override_list_free (list_dialog->working_overrides);
+	list_dialog->working_overrides = color_override_list_clone (list_dialog->original_overrides);
+}
+
+static void color_override_refresh_ui (void *ctx)
+{
+	refresh_color_override_list ((ColorOverrideListDialog *) ctx);
+}
+
+static void color_override_destroy (void *ctx)
+{
+	ColorOverrideListDialog *list_dialog = (ColorOverrideListDialog *) ctx;
+	GtkWidget				*dialog		 = list_dialog->dialog;
+	color_override_list_free (list_dialog->working_overrides);
+	color_override_list_free (list_dialog->original_overrides);
 	free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 static void show_color_override_editor (GtkButton *button, gpointer user_data)
@@ -880,6 +1037,16 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 	PrefsDialog				*prefs		 = (PrefsDialog *) user_data;
 	ColorOverrideListDialog *list_dialog = g_new0 (ColorOverrideListDialog, 1);
 	list_dialog->window_n				 = prefs->window_n;
+	list_dialog->working_overrides		 = color_override_list_clone (terms.color_overrides);
+	list_dialog->original_overrides		 = color_override_list_clone (terms.color_overrides);
+	list_dialog->ops.ctx				 = list_dialog;
+	list_dialog->ops.commit				 = color_override_commit;
+	list_dialog->ops.snapshot			 = color_override_snapshot;
+	list_dialog->ops.restore_config		 = color_override_restore_config;
+	list_dialog->ops.restore_working	 = color_override_restore_working;
+	list_dialog->ops.refresh_ui			 = color_override_refresh_ui;
+	list_dialog->ops.destroy			 = color_override_destroy;
+	list_dialog->ops.after_commit		 = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), "Color Overrides");
@@ -903,7 +1070,7 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
 	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
 	gtk_widget_set_vexpand (scrolled, TRUE);
-	gtk_widget_set_size_request (scrolled, 350, 200);
+	gtk_widget_set_size_request (scrolled, 420, 260);
 	gtk_box_append (GTK_BOX (main_box), scrolled);
 
 	list_dialog->list_box = gtk_list_box_new ();
@@ -912,21 +1079,361 @@ static void show_color_override_editor (GtkButton *button, gpointer user_data)
 
 	refresh_color_override_list (list_dialog);
 
-	/* Buttons */
+	/* Buttons: Add, then Reset | Cancel | Apply | OK */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
-	GtkWidget *add_btn	 = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *close_btn = gtk_button_new_with_mnemonic ("_Close");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), close_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
 	g_signal_connect (add_btn, "clicked", G_CALLBACK (color_override_add_clicked), list_dialog);
-	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (color_override_list_close), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 500, 350);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 400);
+	gtk_window_present (GTK_WINDOW (dialog));
+}
+
+/* ==================== Global Environment Editor ==================== */
+/* Same format as per-terminal: list of "KEY=value" or "!VAR" strings */
+
+typedef struct {
+	GtkWidget  *dialog;
+	GtkWidget  *list_box;
+	GList	  *working_env;  /* GList of gchar* */
+	GList	  *original_env;
+	ListSettingsOps ops;
+} EnvListDialog;
+
+typedef struct {
+	GtkWidget	  *dialog;
+	GtkWidget	  *name_entry;
+	GtkWidget	  *value_entry;
+	GtkWidget	  *unset_check;
+	char		  *edit_string; /* string we're replacing, or NULL for add */
+	EnvListDialog *list_dialog;
+} EnvEditDialog;
+
+static void refresh_env_list (EnvListDialog *list_dialog);
+
+static char **env_list_to_strv (GList *list)
+{
+	guint n = g_list_length (list);
+	char **sv = g_new (char *, n + 1);
+	guint i = 0;
+	for (GList *it = list; it; it = it->next)
+		sv[i++] = g_strdup ((const char *) it->data);
+	sv[i] = NULL;
+	return sv;
+}
+
+static void env_edit_dialog_free (EnvEditDialog *edit)
+{
+	gtk_window_destroy (GTK_WINDOW (edit->dialog));
+	/* edit_string is not freed here: OK removes it from list and frees; Cancel leaves it in list */
+	g_free (edit);
+}
+
+static void env_edit_ok (EnvEditDialog *edit)
+{
+	char *name = g_strdup (gtk_editable_get_text (GTK_EDITABLE (edit->name_entry)));
+	g_strstrip (name);
+	if (!name || name[0] == '\0') {
+		g_free (name);
+		GtkAlertDialog *alert = gtk_alert_dialog_new ("Name cannot be empty.");
+		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+		g_object_unref (alert);
+		return;
+	}
+	bool unset = gtk_check_button_get_active (GTK_CHECK_BUTTON (edit->unset_check));
+	EnvListDialog *list_dialog = edit->list_dialog;
+
+	if (edit->edit_string) {
+		list_dialog->working_env = g_list_remove (list_dialog->working_env, edit->edit_string);
+		g_free (edit->edit_string);
+	}
+
+	const char *value = gtk_editable_get_text (GTK_EDITABLE (edit->value_entry));
+	char *entry = unset ? g_strdup_printf ("!%s", name) : g_strdup_printf ("%s=%s", name, value ? value : "");
+	list_dialog->working_env = g_list_append (list_dialog->working_env, entry);
+	g_free (name);
+	refresh_env_list (list_dialog);
+	env_edit_dialog_free (edit);
+}
+
+static void env_edit_cancel (EnvEditDialog *edit)
+{
+	env_edit_dialog_free (edit);
+}
+
+static void show_env_edit_dialog (EnvListDialog *list_dialog, const char *edit_string)
+{
+	EnvEditDialog *edit = g_new0 (EnvEditDialog, 1);
+	edit->list_dialog  = list_dialog;
+	edit->edit_string  = (char *) edit_string; /* pointer into list, freed in env_edit_ok after remove */
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), edit_string ? "Edit Environment Variable" : "New Environment Variable");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (list_dialog->dialog));
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	edit->dialog = dialog;
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	GtkWidget *grid = gtk_grid_new ();
+	gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+	gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
+	gtk_box_append (GTK_BOX (main_box), grid);
+
+	int row = 0;
+
+	edit->name_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->name_entry), 28);
+	gtk_widget_set_hexpand (edit->name_entry, TRUE);
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Name:"), 0, row, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), edit->name_entry, 1, row++, 1, 1);
+
+	edit->value_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->value_entry), 28);
+	gtk_widget_set_hexpand (edit->value_entry, TRUE);
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Value:"), 0, row, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), edit->value_entry, 1, row++, 1, 1);
+
+	edit->unset_check = gtk_check_button_new_with_label ("Unset (remove from spawn env)");
+	gtk_grid_attach (GTK_GRID (grid), edit->unset_check, 0, row++, 2, 1);
+
+	if (edit_string) {
+		if (edit_string[0] == '!' && edit_string[1] != '\0') {
+			gtk_editable_set_text (GTK_EDITABLE (edit->name_entry), edit_string + 1);
+			gtk_editable_set_text (GTK_EDITABLE (edit->value_entry), "");
+			gtk_check_button_set_active (GTK_CHECK_BUTTON (edit->unset_check), TRUE);
+		} else {
+			const char *eq = strchr (edit_string, '=');
+			if (eq && eq > edit_string) {
+				char *name = g_strndup (edit_string, (gsize) (eq - edit_string));
+				gtk_editable_set_text (GTK_EDITABLE (edit->name_entry), name);
+				gtk_editable_set_text (GTK_EDITABLE (edit->value_entry), eq + 1);
+				g_free (name);
+				gtk_check_button_set_active (GTK_CHECK_BUTTON (edit->unset_check), FALSE);
+			}
+		}
+	}
+
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (main_box), button_box);
+
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *ok_btn	 = gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+
+	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (env_edit_cancel), edit);
+	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (env_edit_ok), edit);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 420, 200);
+	gtk_window_present (GTK_WINDOW (dialog));
+}
+
+static void env_add_clicked (GtkButton *button, gpointer user_data)
+{
+	show_env_edit_dialog ((EnvListDialog *) user_data, NULL);
+}
+
+static void env_edit_clicked (GtkButton *button, gpointer user_data)
+{
+	const char   *s = (const char *) g_object_get_data (G_OBJECT (button), "env_string");
+	EnvListDialog *list_dialog = (EnvListDialog *) user_data;
+	show_env_edit_dialog (list_dialog, s);
+}
+
+static void env_delete_clicked (GtkButton *button, gpointer user_data)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) user_data;
+	char		  *s		  = (char *) g_object_get_data (G_OBJECT (button), "env_string");
+	list_dialog->working_env = g_list_remove (list_dialog->working_env, s);
+	g_free (s);
+	refresh_env_list (list_dialog);
+}
+
+static void refresh_env_list (EnvListDialog *list_dialog)
+{
+	GtkWidget *child = gtk_widget_get_first_child (list_dialog->list_box);
+	while (child) {
+		GtkWidget *next = gtk_widget_get_next_sibling (child);
+		gtk_list_box_remove (GTK_LIST_BOX (list_dialog->list_box), child);
+		child = next;
+	}
+
+	for (GList *it = list_dialog->working_env; it; it = it->next) {
+		const char *s = (const char *) it->data;
+		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+		gtk_widget_set_margin_start (row_box, 6);
+		gtk_widget_set_margin_end (row_box, 6);
+		gtk_widget_set_margin_top (row_box, 3);
+		gtk_widget_set_margin_bottom (row_box, 3);
+
+		GtkWidget *label = gtk_label_new (s);
+		gtk_widget_set_halign (label, GTK_ALIGN_START);
+		gtk_widget_set_hexpand (label, TRUE);
+		gtk_label_set_selectable (GTK_LABEL (label), TRUE);
+		gtk_box_append (GTK_BOX (row_box), label);
+
+		GtkWidget *edit_btn = gtk_button_new_from_icon_name ("document-edit-symbolic");
+		gtk_widget_set_tooltip_text (edit_btn, "Edit");
+		g_object_set_data (G_OBJECT (edit_btn), "env_string", (gpointer) s);
+		g_signal_connect (edit_btn, "clicked", G_CALLBACK (env_edit_clicked), list_dialog);
+		gtk_box_append (GTK_BOX (row_box), edit_btn);
+
+		GtkWidget *delete_btn = gtk_button_new_from_icon_name ("edit-delete-symbolic");
+		gtk_widget_set_tooltip_text (delete_btn, "Delete");
+		g_object_set_data (G_OBJECT (delete_btn), "env_string", (gpointer) s);
+		g_signal_connect (delete_btn, "clicked", G_CALLBACK (env_delete_clicked), list_dialog);
+		gtk_box_append (GTK_BOX (row_box), delete_btn);
+
+		gtk_list_box_append (GTK_LIST_BOX (list_dialog->list_box), row_box);
+	}
+}
+
+static void env_commit (void *ctx)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
+	char **sv = env_list_to_strv (list_dialog->working_env);
+	zterm_set_global_env ((const char **) sv);
+	g_strfreev (sv);
+}
+
+static void env_snapshot (void *ctx)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
+	g_list_free_full (list_dialog->original_env, g_free);
+	list_dialog->original_env = g_list_copy_deep (list_dialog->working_env, (GCopyFunc) g_strdup, g_free);
+}
+
+static void env_restore_config (void *ctx)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
+	char **sv = env_list_to_strv (list_dialog->original_env);
+	zterm_set_global_env ((const char **) sv);
+	g_strfreev (sv);
+}
+
+static void env_restore_working (void *ctx)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
+	g_list_free_full (list_dialog->working_env, g_free);
+	list_dialog->working_env = g_list_copy_deep (list_dialog->original_env, (GCopyFunc) g_strdup, g_free);
+}
+
+static void env_refresh_ui (void *ctx)
+{
+	refresh_env_list ((EnvListDialog *) ctx);
+}
+
+static void env_destroy (void *ctx)
+{
+	EnvListDialog *list_dialog = (EnvListDialog *) ctx;
+	GtkWidget	 *dialog		= list_dialog->dialog;
+	g_list_free_full (list_dialog->working_env, g_free);
+	g_list_free_full (list_dialog->original_env, g_free);
+	g_free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
+}
+
+static void show_env_editor (GtkButton *button, gpointer user_data)
+{
+	PrefsDialog	  *prefs		= (PrefsDialog *) user_data;
+	EnvListDialog *list_dialog = g_new0 (EnvListDialog, 1);
+	list_dialog->working_env  = NULL;
+	list_dialog->original_env = NULL;
+	if (terms.env) {
+		for (int i = 0; terms.env[i] != NULL; i++)
+			list_dialog->working_env = g_list_append (list_dialog->working_env, g_strdup (terms.env[i]));
+	}
+	list_dialog->original_env = g_list_copy_deep (list_dialog->working_env, (GCopyFunc) g_strdup, g_free);
+	list_dialog->ops.ctx			= list_dialog;
+	list_dialog->ops.commit		= env_commit;
+	list_dialog->ops.snapshot	= env_snapshot;
+	list_dialog->ops.restore_config  = env_restore_config;
+	list_dialog->ops.restore_working = env_restore_working;
+	list_dialog->ops.refresh_ui		= env_refresh_ui;
+	list_dialog->ops.destroy		= env_destroy;
+	list_dialog->ops.after_commit	= NULL;
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), "Global Environment");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (prefs->dialog));
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	list_dialog->dialog = dialog;
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	GtkWidget *info_label = gtk_label_new (
+		"Set or unset environment variables for all new terminal spawns. Set: name=value. Unset: variable is removed from spawn env.");
+	gtk_label_set_wrap (GTK_LABEL (info_label), TRUE);
+	gtk_box_append (GTK_BOX (main_box), info_label);
+
+	GtkWidget *scrolled = gtk_scrolled_window_new ();
+	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+	gtk_widget_set_vexpand (scrolled, TRUE);
+	gtk_widget_set_size_request (scrolled, 420, 260);
+	gtk_box_append (GTK_BOX (main_box), scrolled);
+
+	list_dialog->list_box = gtk_list_box_new ();
+	gtk_list_box_set_selection_mode (GTK_LIST_BOX (list_dialog->list_box), GTK_SELECTION_NONE);
+	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), list_dialog->list_box);
+
+	refresh_env_list (list_dialog);
+
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (main_box), button_box);
+
+	GtkWidget *add_btn   = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	= gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), add_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+
+	g_signal_connect (add_btn, "clicked", G_CALLBACK (env_add_clicked), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
@@ -1117,7 +1624,7 @@ static void show_capture_dialog (GtkWidget *state_entry, GtkWidget *key_entry, G
 		g_signal_connect (click_gesture, "pressed", G_CALLBACK (capture_button_pressed), capture);
 	}
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 400, 180);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 460, 220);
 	gtk_window_present (GTK_WINDOW (dialog));
 
 	/* Focus the window to receive key events */
@@ -1129,289 +1636,1132 @@ static void show_capture_dialog (GtkWidget *state_entry, GtkWidget *key_entry, G
 static const char *bind_action_names[] = {"SWITCH",	   "CUT",		"CUT_HTML", "PASTE",   "MENU",
 										  "NEXT_TERM", "PREV_TERM", "OPEN_URI", "CUT_URI", NULL};
 
+/* Per-row widget refs so we can update visibility/sensitivity when action changes without refreshing the list */
 typedef struct {
-	GtkWidget				   *dialog;
-	GtkWidget				   *action_combo;
-	GtkWidget				   *state_entry;
-	GtkWidget				   *key_entry;
-	GtkWidget				   *base_spin;
-	GtkWidget				   *key_max_entry;
-	GtkWidget				   *base_label;
-	GtkWidget				   *key_max_label;
-	GtkWidget				   *cmd_label;
-	GtkWidget				   *cmd_entry;
-	GtkWidget				   *env_label;
-	GtkWidget				   *env_entry;
-	bind_t					   *editing_bind; /* NULL for new */
-	long int					parent_window;
-	struct KeyBindListDialog_s *list_dialog; /* For refreshing list after edit */
-} KeyBindEditDialog;
+	GtkWidget *base_spin;
+	GtkWidget *configure_btn;
+	GtkWidget *max_key_btn;
+} KeyBindRowWidgets;
 
 typedef struct KeyBindListDialog_s {
-	GtkWidget  *dialog;
-	GtkWidget  *column_view;
-	GListStore *store;
-	long int	window_n;
+	GtkWidget	   *dialog;
+	GtkWidget	   *column_view;
+	GListStore	   *store;
+	long int		window_n;
+	GHashTable	   *bind_row_widgets; /* bind_t* -> KeyBindRowWidgets* (cleared on refresh) */
+	bind_t		   *working_keys;	  /* working copy; list dialog edits this */
+	bind_t		   *original_keys;	  /* snapshot for Reset/Cancel */
+	ListSettingsOps ops;			  /* commit/snapshot/restore/destroy/refresh for generic Apply/OK/Cancel/Reset */
 } KeyBindListDialog;
 
 static void refresh_key_bind_list (KeyBindListDialog *list_dialog);
+static void show_terminal_config_editor_for_range (GtkWidget *parent_dialog, long int window_n, int range_start, int range_end);
 
 /* GObject wrapper for bind_t to use with GListStore */
 #define KEY_BIND_ITEM_TYPE (key_bind_item_get_type ())
 G_DECLARE_FINAL_TYPE (KeyBindItem, key_bind_item, KEY, BIND_ITEM, GObject)
 
+enum {
+	KEY_BIND_ITEM_PROP_KEY_LABEL = 1,
+	KEY_BIND_ITEM_PROP_MAX_KEY_LABEL,
+	N_KEY_BIND_ITEM_PROPERTIES
+};
+
 struct _KeyBindItem {
 	GObject parent_instance;
 	bind_t *bind;
+	char   *key_label;	   /* accelerator string for Key column */
+	char   *max_key_label; /* key name or "—" for Max key column */
 };
 
 G_DEFINE_TYPE (KeyBindItem, key_bind_item, G_TYPE_OBJECT)
 
+static void key_bind_item_update_labels (KeyBindItem *item);
+static void key_bind_item_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void key_bind_item_finalize (GObject *object);
+
 static void key_bind_item_class_init (KeyBindItemClass *klass)
 {
+	GObjectClass *obj_class = G_OBJECT_CLASS (klass);
+	obj_class->get_property = key_bind_item_get_property;
+	obj_class->finalize		= key_bind_item_finalize;
+	g_object_class_install_property (
+	  obj_class, KEY_BIND_ITEM_PROP_KEY_LABEL,
+	  g_param_spec_string ("key-label", "Key label", "Accelerator string for key column", "", G_PARAM_READABLE));
+	g_object_class_install_property (
+	  obj_class, KEY_BIND_ITEM_PROP_MAX_KEY_LABEL,
+	  g_param_spec_string ("max-key-label", "Max key label", "Key name for range end column", "", G_PARAM_READABLE));
+}
+
+static void key_bind_item_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	KeyBindItem *item = KEY_BIND_ITEM (object);
+	switch (prop_id) {
+		case KEY_BIND_ITEM_PROP_KEY_LABEL:
+			g_value_set_string (value, item->key_label ? item->key_label : "");
+			break;
+		case KEY_BIND_ITEM_PROP_MAX_KEY_LABEL:
+			g_value_set_string (value, item->max_key_label ? item->max_key_label : "—");
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+			break;
+	}
+}
+
+static void key_bind_item_finalize (GObject *object)
+{
+	KeyBindItem *item = KEY_BIND_ITEM (object);
+	g_free (item->key_label);
+	g_free (item->max_key_label);
+	G_OBJECT_CLASS (key_bind_item_parent_class)->finalize (object);
 }
 
 static void key_bind_item_init (KeyBindItem *self)
 {
 }
 
+static void key_bind_item_update_labels (KeyBindItem *item)
+{
+	if (!item->bind)
+		return;
+	g_free (item->key_label);
+	item->key_label = gtk_accelerator_name (item->bind->key_min, item->bind->state);
+	g_free (item->max_key_label);
+	if (item->bind->action == BIND_ACT_SWITCH && item->bind->key_max != item->bind->key_min) {
+		const char *name	= gdk_keyval_name (item->bind->key_max);
+		item->max_key_label = g_strdup (name ? name : "—");
+	} else {
+		item->max_key_label = g_strdup ("—");
+	}
+	g_object_notify (G_OBJECT (item), "key-label");
+	g_object_notify (G_OBJECT (item), "max-key-label");
+}
+
 static KeyBindItem *key_bind_item_new (bind_t *bind)
 {
 	KeyBindItem *item = g_object_new (KEY_BIND_ITEM_TYPE, NULL);
 	item->bind		  = bind;
+	key_bind_item_update_labels (item);
 	return item;
 }
 
-static void key_bind_edit_cancel (KeyBindEditDialog *edit)
+/* Check for overlapping bindings in list (excluding exclude_bind). Returns false if overlap found (and shows alert). */
+static bool key_bind_check_overlap (bind_t *list, bind_t *exclude_bind, guint key_min, guint state, guint key_max,
+									GtkWindow *parent_window)
 {
-	gtk_window_destroy (GTK_WINDOW (edit->dialog));
-	free (edit);
-}
-
-static void key_bind_edit_ok (KeyBindEditDialog *edit)
-{
-	int			action_idx = gtk_drop_down_get_selected (GTK_DROP_DOWN (edit->action_combo));
-	const char *state_str  = gtk_editable_get_text (GTK_EDITABLE (edit->state_entry));
-	const char *key_str	   = gtk_editable_get_text (GTK_EDITABLE (edit->key_entry));
-
-	if (!key_str || strlen (key_str) == 0) {
-		GtkAlertDialog *alert = gtk_alert_dialog_new ("Key is required.");
-		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
-		g_object_unref (alert);
-		return;
-	}
-
-	/* Parse key_min early for validation */
-	guint key_min = 0;
-	guint state	  = 0;
-	char  bind_str[256];
-	snprintf (bind_str, sizeof (bind_str), "%s%s", state_str ? state_str : "", key_str);
-	gtk_accelerator_parse (bind_str, &key_min, &state);
-
-	if (key_min == 0) {
-		/* Try parsing state separately */
-		gtk_accelerator_parse (state_str ? state_str : "", NULL, &state);
-		key_min = gdk_keyval_from_name (key_str);
-	}
-
-	if (key_min == 0 || key_min == GDK_KEY_VoidSymbol) {
-		GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid key: '%s'", key_str);
-		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
-		g_object_unref (alert);
-		return;
-	}
-
-	/* Validate SWITCH-specific fields */
-	guint key_max = key_min;
-	if (action_idx == BIND_ACT_SWITCH) {
-		const char *key_max_str = gtk_editable_get_text (GTK_EDITABLE (edit->key_max_entry));
-		if (key_max_str && strlen (key_max_str) > 0) {
-			key_max = gdk_keyval_from_name (key_max_str);
-			if (key_max == 0 || key_max == GDK_KEY_VoidSymbol) {
-				GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid key max: '%s'", key_max_str);
-				gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
-				g_object_unref (alert);
-				return;
-			}
-			if (key_max < key_min) {
-				GtkAlertDialog *alert =
-				  gtk_alert_dialog_new ("Key max (%s) must be greater than or equal to key min (%s).", key_max_str, key_str);
-				gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
-				g_object_unref (alert);
-				return;
-			}
-		}
-
-		int base = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (edit->base_spin));
-		if (base < 0) {
-			GtkAlertDialog *alert = gtk_alert_dialog_new ("Base terminal must be non-negative.");
-			gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
-			g_object_unref (alert);
-			return;
-		}
-	}
-
-	/* Check for duplicate or overlapping bindings */
-	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
-		/* Skip the binding we're editing */
-		if (cur == edit->editing_bind) {
+	for (bind_t *cur = list; cur; cur = cur->next) {
+		if (cur == exclude_bind)
 			continue;
-		}
-
-		/* Must have same modifier state to conflict */
-		if (cur->state != state) {
+		if (cur->state != state)
 			continue;
-		}
-
-		/* Check for overlap: ranges [key_min, key_max] and [cur->key_min, cur->key_max] */
-		/* Two ranges overlap if: max1 >= min2 AND max2 >= min1 */
 		if (key_max >= cur->key_min && cur->key_max >= key_min) {
-			gchar		*state_str_display = gtk_accelerator_name (0, state);
-			const gchar *cur_key_min_name  = gdk_keyval_name (cur->key_min);
-			const gchar *cur_key_max_name  = gdk_keyval_name (cur->key_max);
-
+			gchar		   *state_str_display = gtk_accelerator_name (0, state);
+			const gchar	   *cur_key_min_name  = gdk_keyval_name (cur->key_min);
+			const gchar	   *cur_key_max_name  = gdk_keyval_name (cur->key_max);
 			GtkAlertDialog *alert;
-			if (cur->key_min == cur->key_max) {
-				alert = gtk_alert_dialog_new ("Binding overlaps with existing binding: %s%s", state_str_display,
+			if (cur->key_min == cur->key_max)
+				alert = gtk_alert_dialog_new ("Binding overlaps with existing: %s%s", state_str_display,
 											  cur_key_min_name ? cur_key_min_name : "?");
-			} else {
+			else
 				alert =
-				  gtk_alert_dialog_new ("Binding overlaps with existing binding: %s%s-%s", state_str_display,
+				  gtk_alert_dialog_new ("Binding overlaps with existing: %s%s-%s", state_str_display,
 										cur_key_min_name ? cur_key_min_name : "?", cur_key_max_name ? cur_key_max_name : "?");
-			}
-			gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+			gtk_alert_dialog_show (alert, parent_window);
 			g_object_unref (alert);
 			g_free (state_str_display);
-			return;
+			return false;
 		}
 	}
+	return true;
+}
 
-	bind_t *bind;
-	if (edit->editing_bind) {
-		bind = edit->editing_bind;
-	} else {
-		bind	   = calloc (1, sizeof (bind_t));
-		bind->next = terms.keys;
-		terms.keys = bind;
+static void key_bind_add_clicked (GtkButton *button, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	bind_t			  *bind		   = calloc (1, sizeof (bind_t));
+	bind->key_min				   = GDK_KEY_space;
+	bind->state					   = 0;
+	bind->key_max				   = GDK_KEY_space;
+	bind->action				   = BIND_ACT_SWITCH;
+	bind->base					   = 0;
+	bind->next					   = list_dialog->working_keys;
+	list_dialog->working_keys	   = bind;
+	refresh_key_bind_list (list_dialog);
+}
+
+static void key_bind_delete_clicked (GtkButton *button, gpointer user_data)
+{
+	bind_t			  *bind		   = (bind_t *) g_object_get_data (G_OBJECT (button), "bind_ptr");
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+
+	/* Remove from working list */
+	bind_t **prev = &list_dialog->working_keys;
+	for (bind_t *cur = list_dialog->working_keys; cur; cur = cur->next) {
+		if (cur == bind) {
+			*prev = cur->next;
+			free (cur);
+			break;
+		}
+		prev = &cur->next;
 	}
+	refresh_key_bind_list (list_dialog);
+}
 
-	bind->action  = (bind_actions_t) action_idx;
-	bind->key_min = key_min;
-	bind->state	  = state;
+/* Find the KeyBindItem in the store that wraps this bind, or NULL. Caller must unref the returned item. */
+static KeyBindItem *key_bind_list_find_item_for_bind (KeyBindListDialog *list_dialog, bind_t *bind)
+{
+	guint n = g_list_model_get_n_items (G_LIST_MODEL (list_dialog->store));
+	for (guint i = 0; i < n; i++) {
+		GObject		*obj  = g_list_model_get_item (G_LIST_MODEL (list_dialog->store), i);
+		KeyBindItem *item = KEY_BIND_ITEM (obj);
+		if (item->bind == bind) {
+			return item; /* caller unrefs */
+		}
+		g_object_unref (obj);
+	}
+	return NULL;
+}
 
-	if (bind->action == BIND_ACT_SWITCH) {
-		bind->base				= gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (edit->base_spin));
-		const char *key_max_str = gtk_editable_get_text (GTK_EDITABLE (edit->key_max_entry));
-		if (key_max_str && strlen (key_max_str) > 0) {
-			bind->key_max = gdk_keyval_from_name (key_max_str);
+static void refresh_key_bind_list (KeyBindListDialog *list_dialog)
+{
+	debugf ("keybind: refresh_key_bind_list entry");
+	g_hash_table_remove_all (list_dialog->bind_row_widgets);
+	debugf ("keybind: refresh_key_bind_list before remove_all");
+	g_list_store_remove_all (list_dialog->store);
+	debugf ("keybind: refresh_key_bind_list after remove_all");
+
+	for (bind_t *cur = list_dialog->working_keys; cur; cur = cur->next) {
+		KeyBindItem *item = key_bind_item_new (cur);
+		g_list_store_append (list_dialog->store, item);
+		debugf ("Added item %p to list %p", item, list_dialog->store);
+		g_object_unref (item);
+	}
+	debugf ("keybind: refresh_key_bind_list done");
+}
+
+/* Key capture for the Key Bindings list: small window, closes on key capture, Escape, or focus loss. */
+typedef struct {
+	GtkWidget		  *window;
+	GtkWidget		  *label;
+	guint			   captured_key;
+	guint			   captured_state;
+	bind_t			  *bind;
+	KeyBindListDialog *list_dialog;
+	bool			   max_key_only;
+	guint			   active_check_source_id; /* timeout to detect window deactivation */
+	bool			   had_focus;			   /* true once window has been active (avoids close on first frame) */
+} KeyCaptureForBind;
+
+static void key_capture_for_bind_close (KeyCaptureForBind *cap)
+{
+	if (cap->active_check_source_id) {
+		g_source_remove (cap->active_check_source_id);
+		cap->active_check_source_id = 0;
+	}
+	if (cap->window) {
+		g_object_set_data (G_OBJECT (cap->window), "key-capture-cap", NULL);
+		gtk_window_destroy (GTK_WINDOW (cap->window));
+		cap->window = NULL;
+	}
+	free (cap);
+}
+
+/* Called periodically; close when window loses activation (Alt+Tab, another app, etc.). */
+static gboolean key_capture_check_active (gpointer user_data)
+{
+	KeyCaptureForBind *cap = (KeyCaptureForBind *) user_data;
+	if (!cap->window)
+		return G_SOURCE_REMOVE;
+	if (gtk_window_is_active (GTK_WINDOW (cap->window)))
+		cap->had_focus = true;
+	else if (cap->had_focus) {
+		key_capture_for_bind_close (cap);
+		return G_SOURCE_REMOVE;
+	}
+	return G_SOURCE_CONTINUE;
+}
+
+static void key_capture_for_bind_update_label (KeyCaptureForBind *cap)
+{
+	char label_text[256];
+	if (cap->max_key_only) {
+		if (cap->captured_key) {
+			const gchar *name = gdk_keyval_name (cap->captured_key);
+			snprintf (label_text, sizeof (label_text), "End key: %s\nRelease to set", name ? name : "?");
 		} else {
-			bind->key_max = bind->key_min;
-		}
-
-		/* Parse and save command */
-		const char *cmd_str = gtk_editable_get_text (GTK_EDITABLE (edit->cmd_entry));
-		if (bind->argv) {
-			g_strfreev (bind->argv);
-			bind->argv = NULL;
-		}
-		if (cmd_str && strlen (cmd_str) > 0) {
-			gint	argc  = 0;
-			gchar **argv  = NULL;
-			GError *error = NULL;
-			if (g_shell_parse_argv (cmd_str, &argc, &argv, &error)) {
-				bind->argv = argv;
-			} else {
-				if (error) {
-					g_error_free (error);
-				}
-			}
-		}
-
-		/* Parse and save environment */
-		const char *env_str = gtk_editable_get_text (GTK_EDITABLE (edit->env_entry));
-		if (bind->env) {
-			g_strfreev (bind->env);
-			bind->env = NULL;
-		}
-		if (env_str && strlen (env_str) > 0) {
-			gint	argc  = 0;
-			gchar **argv  = NULL;
-			GError *error = NULL;
-			if (g_shell_parse_argv (env_str, &argc, &argv, &error)) {
-				bind->env = argv;
-			} else {
-				if (error) {
-					g_error_free (error);
-				}
-			}
-		}
-
-		/* Update n_active if needed */
-		int n = bind->base + (bind->key_max - bind->key_min) + 1;
-		if (n > terms.n_active) {
-			int old_n_active = terms.n_active;
-			terms.n_active	 = n;
-			terms.active	 = realloc (terms.active, terms.n_active * sizeof (*terms.active));
-			memset (&terms.active[old_n_active], 0, (terms.n_active - old_n_active) * sizeof (*terms.active));
+			snprintf (label_text, sizeof (label_text),
+					  "Press the key that ends the range (e.g. F12)\nEscape or click away to cancel");
 		}
 	} else {
+		if (cap->captured_key) {
+			gchar *accel = gtk_accelerator_name (cap->captured_key, cap->captured_state);
+			snprintf (label_text, sizeof (label_text), "%s\nRelease to set", accel);
+			g_free (accel);
+		} else if (cap->captured_state) {
+			gchar *state_str = gtk_accelerator_name (0, cap->captured_state);
+			snprintf (label_text, sizeof (label_text), "Modifiers: %s\nPress a key, then release", state_str);
+			g_free (state_str);
+		} else {
+			snprintf (label_text, sizeof (label_text), "Press key combination\nEscape or click away to cancel");
+		}
+	}
+	gtk_label_set_text (GTK_LABEL (cap->label), label_text);
+}
+
+static void key_capture_focus_out (GtkEventControllerFocus *controller, gpointer user_data)
+{
+	GtkWidget		  *w		= gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (controller));
+	GtkRoot			  *root		= gtk_widget_get_root (w);
+	GtkWidget		  *toplevel = root ? GTK_WIDGET (root) : gtk_widget_get_ancestor (w, GTK_TYPE_WINDOW);
+	KeyCaptureForBind *cap		= toplevel ? g_object_get_data (G_OBJECT (toplevel), "key-capture-cap") : NULL;
+	debugf ("lost focus, w %p, root %p, toplevel %p, cap %p", w, root, toplevel, cap);
+	if (cap)
+		key_capture_for_bind_close (cap);
+}
+
+/* Apply captured key/state to bind; update item labels. Returns true if applied. */
+static bool key_capture_apply (KeyCaptureForBind *cap)
+{
+	GtkWindow *parent = GTK_WINDOW (cap->list_dialog->dialog);
+	if (cap->max_key_only) {
+		if (!cap->captured_key || cap->captured_key == GDK_KEY_VoidSymbol)
+			return false;
+		guint key_max = cap->captured_key;
+		if (key_max < cap->bind->key_min) {
+			GtkAlertDialog *alert = gtk_alert_dialog_new ("End key must be >= start key.");
+			gtk_alert_dialog_show (alert, parent);
+			g_object_unref (alert);
+			return false;
+		}
+		if (!key_bind_check_overlap (cap->list_dialog->working_keys, cap->bind, cap->bind->key_min, cap->bind->state, key_max,
+									 parent))
+			return false;
+		cap->bind->key_max = key_max;
+		/* terms.n_active is updated on Apply when we commit working_keys to terms.keys */
+	} else {
+		if (!cap->captured_key || cap->captured_key == GDK_KEY_VoidSymbol)
+			return false;
+		guint old_key	= cap->bind->key_min;
+		guint new_key	= cap->captured_key;
+		guint new_state = cap->captured_state;
+		guint new_max	= cap->bind->key_max;
+		if (new_key != old_key)
+			new_max = new_key;
+		if (!key_bind_check_overlap (cap->list_dialog->working_keys, cap->bind, new_key, new_state, new_max, parent))
+			return false;
+		cap->bind->key_min = new_key;
+		cap->bind->state   = new_state;
+		cap->bind->key_max = new_max;
+		if (cap->bind->action != BIND_ACT_SWITCH)
+			cap->bind->key_max = cap->bind->key_min;
+		/* terms.n_active is updated on Apply when we commit working_keys to terms.keys */
+	}
+	KeyBindItem *item = key_bind_list_find_item_for_bind (cap->list_dialog, cap->bind);
+	if (item) {
+		key_bind_item_update_labels (item);
+		g_object_unref (item);
+	}
+	return true;
+}
+
+/* Capture ends on first key-up or first keydown that is not a modifier. Escape / focus loss = abort. */
+static gboolean key_capture_for_bind_key_pressed (GtkEventControllerKey *controller, guint keyval, guint keycode,
+												  GdkModifierType state, gpointer user_data)
+{
+	KeyCaptureForBind *cap = (KeyCaptureForBind *) user_data;
+
+	if (keyval == GDK_KEY_Escape) {
+		key_capture_for_bind_close (cap);
+		return TRUE;
+	}
+
+	if (cap->max_key_only) {
+		if (keyval == GDK_KEY_Shift_L || keyval == GDK_KEY_Shift_R || keyval == GDK_KEY_Control_L ||
+			keyval == GDK_KEY_Control_R || keyval == GDK_KEY_Alt_L || keyval == GDK_KEY_Alt_R || keyval == GDK_KEY_Super_L ||
+			keyval == GDK_KEY_Super_R || keyval == GDK_KEY_Meta_L || keyval == GDK_KEY_Meta_R || keyval == GDK_KEY_Hyper_L ||
+			keyval == GDK_KEY_Hyper_R)
+			return TRUE;
+		cap->captured_key = keyval;
+		if (key_capture_apply (cap))
+			key_capture_for_bind_close (cap);
+		return TRUE;
+	}
+
+	/* Main key: modifier-only → update state; non-modifier → record key+state */
+	if (keyval == GDK_KEY_Shift_L || keyval == GDK_KEY_Shift_R || keyval == GDK_KEY_Control_L || keyval == GDK_KEY_Control_R ||
+		keyval == GDK_KEY_Alt_L || keyval == GDK_KEY_Alt_R || keyval == GDK_KEY_Super_L || keyval == GDK_KEY_Super_R ||
+		keyval == GDK_KEY_Meta_L || keyval == GDK_KEY_Meta_R || keyval == GDK_KEY_Hyper_L || keyval == GDK_KEY_Hyper_R) {
+		cap->captured_state = state & key_bind_mask;
+		key_capture_for_bind_update_label (cap);
+		return TRUE;
+	}
+	cap->captured_key	= keyval;
+	cap->captured_state = state & key_bind_mask;
+	key_capture_for_bind_update_label (cap);
+	return TRUE;
+}
+
+static gboolean key_capture_for_bind_key_released (GtkEventControllerKey *controller, guint keyval, guint keycode,
+												   GdkModifierType state, gpointer user_data)
+{
+	KeyCaptureForBind *cap = (KeyCaptureForBind *) user_data;
+	/* Capture over on first key-up: apply if we have a key, then close */
+	if (cap->captured_key && cap->captured_key != GDK_KEY_VoidSymbol) {
+		key_capture_apply (cap);
+		key_capture_for_bind_close (cap);
+	}
+	return TRUE;
+}
+
+static void show_key_capture_for_bind (GtkWindow *parent, bind_t *bind, KeyBindListDialog *list_dialog, bool max_key_only)
+{
+	KeyCaptureForBind *cap = g_new0 (KeyCaptureForBind, 1);
+	cap->bind			   = bind;
+	cap->list_dialog	   = list_dialog;
+	cap->max_key_only	   = max_key_only;
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), max_key_only ? "Capture range end key" : "Capture key");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), parent);
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	g_object_set_data (G_OBJECT (dialog), "key-capture-cap", cap);
+	cap->window					= dialog;
+	cap->had_focus				= false;
+	cap->active_check_source_id = g_timeout_add (150, key_capture_check_active, cap);
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 24);
+	gtk_widget_set_margin_end (main_box, 24);
+	gtk_widget_set_margin_top (main_box, 24);
+	gtk_widget_set_margin_bottom (main_box, 24);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	cap->label = gtk_label_new ("");
+	gtk_label_set_justify (GTK_LABEL (cap->label), GTK_JUSTIFY_CENTER);
+	gtk_label_set_wrap (GTK_LABEL (cap->label), TRUE);
+	gtk_label_set_max_width_chars (GTK_LABEL (cap->label), 40);
+	gtk_widget_set_vexpand (cap->label, TRUE);
+	gtk_box_append (GTK_BOX (main_box), cap->label);
+	key_capture_for_bind_update_label (cap);
+
+	GtkEventController *key_controller = gtk_event_controller_key_new ();
+	gtk_widget_add_controller (dialog, key_controller);
+	gtk_event_controller_set_propagation_phase (key_controller, GTK_PHASE_CAPTURE);
+	g_signal_connect (key_controller, "key-pressed", G_CALLBACK (key_capture_for_bind_key_pressed), cap);
+	g_signal_connect (key_controller, "key-released", G_CALLBACK (key_capture_for_bind_key_released), cap);
+
+	GtkEventController *focus_controller = gtk_event_controller_focus_new ();
+	gtk_widget_add_controller (dialog, focus_controller);
+	g_signal_connect (focus_controller, "leave", G_CALLBACK (key_capture_focus_out), NULL);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 380, 120);
+	gtk_window_present (GTK_WINDOW (dialog));
+	gtk_widget_grab_focus (dialog);
+}
+
+static void key_bind_base_changed (GtkSpinButton *spin, gpointer user_data);
+
+/* Synchronous teardown: clear the list store first so unbind runs while list_dialog is valid,
+ * then free our data and destroy the window. No g_idle_add. */
+/* List-settings callbacks for Key Bindings (ctx = KeyBindListDialog *) */
+static void key_bind_commit (void *ctx)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) ctx;
+	key_bind_list_free (terms.keys);
+	terms.keys = key_bind_list_clone (list_dialog->working_keys);
+	/* Update terms.n_active from SWITCH binds */
+	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
+		if (cur->action == BIND_ACT_SWITCH) {
+			int n = cur->base + (cur->key_max - cur->key_min) + 1;
+			if (n > terms.n_active) {
+				int old_n	   = terms.n_active;
+				terms.n_active = n;
+				terms.active   = realloc (terms.active, terms.n_active * sizeof (*terms.active));
+				memset (&terms.active[old_n], 0, (terms.n_active - old_n) * sizeof (*terms.active));
+			}
+		}
+	}
+}
+
+static void key_bind_snapshot (void *ctx)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) ctx;
+	key_bind_list_free (list_dialog->original_keys);
+	list_dialog->original_keys = key_bind_list_clone (list_dialog->working_keys);
+}
+
+static void key_bind_restore_config (void *ctx)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) ctx;
+	key_bind_list_free (terms.keys);
+	terms.keys = key_bind_list_clone (list_dialog->original_keys);
+	/* Recompute terms.n_active from restored keys */
+	int n_required = 0;
+	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
+		if (cur->action == BIND_ACT_SWITCH) {
+			int n = cur->base + (cur->key_max - cur->key_min) + 1;
+			if (n > n_required)
+				n_required = n;
+		}
+	}
+	if (n_required > terms.n_active) {
+		int old_n	   = terms.n_active;
+		terms.n_active = n_required;
+		terms.active   = realloc (terms.active, terms.n_active * sizeof (*terms.active));
+		memset (&terms.active[old_n], 0, (terms.n_active - old_n) * sizeof (*terms.active));
+	}
+}
+
+static void key_bind_restore_working (void *ctx)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) ctx;
+	key_bind_list_free (list_dialog->working_keys);
+	list_dialog->working_keys = key_bind_list_clone (list_dialog->original_keys);
+}
+
+static void key_bind_refresh_ui (void *ctx)
+{
+	refresh_key_bind_list ((KeyBindListDialog *) ctx);
+}
+
+static void key_bind_destroy (void *ctx)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) ctx;
+	GtkWidget		  *dialog	   = list_dialog->dialog;
+	g_list_store_remove_all (list_dialog->store);
+	g_hash_table_destroy (list_dialog->bind_row_widgets);
+	key_bind_list_free (list_dialog->working_keys);
+	key_bind_list_free (list_dialog->original_keys);
+	free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
+}
+
+static void key_bind_after_commit (void *ctx)
+{
+	(void) ctx;
+	rebuild_menus ();
+}
+
+/* In-place: Action dropdown — update bind and this row's widgets only; no list refresh */
+static void key_bind_action_changed_in_list (GtkDropDown *dropdown, GParamSpec *pspec, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	bind_t			  *bind		   = g_object_get_data (G_OBJECT (dropdown), "bind_ptr");
+	if (!bind)
+		return;
+	guint pos = gtk_drop_down_get_selected (dropdown);
+	if (pos == GTK_INVALID_LIST_POSITION || pos >= (sizeof (bind_action_names) / sizeof (bind_action_names[0])) - 1)
+		return;
+	bind->action = (bind_actions_t) pos;
+	if (bind->action != BIND_ACT_SWITCH) {
 		bind->key_max = bind->key_min;
 		bind->base	  = 0;
-		/* Clear argv and env for non-switch bindings */
-		if (bind->argv) {
-			g_strfreev (bind->argv);
-			bind->argv = NULL;
-		}
-		if (bind->env) {
-			g_strfreev (bind->env);
-			bind->env = NULL;
-		}
 	}
-
-	zterm_save_config ();
-	debugf ("Calling rebuild_menus");
-	rebuild_menus ();
-
-	/* Refresh the list dialog if available */
-	if (edit->list_dialog) {
-		refresh_key_bind_list (edit->list_dialog);
+	KeyBindItem *item = key_bind_list_find_item_for_bind (list_dialog, bind);
+	if (item) {
+		key_bind_item_update_labels (item);
+		g_object_unref (item);
 	}
+	KeyBindRowWidgets *row_w = g_hash_table_lookup (list_dialog->bind_row_widgets, bind);
+	if (row_w) {
+		if (row_w->base_spin) {
+			g_signal_handlers_disconnect_by_func (row_w->base_spin, G_CALLBACK (key_bind_base_changed), list_dialog);
+			gtk_spin_button_set_value (GTK_SPIN_BUTTON (row_w->base_spin), 1.0);
+			gtk_widget_set_sensitive (row_w->base_spin, bind->action == BIND_ACT_SWITCH);
+			g_signal_connect (row_w->base_spin, "value-changed", G_CALLBACK (key_bind_base_changed), list_dialog);
+		}
+		if (row_w->configure_btn)
+			gtk_widget_set_visible (row_w->configure_btn, bind->action == BIND_ACT_SWITCH);
+		if (row_w->max_key_btn)
+			gtk_widget_set_visible (row_w->max_key_btn, bind->action == BIND_ACT_SWITCH);
+	}
+}
 
+/* Each dropdown gets its own model via gtk_drop_down_new_from_strings (no shared model). */
+static void setup_key_bind_action_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	debugf ("keybind: setup_key_bind_action_factory list_item=%p", (void *) list_item);
+	GtkWidget *dropdown = gtk_drop_down_new_from_strings (bind_action_names);
+	gtk_list_item_set_child (list_item, dropdown);
+}
+
+static void bind_key_bind_action_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	GtkWidget		  *dropdown	   = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	debugf ("keybind: bind_key_bind_action_factory list_item=%p item=%p", (void *) list_item, (void *) item);
+	if (item && item->bind) {
+		g_object_set_data (G_OBJECT (dropdown), "bind_ptr", item->bind);
+		g_signal_handlers_disconnect_by_func (dropdown, G_CALLBACK (key_bind_action_changed_in_list), list_dialog);
+		gtk_drop_down_set_selected (GTK_DROP_DOWN (dropdown), item->bind->action);
+		g_signal_connect (dropdown, "notify::selected", G_CALLBACK (key_bind_action_changed_in_list), list_dialog);
+	}
+}
+
+/* Key column: button showing accelerator; click starts key capture (modifier + key). */
+static void key_bind_key_clicked (GtkButton *button, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	bind_t			  *bind		   = g_object_get_data (G_OBJECT (button), "bind_ptr");
+	if (!bind)
+		return;
+	/* Move focus to the dialog so when the modal closes and we refresh (destroying this button),
+	 * focus returns to a valid widget, not the destroyed row. */
+	gtk_widget_grab_focus (list_dialog->dialog);
+	show_key_capture_for_bind (GTK_WINDOW (list_dialog->dialog), bind, list_dialog, false);
+}
+
+static void key_bind_key_label_notify (KeyBindItem *item, GParamSpec *pspec, gpointer user_data)
+{
+	GtkButton *btn = GTK_BUTTON (user_data);
+	gchar	  *str = NULL;
+	g_object_get (item, "key-label", &str, NULL);
+	gtk_button_set_label (btn, str ? str : "…");
+	g_free (str);
+}
+
+static void setup_key_bind_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	debugf ("keybind: setup_key_bind_key_factory list_item=%p", (void *) list_item);
+	GtkWidget *btn = gtk_button_new ();
+	gtk_button_set_has_frame (GTK_BUTTON (btn), FALSE);
+	gtk_widget_set_hexpand (btn, TRUE);
+	gtk_widget_set_halign (btn, GTK_ALIGN_START);
+	gtk_list_item_set_child (list_item, btn);
+}
+
+static void unbind_key_bind_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	GtkWidget	*btn  = gtk_list_item_get_child (list_item);
+	KeyBindItem *item = gtk_list_item_get_item (list_item);
+	if (item)
+		g_signal_handlers_disconnect_by_data (item, btn);
+}
+
+static void bind_key_bind_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	GtkWidget		  *btn		   = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	debugf ("keybind: bind_key_bind_key_factory list_item=%p btn=%p item=%p", (void *) list_item, (void *) btn, (void *) item);
+	if (item && item->bind) {
+		gchar *str = NULL;
+		g_object_get (item, "key-label", &str, NULL);
+		gtk_button_set_label (GTK_BUTTON (btn), str ? str : "…");
+		g_free (str);
+		g_object_set_data (G_OBJECT (btn), "bind_ptr", item->bind);
+		g_signal_handlers_disconnect_by_func (btn, G_CALLBACK (key_bind_key_clicked), list_dialog);
+		g_signal_connect (btn, "clicked", G_CALLBACK (key_bind_key_clicked), list_dialog);
+		g_signal_handlers_disconnect_by_data (item, btn);
+		g_signal_connect (item, "notify::key-label", G_CALLBACK (key_bind_key_label_notify), btn);
+	}
+}
+
+/* Max key column: button showing range end key (SWITCH only); click starts key capture for end key. */
+static void key_bind_max_key_clicked (GtkButton *button, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	bind_t			  *bind		   = g_object_get_data (G_OBJECT (button), "bind_ptr");
+	if (!bind || bind->action != BIND_ACT_SWITCH)
+		return;
+	gtk_widget_grab_focus (list_dialog->dialog);
+	show_key_capture_for_bind (GTK_WINDOW (list_dialog->dialog), bind, list_dialog, true);
+}
+
+static void setup_key_bind_max_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	GtkWidget *btn = gtk_button_new ();
+	gtk_button_set_has_frame (GTK_BUTTON (btn), FALSE);
+	gtk_widget_set_halign (btn, GTK_ALIGN_START);
+	gtk_list_item_set_child (list_item, btn);
+}
+
+static void key_bind_max_key_label_notify (KeyBindItem *item, GParamSpec *pspec, gpointer user_data)
+{
+	GtkButton *btn = GTK_BUTTON (user_data);
+	gchar	  *str = NULL;
+	g_object_get (item, "max-key-label", &str, NULL);
+	gtk_button_set_label (btn, str ? str : "—");
+	g_free (str);
+}
+
+static void unbind_key_bind_max_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	GtkWidget		  *btn		   = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	debugf ("keybind: unbind_key_bind_max_key_factory list_item=%p item=%p", (void *) list_item, (void *) item);
+	if (item) {
+		g_signal_handlers_disconnect_by_data (item, btn);
+		if (item->bind)
+			g_hash_table_remove (list_dialog->bind_row_widgets, item->bind);
+	}
+}
+
+static void bind_key_bind_max_key_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	GtkWidget		  *btn		   = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	if (item && item->bind) {
+		KeyBindRowWidgets *row_w = g_hash_table_lookup (list_dialog->bind_row_widgets, item->bind);
+		if (!row_w) {
+			row_w = g_new0 (KeyBindRowWidgets, 1);
+			g_hash_table_insert (list_dialog->bind_row_widgets, item->bind, row_w);
+		}
+		row_w->max_key_btn = btn;
+		gchar *str		   = NULL;
+		g_object_get (item, "max-key-label", &str, NULL);
+		gtk_button_set_label (GTK_BUTTON (btn), str ? str : "—");
+		g_free (str);
+		gtk_widget_set_visible (btn, item->bind->action == BIND_ACT_SWITCH);
+		g_object_set_data (G_OBJECT (btn), "bind_ptr", item->bind);
+		g_signal_handlers_disconnect_by_func (btn, G_CALLBACK (key_bind_max_key_clicked), list_dialog);
+		g_signal_connect (btn, "clicked", G_CALLBACK (key_bind_max_key_clicked), list_dialog);
+		g_signal_handlers_disconnect_by_data (item, btn);
+		g_signal_connect (item, "notify::max-key-label", G_CALLBACK (key_bind_max_key_label_notify), btn);
+	}
+}
+
+/* In-place: Base spin (SWITCH only) */
+static void key_bind_base_changed (GtkSpinButton *spin, gpointer user_data)
+{
+	(void) user_data;
+	bind_t *bind = g_object_get_data (G_OBJECT (spin), "bind_ptr");
+	if (!bind || bind->action != BIND_ACT_SWITCH)
+		return;
+	bind->base = gtk_spin_button_get_value_as_int (spin) - 1;
+	/* No refresh: base is only shown in this spin, nothing else in the row depends on it */
+}
+
+static void setup_key_bind_base_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	GtkWidget *spin = gtk_spin_button_new_with_range (1, MAX_TABS, 1);
+	gtk_list_item_set_child (list_item, spin);
+}
+
+static void unbind_key_bind_base_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	debugf ("keybind: unbind_key_bind_base_factory list_item=%p item=%p", (void *) list_item, (void *) item);
+	if (item && item->bind)
+		g_hash_table_remove (list_dialog->bind_row_widgets, item->bind);
+}
+
+static void bind_key_bind_base_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	GtkWidget		  *spin		   = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	if (item && item->bind) {
+		KeyBindRowWidgets *row_w = g_hash_table_lookup (list_dialog->bind_row_widgets, item->bind);
+		if (!row_w) {
+			row_w = g_new0 (KeyBindRowWidgets, 1);
+			g_hash_table_insert (list_dialog->bind_row_widgets, item->bind, row_w);
+		}
+		row_w->base_spin = spin;
+		g_object_set_data (G_OBJECT (spin), "bind_ptr", item->bind);
+		g_signal_handlers_disconnect_by_func (spin, G_CALLBACK (key_bind_base_changed), list_dialog);
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (spin), (double) (item->bind->base + 1));
+		gtk_widget_set_sensitive (spin, item->bind->action == BIND_ACT_SWITCH);
+		g_signal_connect (spin, "value-changed", G_CALLBACK (key_bind_base_changed), list_dialog);
+	}
+}
+
+/* Key bind list row: Delete, Configure (Configure only for SWITCH); editing is in-place on cells */
+static void setup_key_bind_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	GtkWidget *box		  = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
+	GtkWidget *delete_btn = gtk_button_new_from_icon_name ("edit-delete-symbolic");
+	gtk_widget_set_tooltip_text (delete_btn, "Delete");
+	gtk_box_append (GTK_BOX (box), delete_btn);
+	GtkWidget *configure_btn = gtk_button_new_from_icon_name ("utilities-terminal-symbolic");
+	gtk_widget_set_tooltip_text (configure_btn, "Configure terminals for this binding's range");
+	gtk_box_append (GTK_BOX (box), configure_btn);
+	gtk_list_item_set_child (list_item, box);
+}
+
+static void key_bind_configure_clicked (GtkButton *button, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	bind_t			  *bind		   = (bind_t *) g_object_get_data (G_OBJECT (button), "bind_ptr");
+	if (!bind || bind->action != BIND_ACT_SWITCH)
+		return;
+	int range_start = (int) bind->base;
+	int range_end	= (int) (bind->base + (bind->key_max - bind->key_min));
+	show_terminal_config_editor_for_range (list_dialog->dialog, list_dialog->window_n, range_start, range_end);
+}
+
+static void unbind_key_bind_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
+	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
+	debugf ("keybind: unbind_key_bind_buttons_factory list_item=%p item=%p", (void *) list_item, (void *) item);
+	if (item && item->bind)
+		g_hash_table_remove (list_dialog->bind_row_widgets, item->bind);
+}
+
+static void bind_key_bind_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	KeyBindListDialog *list_dialog	 = (KeyBindListDialog *) user_data;
+	GtkWidget		  *box			 = gtk_list_item_get_child (list_item);
+	KeyBindItem		  *item			 = gtk_list_item_get_item (list_item);
+	GtkWidget		  *delete_btn	 = gtk_widget_get_first_child (box);
+	GtkWidget		  *configure_btn = gtk_widget_get_next_sibling (delete_btn);
+
+	if (item && item->bind) {
+		KeyBindRowWidgets *row_w = g_hash_table_lookup (list_dialog->bind_row_widgets, item->bind);
+		if (!row_w) {
+			row_w = g_new0 (KeyBindRowWidgets, 1);
+			g_hash_table_insert (list_dialog->bind_row_widgets, item->bind, row_w);
+		}
+		row_w->configure_btn = configure_btn;
+		g_object_set_data (G_OBJECT (delete_btn), "bind_ptr", item->bind);
+		g_object_set_data (G_OBJECT (configure_btn), "bind_ptr", item->bind);
+		gtk_widget_set_visible (configure_btn, item->bind->action == BIND_ACT_SWITCH);
+		g_signal_handlers_disconnect_by_func (delete_btn, G_CALLBACK (key_bind_delete_clicked), list_dialog);
+		g_signal_handlers_disconnect_by_func (configure_btn, G_CALLBACK (key_bind_configure_clicked), list_dialog);
+		g_signal_connect (delete_btn, "clicked", G_CALLBACK (key_bind_delete_clicked), list_dialog);
+		g_signal_connect (configure_btn, "clicked", G_CALLBACK (key_bind_configure_clicked), list_dialog);
+	}
+}
+
+static void show_key_bind_editor (GtkButton *button, gpointer user_data)
+{
+	PrefsDialog		  *prefs		 = (PrefsDialog *) user_data;
+	KeyBindListDialog *list_dialog	 = g_new0 (KeyBindListDialog, 1);
+	list_dialog->window_n			 = prefs->window_n;
+	list_dialog->working_keys		 = key_bind_list_clone (terms.keys);
+	list_dialog->original_keys		 = key_bind_list_clone (terms.keys);
+	list_dialog->ops.ctx			 = list_dialog;
+	list_dialog->ops.commit			 = key_bind_commit;
+	list_dialog->ops.snapshot		 = key_bind_snapshot;
+	list_dialog->ops.restore_config	 = key_bind_restore_config;
+	list_dialog->ops.restore_working = key_bind_restore_working;
+	list_dialog->ops.refresh_ui		 = key_bind_refresh_ui;
+	list_dialog->ops.destroy		 = key_bind_destroy;
+	list_dialog->ops.after_commit	 = key_bind_after_commit;
+
+	GtkWidget *dialog = gtk_window_new ();
+	gtk_window_set_title (GTK_WINDOW (dialog), "Key Bindings");
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (prefs->dialog));
+	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
+	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
+	list_dialog->dialog = dialog;
+
+	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+	gtk_widget_set_margin_start (main_box, 12);
+	gtk_widget_set_margin_end (main_box, 12);
+	gtk_widget_set_margin_top (main_box, 12);
+	gtk_widget_set_margin_bottom (main_box, 12);
+	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
+
+	list_dialog->bind_row_widgets = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
+	/* Create the GListStore and populate it */
+	list_dialog->store = g_list_store_new (KEY_BIND_ITEM_TYPE);
+
+	/* Create selection model */
+	GtkNoSelection *selection = gtk_no_selection_new (G_LIST_MODEL (list_dialog->store));
+
+	/* Create ColumnView */
+	list_dialog->column_view = gtk_column_view_new (GTK_SELECTION_MODEL (selection));
+	gtk_column_view_set_show_column_separators (GTK_COLUMN_VIEW (list_dialog->column_view), TRUE);
+
+	/* Action column: dropdown for in-place edit; each row gets its own model via new_from_strings */
+	GtkListItemFactory *action_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (action_factory, "setup", G_CALLBACK (setup_key_bind_action_factory), NULL);
+	g_signal_connect (action_factory, "bind", G_CALLBACK (bind_key_bind_action_factory), list_dialog);
+	GtkColumnViewColumn *action_col = gtk_column_view_column_new ("Action", action_factory);
+	gtk_column_view_column_set_resizable (action_col, TRUE);
+	gtk_column_view_column_set_fixed_width (action_col, 120);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), action_col);
+
+	/* Key column: modifier+key; click starts key capture */
+	GtkListItemFactory *key_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (key_factory, "setup", G_CALLBACK (setup_key_bind_key_factory), NULL);
+	g_signal_connect (key_factory, "bind", G_CALLBACK (bind_key_bind_key_factory), list_dialog);
+	g_signal_connect (key_factory, "unbind", G_CALLBACK (unbind_key_bind_key_factory), list_dialog);
+	GtkColumnViewColumn *key_col = gtk_column_view_column_new ("Key", key_factory);
+	gtk_column_view_column_set_resizable (key_col, TRUE);
+	gtk_column_view_column_set_expand (key_col, TRUE);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), key_col);
+
+	/* Max key column: range end for SWITCH; click captures end key */
+	GtkListItemFactory *max_key_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (max_key_factory, "setup", G_CALLBACK (setup_key_bind_max_key_factory), NULL);
+	g_signal_connect (max_key_factory, "bind", G_CALLBACK (bind_key_bind_max_key_factory), list_dialog);
+	g_signal_connect (max_key_factory, "unbind", G_CALLBACK (unbind_key_bind_max_key_factory), list_dialog);
+	GtkColumnViewColumn *max_key_col = gtk_column_view_column_new ("Max key", max_key_factory);
+	gtk_column_view_column_set_resizable (max_key_col, TRUE);
+	gtk_column_view_column_set_fixed_width (max_key_col, 80);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), max_key_col);
+
+	/* Base column: spin for in-place edit (SWITCH only) */
+	GtkListItemFactory *base_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (base_factory, "setup", G_CALLBACK (setup_key_bind_base_factory), NULL);
+	g_signal_connect (base_factory, "bind", G_CALLBACK (bind_key_bind_base_factory), list_dialog);
+	g_signal_connect (base_factory, "unbind", G_CALLBACK (unbind_key_bind_base_factory), list_dialog);
+	GtkColumnViewColumn *base_col = gtk_column_view_column_new ("Base", base_factory);
+	gtk_column_view_column_set_resizable (base_col, TRUE);
+	gtk_column_view_column_set_fixed_width (base_col, 60);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), base_col);
+
+	/* Buttons column: Edit, Delete, Configure (Configure only for SWITCH) */
+	GtkListItemFactory *buttons_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (buttons_factory, "setup", G_CALLBACK (setup_key_bind_buttons_factory), NULL);
+	g_signal_connect (buttons_factory, "bind", G_CALLBACK (bind_key_bind_buttons_factory), list_dialog);
+	g_signal_connect (buttons_factory, "unbind", G_CALLBACK (unbind_key_bind_buttons_factory), list_dialog);
+	GtkColumnViewColumn *buttons_col = gtk_column_view_column_new ("", buttons_factory);
+	/* No fixed width: column sizes to fit buttons exactly */
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), buttons_col);
+
+	/* Scrolled window for column view; small minimum so user can shrink the dialog */
+	GtkWidget *scrolled = gtk_scrolled_window_new ();
+	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (scrolled), FALSE);
+	gtk_widget_set_vexpand (scrolled, TRUE);
+	gtk_widget_set_size_request (scrolled, 320, 160);
+	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), list_dialog->column_view);
+	gtk_box_append (GTK_BOX (main_box), scrolled);
+
+	refresh_key_bind_list (list_dialog);
+
+	/* Buttons: Add, then Reset | Cancel | Apply | OK (GNOME convention) */
+	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
+	gtk_widget_set_margin_top (button_box, 12);
+	gtk_box_append (GTK_BOX (main_box), button_box);
+
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
+	gtk_box_append (GTK_BOX (button_box), add_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
+
+	g_signal_connect (add_btn, "clicked", G_CALLBACK (key_bind_add_clicked), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
+
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 740, 500);
+	gtk_window_present (GTK_WINDOW (dialog));
+}
+
+/* ==================== Terminal Configuration Editor ==================== */
+
+static bool terminal_config_entry_equal (terminal_config_t *a, terminal_config_t *b)
+{
+	if ((a->argv == NULL) != (b->argv == NULL))
+		return false;
+	if (a->argv != NULL && !g_strv_equal (a->argv, b->argv))
+		return false;
+	if ((a->env == NULL) != (b->env == NULL))
+		return false;
+	if (a->env != NULL && !g_strv_equal (a->env, b->env))
+		return false;
+	if (a->working_directory == NULL && b->working_directory == NULL)
+		return true;
+	if (a->working_directory == NULL || b->working_directory == NULL)
+		return false;
+	return strcmp (a->working_directory, b->working_directory) == 0;
+}
+
+/* Parse ranges string (1-based user input) "1", "3-8", "1-2, 9" into 0-based indices. Returns false on parse error. */
+static bool parse_ranges_string (const char *str, int *out_indices, int max_indices, int *out_count)
+{
+	*out_count = 0;
+	if (!str || strlen (str) == 0)
+		return true;
+	gchar **parts = g_strsplit (str, ",", -1);
+	for (int i = 0; parts[i] != NULL && *out_count < max_indices; i++) {
+		g_strstrip (parts[i]);
+		if (parts[i][0] == '\0')
+			continue;
+		int start = -1, end = -1;
+		if (strchr (parts[i], '-')) {
+			if (sscanf (parts[i], "%d-%d", &start, &end) != 2 || start < 1 || end < start || end > MAX_TABS) {
+				g_strfreev (parts);
+				return false;
+			}
+		} else {
+			if (sscanf (parts[i], "%d", &start) != 1 || start < 1 || start > MAX_TABS) {
+				g_strfreev (parts);
+				return false;
+			}
+			end = start;
+		}
+		for (int j = start; j <= end && *out_count < max_indices; j++)
+			out_indices[(*out_count)++] = j - 1;
+	}
+	g_strfreev (parts);
+	return true;
+}
+
+/* Format a single range for display (0-based start/end -> 1-based display) */
+static void format_range (int start, int end, GString *out)
+{
+	if (start == end)
+		g_string_append_printf (out, "%d", start + 1);
+	else
+		g_string_append_printf (out, "%d-%d", start + 1, end + 1);
+}
+
+#define TERMINAL_CONFIG_ITEM_TYPE (terminal_config_item_get_type ())
+G_DECLARE_FINAL_TYPE (TerminalConfigItem, terminal_config_item, TERMINAL, CONFIG_ITEM, GObject)
+
+struct _TerminalConfigItem {
+	GObject parent_instance;
+	int		start;
+	int		end;
+};
+
+G_DEFINE_TYPE (TerminalConfigItem, terminal_config_item, G_TYPE_OBJECT)
+
+static void terminal_config_item_class_init (TerminalConfigItemClass *)
+{
+}
+
+static void terminal_config_item_init (TerminalConfigItem *self)
+{
+}
+
+TerminalConfigItem *terminal_config_item_new (int start, int end)
+{
+	TerminalConfigItem *item = g_object_new (TERMINAL_CONFIG_ITEM_TYPE, NULL);
+	item->start				 = start;
+	item->end				 = end;
+	return item;
+}
+
+typedef struct TerminalConfigListDialog_s TerminalConfigListDialog;
+
+typedef struct {
+	GtkWidget *dialog;
+	GtkWidget *ranges_entry;
+	GtkWidget *cmd_entry;
+	GtkWidget *directory_entry;
+	GtkWidget *env_entry;
+	int		   edit_start; /* -1 for add */
+	int		   edit_end;
+	long int   parent_window;
+	GtkWidget *list_dialog;
+} TerminalConfigEditDialog;
+
+struct TerminalConfigListDialog_s {
+	GtkWidget  *dialog;
+	GtkWidget  *column_view;
+	GtkWidget  *filter_check;
+	GtkWidget  *filter_min_spin;
+	GtkWidget  *filter_max_spin;
+	GListStore *store;
+	long int	window_n;
+	int			filter_start; /* -1 = show all */
+	int			filter_end;
+};
+
+static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog);
+static void terminal_config_cell_editing_done (GtkEntry *entry, gpointer unused);
+
+static void terminal_config_edit_cancel (TerminalConfigEditDialog *edit)
+{
 	gtk_window_destroy (GTK_WINDOW (edit->dialog));
 	free (edit);
 }
 
-static void key_bind_action_changed (GtkDropDown *dropdown, GParamSpec *pspec, gpointer user_data)
+static void terminal_config_edit_ok (TerminalConfigEditDialog *edit)
 {
-	KeyBindEditDialog *edit		  = (KeyBindEditDialog *) user_data;
-	int				   action_idx = gtk_drop_down_get_selected (dropdown);
-	bool			   is_switch  = (action_idx == BIND_ACT_SWITCH);
+	const char *ranges_str = gtk_editable_get_text (GTK_EDITABLE (edit->ranges_entry));
+	const char *cmd_str	   = gtk_editable_get_text (GTK_EDITABLE (edit->cmd_entry));
+	const char *dir_str	   = gtk_editable_get_text (GTK_EDITABLE (edit->directory_entry));
+	const char *env_str	   = gtk_editable_get_text (GTK_EDITABLE (edit->env_entry));
 
-	gtk_widget_set_visible (edit->base_label, is_switch);
-	gtk_widget_set_visible (edit->base_spin, is_switch);
-	gtk_widget_set_visible (edit->key_max_label, is_switch);
-	gtk_widget_set_visible (edit->key_max_entry, is_switch);
-	gtk_widget_set_visible (edit->cmd_label, is_switch);
-	gtk_widget_set_visible (edit->cmd_entry, is_switch);
-	gtk_widget_set_visible (edit->env_label, is_switch);
-	gtk_widget_set_visible (edit->env_entry, is_switch);
+	int indices[MAX_TABS];
+	int n_indices = 0;
+	if (!parse_ranges_string (ranges_str, indices, MAX_TABS, &n_indices) || n_indices == 0) {
+		GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid terminal ranges. Use e.g. 1, 3-8, or 1-2, 9");
+		gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+		g_object_unref (alert);
+		return;
+	}
+
+	gchar **argv = NULL;
+	gchar **env	 = NULL;
+	if (cmd_str && strlen (cmd_str) > 0) {
+		gint	argc  = 0;
+		GError *error = NULL;
+		if (!g_shell_parse_argv (cmd_str, &argc, &argv, &error)) {
+			if (error) {
+				GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid command: %s", error->message);
+				gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+				g_object_unref (alert);
+				g_error_free (error);
+			}
+			return;
+		}
+	}
+	if (env_str && strlen (env_str) > 0) {
+		gint	argc  = 0;
+		GError *error = NULL;
+		if (!g_shell_parse_argv (env_str, &argc, &env, &error)) {
+			if (error) {
+				GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid environment: %s", error->message);
+				gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
+				g_object_unref (alert);
+				g_error_free (error);
+			}
+			return;
+		}
+	}
+	const char *dir = (dir_str && strlen (dir_str) > 0) ? dir_str : NULL;
+
+	zterm_ensure_terminal_configs ();
+
+	/* If editing, clear the old range first */
+	if (edit->edit_start >= 0) {
+		for (int i = edit->edit_start; i <= edit->edit_end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, NULL, NULL, NULL);
+	}
+
+	for (int i = 0; i < n_indices; i++)
+		zterm_set_terminal_config (indices[i], (const char **) argv, (const char **) env, dir);
+
+	if (argv)
+		g_strfreev (argv);
+	if (env)
+		g_strfreev (env);
+
+	zterm_save_config ();
+	if (edit->list_dialog) {
+		TerminalConfigListDialog *list =
+		  (TerminalConfigListDialog *) g_object_get_data (G_OBJECT (edit->list_dialog), "terminal_config_list_dialog");
+		if (list)
+			refresh_terminal_config_list (list);
+	}
+	gtk_window_destroy (GTK_WINDOW (edit->dialog));
+	free (edit);
 }
 
-static void key_capture_btn_clicked (GtkButton *button, gpointer user_data)
+static void show_terminal_config_edit_dialog (int edit_start, int edit_end, long int parent_window, GtkWidget *list_dialog)
 {
-	KeyBindEditDialog *edit = (KeyBindEditDialog *) user_data;
-	show_capture_dialog (edit->state_entry, edit->key_entry, NULL, true, edit->parent_window);
-}
-
-static void show_key_bind_edit_dialog (bind_t *editing_bind, long int parent_window, KeyBindListDialog *list_dialog)
-{
-	KeyBindEditDialog *edit = g_new0 (KeyBindEditDialog, 1);
-	edit->editing_bind		= editing_bind;
-	edit->parent_window		= parent_window;
-	edit->list_dialog		= list_dialog;
+	TerminalConfigEditDialog *edit = g_new0 (TerminalConfigEditDialog, 1);
+	edit->edit_start			   = edit_start;
+	edit->edit_end				   = edit_end;
+	edit->parent_window			   = parent_window;
+	edit->list_dialog			   = list_dialog;
 
 	GtkWidget *dialog = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (dialog), editing_bind ? "Edit Key Binding" : "New Key Binding");
+	gtk_window_set_title (GTK_WINDOW (dialog), (edit_start >= 0) ? "Edit Terminal Configuration" : "New Terminal Configuration");
 	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (windows[parent_window].window));
 	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
@@ -1431,305 +2781,346 @@ static void show_key_bind_edit_dialog (bind_t *editing_bind, long int parent_win
 
 	int row = 0;
 
-	/* Action */
-	gtk_grid_attach (GTK_GRID (grid), create_label ("Action:"), 0, row, 1, 1);
-	GtkStringList *action_list = gtk_string_list_new ((const char *const *) bind_action_names);
-	edit->action_combo		   = gtk_drop_down_new (G_LIST_MODEL (action_list), NULL);
-	if (editing_bind) {
-		gtk_drop_down_set_selected (GTK_DROP_DOWN (edit->action_combo), editing_bind->action);
-	}
-	g_signal_connect (edit->action_combo, "notify::selected", G_CALLBACK (key_bind_action_changed), edit);
-	gtk_grid_attach (GTK_GRID (grid), edit->action_combo, 1, row++, 1, 1);
-
-	/* State (modifiers) */
-	gtk_grid_attach (GTK_GRID (grid), create_label ("Modifiers:"), 0, row, 1, 1);
-	edit->state_entry = gtk_entry_new ();
-	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->state_entry), "e.g. <Control><Shift>");
-	if (editing_bind) {
-		gchar *state_str = gtk_accelerator_name (0, editing_bind->state);
-		gtk_editable_set_text (GTK_EDITABLE (edit->state_entry), state_str);
-		g_free (state_str);
-	}
-	gtk_grid_attach (GTK_GRID (grid), edit->state_entry, 1, row++, 1, 1);
-
-	/* Key */
-	gtk_grid_attach (GTK_GRID (grid), create_label ("Key:"), 0, row, 1, 1);
-	GtkWidget *key_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-	edit->key_entry	   = gtk_entry_new ();
-	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->key_entry), "e.g. c, F1, 1");
-	if (editing_bind) {
-		const gchar *key_str = gdk_keyval_name (editing_bind->key_min);
-		if (key_str) {
-			gtk_editable_set_text (GTK_EDITABLE (edit->key_entry), key_str);
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Terminals (ranges):"), 0, row, 1, 1);
+	edit->ranges_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->ranges_entry), 28);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->ranges_entry), "e.g. 1, 3-8, or 1-2, 9");
+	if (edit_start >= 0) {
+		GString *s = g_string_new ("");
+		format_range (edit_start, edit_end, s);
+		gtk_editable_set_text (GTK_EDITABLE (edit->ranges_entry), s->str);
+		g_string_free (s, TRUE);
+	} else {
+		TerminalConfigListDialog *list = g_object_get_data (G_OBJECT (list_dialog), "terminal_config_list_dialog");
+		if (list && list->filter_start >= 0) {
+			GString *s = g_string_new ("");
+			format_range (list->filter_start, list->filter_end, s);
+			gtk_editable_set_text (GTK_EDITABLE (edit->ranges_entry), s->str);
+			g_string_free (s, TRUE);
 		}
 	}
-	gtk_widget_set_hexpand (edit->key_entry, TRUE);
-	gtk_box_append (GTK_BOX (key_box), edit->key_entry);
+	gtk_widget_set_hexpand (edit->ranges_entry, TRUE);
+	gtk_grid_attach (GTK_GRID (grid), edit->ranges_entry, 1, row++, 1, 1);
 
-	/* Capture button for key */
-	GtkWidget *capture_btn = gtk_button_new_with_label ("Capture...");
-	g_object_set_data (G_OBJECT (capture_btn), "state_entry", edit->state_entry);
-	g_object_set_data (G_OBJECT (capture_btn), "key_entry", edit->key_entry);
-	g_object_set_data (G_OBJECT (capture_btn), "parent_window", GINT_TO_POINTER (parent_window));
-	g_signal_connect (capture_btn, "clicked", G_CALLBACK (key_capture_btn_clicked), edit);
-	gtk_box_append (GTK_BOX (key_box), capture_btn);
-
-	gtk_grid_attach (GTK_GRID (grid), key_box, 1, row++, 1, 1);
-
-	/* Base (for SWITCH only) */
-	edit->base_label = create_label ("Base Terminal:");
-	gtk_grid_attach (GTK_GRID (grid), edit->base_label, 0, row, 1, 1);
-	edit->base_spin = gtk_spin_button_new_with_range (0, 100, 1);
-	if (editing_bind && editing_bind->action == BIND_ACT_SWITCH) {
-		gtk_spin_button_set_value (GTK_SPIN_BUTTON (edit->base_spin), editing_bind->base);
-	}
-	gtk_grid_attach (GTK_GRID (grid), edit->base_spin, 1, row++, 1, 1);
-
-	/* Key Max (for SWITCH only) */
-	edit->key_max_label = create_label ("Key Max (optional):");
-	gtk_grid_attach (GTK_GRID (grid), edit->key_max_label, 0, row, 1, 1);
-	edit->key_max_entry = gtk_entry_new ();
-	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->key_max_entry), "e.g. 9, F12");
-	if (editing_bind && editing_bind->action == BIND_ACT_SWITCH && editing_bind->key_max != editing_bind->key_min) {
-		const gchar *key_max_str = gdk_keyval_name (editing_bind->key_max);
-		if (key_max_str) {
-			gtk_editable_set_text (GTK_EDITABLE (edit->key_max_entry), key_max_str);
-		}
-	}
-	gtk_grid_attach (GTK_GRID (grid), edit->key_max_entry, 1, row++, 1, 1);
-
-	/* Command (for SWITCH only) */
-	edit->cmd_label = create_label ("Command (optional):");
-	gtk_grid_attach (GTK_GRID (grid), edit->cmd_label, 0, row, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Command (optional):"), 0, row, 1, 1);
 	edit->cmd_entry = gtk_entry_new ();
-	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->cmd_entry), "e.g. /bin/bash --login");
-	if (editing_bind && editing_bind->action == BIND_ACT_SWITCH && editing_bind->argv) {
-		gchar *cmd_str = g_strjoinv (" ", editing_bind->argv);
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->cmd_entry), 28);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->cmd_entry), "e.g. /bin/zsh -l");
+	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS && terms.terminal_configs[edit_start].argv) {
+		gchar *cmd_str = g_strjoinv (" ", (gchar **) terms.terminal_configs[edit_start].argv);
 		gtk_editable_set_text (GTK_EDITABLE (edit->cmd_entry), cmd_str);
 		g_free (cmd_str);
 	}
 	gtk_widget_set_hexpand (edit->cmd_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), edit->cmd_entry, 1, row++, 1, 1);
 
-	/* Environment (for SWITCH only) */
-	edit->env_label = create_label ("Environment (optional):");
-	gtk_grid_attach (GTK_GRID (grid), edit->env_label, 0, row, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Working directory (optional):"), 0, row, 1, 1);
+	edit->directory_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->directory_entry), 32);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->directory_entry), "e.g. /home/user/project");
+	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS &&
+		terms.terminal_configs[edit_start].working_directory) {
+		gtk_editable_set_text (GTK_EDITABLE (edit->directory_entry), terms.terminal_configs[edit_start].working_directory);
+	}
+	gtk_widget_set_hexpand (edit->directory_entry, TRUE);
+	gtk_grid_attach (GTK_GRID (grid), edit->directory_entry, 1, row++, 1, 1);
+
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Environment (optional):"), 0, row, 1, 1);
 	edit->env_entry = gtk_entry_new ();
-	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->env_entry), "e.g. VAR1=val1 VAR2=val2");
-	if (editing_bind && editing_bind->action == BIND_ACT_SWITCH && editing_bind->env) {
-		gchar *env_str = g_strjoinv (" ", editing_bind->env);
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->env_entry), 24);
+	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->env_entry), "e.g. VAR=val");
+	if (edit_start >= 0 && terms.terminal_configs && edit_start < MAX_TABS && terms.terminal_configs[edit_start].env) {
+		gchar *env_str = g_strjoinv (" ", (gchar **) terms.terminal_configs[edit_start].env);
 		gtk_editable_set_text (GTK_EDITABLE (edit->env_entry), env_str);
 		g_free (env_str);
 	}
 	gtk_widget_set_hexpand (edit->env_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), edit->env_entry, 1, row++, 1, 1);
 
-	/* Set initial visibility of switch-only fields */
-	/* For new bindings, default action is SWITCH (index 0), so fields should be visible */
-	bool is_switch = editing_bind ? (editing_bind->action == BIND_ACT_SWITCH) : true;
-	gtk_widget_set_visible (edit->base_label, is_switch);
-	gtk_widget_set_visible (edit->base_spin, is_switch);
-	gtk_widget_set_visible (edit->key_max_label, is_switch);
-	gtk_widget_set_visible (edit->key_max_entry, is_switch);
-	gtk_widget_set_visible (edit->cmd_label, is_switch);
-	gtk_widget_set_visible (edit->cmd_entry, is_switch);
-	gtk_widget_set_visible (edit->env_label, is_switch);
-	gtk_widget_set_visible (edit->env_entry, is_switch);
-
-	/* Buttons */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
-
 	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
 	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
 	gtk_box_append (GTK_BOX (button_box), ok_btn);
+	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (terminal_config_edit_cancel), edit);
+	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (terminal_config_edit_ok), edit);
 
-	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (key_bind_edit_cancel), edit);
-	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (key_bind_edit_ok), edit);
-
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 450, -1);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 560, 380);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
-static void key_bind_add_clicked (GtkButton *button, gpointer user_data)
+static void terminal_config_add_clicked (GtkButton *button, gpointer user_data)
 {
-	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
-	show_key_bind_edit_dialog (NULL, list_dialog->window_n, list_dialog);
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) user_data;
+	show_terminal_config_edit_dialog (-1, -1, list_dialog->window_n, list_dialog->dialog);
 }
 
-static void key_bind_edit_clicked (GtkButton *button, gpointer user_data)
+static void terminal_config_delete_clicked (GtkButton *button, gpointer user_data)
 {
-	bind_t			  *bind		   = (bind_t *) g_object_get_data (G_OBJECT (button), "bind_ptr");
-	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
-
-	if (bind) {
-		show_key_bind_edit_dialog (bind, list_dialog->window_n, list_dialog);
-	}
-}
-
-static void key_bind_delete_clicked (GtkButton *button, gpointer user_data)
-{
-	bind_t			  *bind		   = (bind_t *) g_object_get_data (G_OBJECT (button), "bind_ptr");
-	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
-
-	/* Remove from linked list */
-	bind_t **prev = &terms.keys;
-	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
-		if (cur == bind) {
-			*prev = cur->next;
-			if (cur->argv)
-				g_strfreev (cur->argv);
-			if (cur->env)
-				g_strfreev (cur->env);
-			free (cur);
-			break;
-		}
-		prev = &cur->next;
-	}
-
+	TerminalConfigItem		 *item		  = (TerminalConfigItem *) g_object_get_data (G_OBJECT (button), "terminal_config_item");
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) user_data;
+	if (!item || !terms.terminal_configs)
+		return;
+	zterm_ensure_terminal_configs ();
+	for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+		zterm_set_terminal_config (i, NULL, NULL, NULL);
 	zterm_save_config ();
-	debugf ("Calling rebuild_menus");
-	rebuild_menus ();
-	refresh_key_bind_list (list_dialog);
+	refresh_terminal_config_list (list_dialog);
 }
 
-static void refresh_key_bind_list (KeyBindListDialog *list_dialog)
+static void refresh_terminal_config_list (TerminalConfigListDialog *list_dialog)
 {
-	/* Clear and repopulate the store */
 	g_list_store_remove_all (list_dialog->store);
-
-	for (bind_t *cur = terms.keys; cur; cur = cur->next) {
-		KeyBindItem *item = key_bind_item_new (cur);
-		g_list_store_append (list_dialog->store, item);
-		g_object_unref (item);
+	if (!terms.terminal_configs)
+		return;
+	int fs		 = list_dialog->filter_start;
+	int fe		 = list_dialog->filter_end;
+	int filtered = (fs >= 0);
+	for (int i = 0; i < MAX_TABS; i++) {
+		terminal_config_t *tc = &terms.terminal_configs[i];
+		if (tc->argv == NULL && tc->working_directory == NULL && tc->env == NULL)
+			continue;
+		int end_i = i;
+		while (end_i + 1 < MAX_TABS && terminal_config_entry_equal (tc, &terms.terminal_configs[end_i + 1]))
+			end_i++;
+		if (filtered && (end_i < fs || i > fe))
+			; /* skip: no overlap with [fs, fe] */
+		else {
+			TerminalConfigItem *item = terminal_config_item_new (i, end_i);
+			g_list_store_append (list_dialog->store, item);
+			debugf ("Added item %p to list %p", item, list_dialog->store);
+			g_object_unref (item);
+		}
+		i = end_i;
 	}
 }
 
-static void key_bind_list_close (KeyBindListDialog *list_dialog)
+static void terminal_config_list_close (TerminalConfigListDialog *list_dialog)
 {
 	gtk_window_destroy (GTK_WINDOW (list_dialog->dialog));
-	/* Note: store is owned by the selection model which is owned by the column view,
-	 * so it will be freed when the dialog is destroyed */
 	free (list_dialog);
 }
 
-static void setup_label_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+/* In-place editable cell: entry that commits on apply (Enter) or focus leave. column_type: 0=ranges, 1=command, 2=directory,
+ * 3=env */
+typedef struct {
+	TerminalConfigListDialog *list_dialog;
+	int						  column_type;
+} TerminalConfigCellBindData;
+
+static void terminal_config_entry_focus_leave (GtkEventControllerFocus *ctrl, gpointer unused)
 {
-	GtkWidget *label = gtk_label_new ("");
-	gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-	gtk_list_item_set_child (list_item, label);
+	GtkWidget *entry = gtk_event_controller_get_widget (GTK_EVENT_CONTROLLER (ctrl));
+	terminal_config_cell_editing_done (GTK_ENTRY (entry), NULL);
 }
 
-static void bind_action_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+static void setup_terminal_config_entry_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
-	GtkWidget	*label = gtk_list_item_get_child (list_item);
-	KeyBindItem *item  = gtk_list_item_get_item (list_item);
-	if (item && item->bind) {
-		const char *action_name = (item->bind->action < sizeof (bind_action_names) / sizeof (bind_action_names[0]) - 1)
-									? bind_action_names[item->bind->action]
-									: "UNKNOWN";
-		gtk_label_set_text (GTK_LABEL (label), action_name);
-	}
+	GtkWidget *entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (entry), 12);
+	gtk_widget_set_hexpand (entry, TRUE);
+	g_signal_connect (entry, "apply", G_CALLBACK (terminal_config_cell_editing_done), NULL);
+	GtkEventController *focus = gtk_event_controller_focus_new ();
+	g_signal_connect (focus, "leave", G_CALLBACK (terminal_config_entry_focus_leave), NULL);
+	gtk_widget_add_controller (entry, focus);
+	gtk_list_item_set_child (list_item, entry);
 }
 
-static void bind_binding_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+static void terminal_config_editable_cell_bind (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
-	GtkWidget	*label = gtk_list_item_get_child (list_item);
-	KeyBindItem *item  = gtk_list_item_get_item (list_item);
-	if (item && item->bind) {
-		char   binding_str[128];
-		gchar *accel = gtk_accelerator_name (item->bind->key_min, item->bind->state);
-		if (item->bind->action == BIND_ACT_SWITCH && item->bind->key_max != item->bind->key_min) {
-			const gchar *key_max_name = gdk_keyval_name (item->bind->key_max);
-			snprintf (binding_str, sizeof (binding_str), "%s..%s", accel, key_max_name ? key_max_name : "?");
-		} else {
-			snprintf (binding_str, sizeof (binding_str), "%s", accel);
+	TerminalConfigCellBindData *bind_data = (TerminalConfigCellBindData *) user_data;
+	GtkWidget				   *entry	  = gtk_list_item_get_child (list_item);
+	TerminalConfigItem		   *item	  = gtk_list_item_get_item (list_item);
+	char						display[512];
+	display[0] = '\0';
+	if (item && terms.terminal_configs && item->start < MAX_TABS) {
+		terminal_config_t *tc = &terms.terminal_configs[item->start];
+		switch (bind_data->column_type) {
+			case 0: {
+				GString *s = g_string_new ("");
+				format_range (item->start, item->end, s);
+				g_snprintf (display, sizeof (display), "%s", s->str);
+				g_string_free (s, TRUE);
+				break;
+			}
+			case 1:
+				if (tc->argv && tc->argv[0]) {
+					gchar *j = g_strjoinv (" ", (gchar **) tc->argv);
+					g_snprintf (display, sizeof (display), "%s", j ? j : "");
+					g_free (j);
+				} else
+					g_snprintf (display, sizeof (display), "(default)");
+				break;
+			case 2:
+				g_snprintf (display, sizeof (display), "%s",
+							tc->working_directory && tc->working_directory[0] ? tc->working_directory : "(default)");
+				break;
+			case 3:
+				if (tc->env && tc->env[0]) {
+					gchar *j = g_strjoinv (" ", (gchar **) tc->env);
+					g_snprintf (display, sizeof (display), "%s", j ? j : "");
+					g_free (j);
+				} else
+					g_snprintf (display, sizeof (display), "(default)");
+				break;
 		}
-		g_free (accel);
-		gtk_label_set_text (GTK_LABEL (label), binding_str);
 	}
+	gtk_editable_set_text (GTK_EDITABLE (entry), display);
+	g_object_set_data (G_OBJECT (entry), "terminal_config_item", item);
+	g_object_set_data (G_OBJECT (entry), "terminal_config_list_dialog", bind_data->list_dialog);
+	g_object_set_data (G_OBJECT (entry), "column_type", GINT_TO_POINTER (bind_data->column_type));
 }
 
-static void bind_base_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+static void terminal_config_cell_apply (TerminalConfigListDialog *list_dialog, TerminalConfigItem *item, int column_type,
+										const char *new_text)
 {
-	GtkWidget	*label = gtk_list_item_get_child (list_item);
-	KeyBindItem *item  = gtk_list_item_get_item (list_item);
-	if (item && item->bind) {
-		char base_str[16] = "";
-		if (item->bind->action == BIND_ACT_SWITCH) {
-			snprintf (base_str, sizeof (base_str), "%d", item->bind->base);
+	zterm_ensure_terminal_configs ();
+	if (!item || item->start < 0 || item->start >= MAX_TABS || !terms.terminal_configs)
+		return;
+	terminal_config_t *tc		= &terms.terminal_configs[item->start];
+	gchar			 **argv_new = NULL;
+	gchar			 **env_new	= NULL;
+	const char		  *dir_new	= NULL;
+
+	if (column_type == 0) {
+		/* Ranges: parse new range, copy current config, clear old range, set new range */
+		int indices[MAX_TABS];
+		int n = 0;
+		if (!new_text || !parse_ranges_string (new_text, indices, MAX_TABS, &n) || n == 0) {
+			GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid terminal ranges. Use e.g. 1, 3-8, or 1-2, 9");
+			gtk_alert_dialog_show (alert, GTK_WINDOW (list_dialog->dialog));
+			g_object_unref (alert);
+			return;
 		}
-		gtk_label_set_text (GTK_LABEL (label), base_str);
-	}
-}
-
-static void bind_command_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
-{
-	GtkWidget	*label = gtk_list_item_get_child (list_item);
-	KeyBindItem *item  = gtk_list_item_get_item (list_item);
-	if (item && item->bind) {
-		if (item->bind->action == BIND_ACT_SWITCH && item->bind->argv) {
-			gchar *cmd_str = g_strjoinv (" ", item->bind->argv);
-			gtk_label_set_text (GTK_LABEL (label), cmd_str);
-			g_free (cmd_str);
-		} else {
-			gtk_label_set_text (GTK_LABEL (label), "");
+		gchar **argv_dup = tc->argv ? g_strdupv ((gchar **) tc->argv) : NULL;
+		gchar **env_dup	 = tc->env ? g_strdupv ((gchar **) tc->env) : NULL;
+		char   *dir_dup	 = tc->working_directory ? strdup (tc->working_directory) : NULL;
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, NULL, NULL, NULL);
+		for (int i = 0; i < n; i++)
+			zterm_set_terminal_config (indices[i], (const char **) argv_dup, (const char **) env_dup, dir_dup);
+		g_strfreev (argv_dup);
+		g_strfreev (env_dup);
+		free (dir_dup);
+	} else if (column_type == 1) {
+		if (new_text && strlen (new_text) > 0) {
+			gint	argc = 0;
+			GError *err	 = NULL;
+			if (!g_shell_parse_argv (new_text, &argc, &argv_new, &err)) {
+				if (err) {
+					GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid command: %s", err->message);
+					gtk_alert_dialog_show (alert, GTK_WINDOW (list_dialog->dialog));
+					g_object_unref (alert);
+					g_error_free (err);
+				}
+				return;
+			}
 		}
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, (const char **) argv_new, tc->env, tc->working_directory);
+		g_strfreev (argv_new);
+	} else if (column_type == 2) {
+		dir_new = (new_text && strlen (new_text) > 0) ? new_text : NULL;
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, tc->argv, tc->env, dir_new);
+	} else if (column_type == 3) {
+		if (new_text && strlen (new_text) > 0) {
+			gint	argc = 0;
+			GError *err	 = NULL;
+			if (!g_shell_parse_argv (new_text, &argc, &env_new, &err)) {
+				if (err) {
+					GtkAlertDialog *alert = gtk_alert_dialog_new ("Invalid environment: %s", err->message);
+					gtk_alert_dialog_show (alert, GTK_WINDOW (list_dialog->dialog));
+					g_object_unref (alert);
+					g_error_free (err);
+				}
+				return;
+			}
+		}
+		for (int i = item->start; i <= item->end && i < MAX_TABS; i++)
+			zterm_set_terminal_config (i, tc->argv, (const char **) env_new, tc->working_directory);
+		g_strfreev (env_new);
 	}
+	zterm_save_config ();
+	refresh_terminal_config_list (list_dialog);
 }
 
-static void setup_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+static void terminal_config_cell_editing_done (GtkEntry *entry, gpointer unused)
 {
-	GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
+	TerminalConfigItem		 *item		  = g_object_get_data (G_OBJECT (entry), "terminal_config_item");
+	TerminalConfigListDialog *list_dialog = g_object_get_data (G_OBJECT (entry), "terminal_config_list_dialog");
+	int						  column_type = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (entry), "column_type"));
+	if (!item || !list_dialog)
+		return;
+	const char *text = gtk_editable_get_text (GTK_EDITABLE (entry));
+	terminal_config_cell_apply (list_dialog, item, column_type, text);
+}
 
-	GtkWidget *edit_btn = gtk_button_new_from_icon_name ("document-edit-symbolic");
-	gtk_widget_set_tooltip_text (edit_btn, "Edit");
-	gtk_box_append (GTK_BOX (box), edit_btn);
-
+/* Terminal config list: only Delete button (edit is in-place on cells) */
+static void setup_terminal_config_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+{
+	GtkWidget *box		  = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
 	GtkWidget *delete_btn = gtk_button_new_from_icon_name ("edit-delete-symbolic");
 	gtk_widget_set_tooltip_text (delete_btn, "Delete");
 	gtk_box_append (GTK_BOX (box), delete_btn);
-
 	gtk_list_item_set_child (list_item, box);
 }
 
-static void bind_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
+static void terminal_config_buttons_factory (GtkSignalListItemFactory *factory, GtkListItem *list_item, gpointer user_data)
 {
-	KeyBindListDialog *list_dialog = (KeyBindListDialog *) user_data;
-	GtkWidget		  *box		   = gtk_list_item_get_child (list_item);
-	KeyBindItem		  *item		   = gtk_list_item_get_item (list_item);
-
-	GtkWidget *edit_btn	  = gtk_widget_get_first_child (box);
-	GtkWidget *delete_btn = gtk_widget_get_next_sibling (edit_btn);
-
-	if (item && item->bind) {
-		g_object_set_data (G_OBJECT (edit_btn), "bind_ptr", item->bind);
-		g_object_set_data (G_OBJECT (delete_btn), "bind_ptr", item->bind);
-
-		/* Disconnect any previous handlers */
-		g_signal_handlers_disconnect_by_func (edit_btn, G_CALLBACK (key_bind_edit_clicked), list_dialog);
-		g_signal_handlers_disconnect_by_func (delete_btn, G_CALLBACK (key_bind_delete_clicked), list_dialog);
-
-		g_signal_connect (edit_btn, "clicked", G_CALLBACK (key_bind_edit_clicked), list_dialog);
-		g_signal_connect (delete_btn, "clicked", G_CALLBACK (key_bind_delete_clicked), list_dialog);
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) user_data;
+	GtkWidget				 *box		  = gtk_list_item_get_child (list_item);
+	TerminalConfigItem		 *item		  = gtk_list_item_get_item (list_item);
+	GtkWidget				 *delete_btn  = gtk_widget_get_first_child (box);
+	if (item) {
+		g_object_set_data (G_OBJECT (delete_btn), "terminal_config_item", item);
+		g_signal_handlers_disconnect_by_func (delete_btn, G_CALLBACK (terminal_config_delete_clicked), list_dialog);
+		g_signal_connect (delete_btn, "clicked", G_CALLBACK (terminal_config_delete_clicked), list_dialog);
 	}
 }
 
-static void show_key_bind_editor (GtkButton *button, gpointer user_data)
+static void terminal_config_filter_changed (GtkWidget *widget, gpointer user_data)
 {
-	PrefsDialog		  *prefs	   = (PrefsDialog *) user_data;
-	KeyBindListDialog *list_dialog = g_new0 (KeyBindListDialog, 1);
-	list_dialog->window_n		   = prefs->window_n;
+	TerminalConfigListDialog *list_dialog = (TerminalConfigListDialog *) user_data;
+	if (gtk_check_button_get_active (GTK_CHECK_BUTTON (list_dialog->filter_check))) {
+		int min_val = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (list_dialog->filter_min_spin));
+		int max_val = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (list_dialog->filter_max_spin));
+		if (min_val > max_val) {
+			gtk_spin_button_set_value (GTK_SPIN_BUTTON (list_dialog->filter_max_spin), (double) min_val);
+			max_val = min_val;
+		}
+		list_dialog->filter_start = min_val - 1;
+		list_dialog->filter_end	  = max_val - 1;
+	} else {
+		list_dialog->filter_start = -1;
+		list_dialog->filter_end	  = -1;
+	}
+	refresh_terminal_config_list (list_dialog);
+}
+
+static void show_terminal_config_editor_impl (GtkWidget *parent_window, long int window_n, int filter_start, int filter_end)
+{
+	TerminalConfigListDialog *list_dialog = g_new0 (TerminalConfigListDialog, 1);
+	list_dialog->window_n				  = window_n;
+	list_dialog->filter_start			  = filter_start;
+	list_dialog->filter_end				  = filter_end;
 
 	GtkWidget *dialog = gtk_window_new ();
-	gtk_window_set_title (GTK_WINDOW (dialog), "Key Bindings");
-	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (prefs->dialog));
+	if (filter_start >= 0) {
+		char title_buf[80];
+		snprintf (title_buf, sizeof (title_buf), "Terminal Configuration (terminals %d–%d)", filter_start + 1, filter_end + 1);
+		gtk_window_set_title (GTK_WINDOW (dialog), title_buf);
+	} else {
+		gtk_window_set_title (GTK_WINDOW (dialog), "Terminal Configuration");
+	}
+	gtk_window_set_transient_for (GTK_WINDOW (dialog), GTK_WINDOW (parent_window));
 	gtk_window_set_modal (GTK_WINDOW (dialog), TRUE);
 	gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 	list_dialog->dialog = dialog;
+	g_object_set_data (G_OBJECT (dialog), "terminal_config_list_dialog", list_dialog);
 
 	GtkWidget *main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
 	gtk_widget_set_margin_start (main_box, 12);
@@ -1738,86 +3129,110 @@ static void show_key_bind_editor (GtkButton *button, gpointer user_data)
 	gtk_widget_set_margin_bottom (main_box, 12);
 	gtk_window_set_child (GTK_WINDOW (dialog), main_box);
 
-	/* Create the GListStore and populate it */
-	list_dialog->store = g_list_store_new (KEY_BIND_ITEM_TYPE);
+	/* Filter row: checkbox and min–max (1-based in UI) */
+	GtkWidget *filter_row	  = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
+	list_dialog->filter_check = gtk_check_button_new_with_label ("Filter to range:");
+	gtk_box_append (GTK_BOX (filter_row), list_dialog->filter_check);
+	list_dialog->filter_min_spin = gtk_spin_button_new_with_range (1, MAX_TABS, 1);
+	list_dialog->filter_max_spin = gtk_spin_button_new_with_range (1, MAX_TABS, 1);
+	if (filter_start >= 0) {
+		gtk_check_button_set_active (GTK_CHECK_BUTTON (list_dialog->filter_check), TRUE);
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (list_dialog->filter_min_spin), (double) (filter_start + 1));
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (list_dialog->filter_max_spin), (double) (filter_end + 1));
+	} else {
+		gtk_check_button_set_active (GTK_CHECK_BUTTON (list_dialog->filter_check), FALSE);
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (list_dialog->filter_min_spin), 1.0);
+		gtk_spin_button_set_value (GTK_SPIN_BUTTON (list_dialog->filter_max_spin), (double) MAX_TABS);
+	}
+	gtk_box_append (GTK_BOX (filter_row), list_dialog->filter_min_spin);
+	gtk_box_append (GTK_BOX (filter_row), gtk_label_new ("–"));
+	gtk_box_append (GTK_BOX (filter_row), list_dialog->filter_max_spin);
+	g_signal_connect (list_dialog->filter_check, "toggled", G_CALLBACK (terminal_config_filter_changed), list_dialog);
+	g_signal_connect (list_dialog->filter_min_spin, "value-changed", G_CALLBACK (terminal_config_filter_changed), list_dialog);
+	g_signal_connect (list_dialog->filter_max_spin, "value-changed", G_CALLBACK (terminal_config_filter_changed), list_dialog);
+	gtk_box_append (GTK_BOX (main_box), filter_row);
 
-	/* Create selection model */
+	list_dialog->store		  = g_list_store_new (TERMINAL_CONFIG_ITEM_TYPE);
 	GtkNoSelection *selection = gtk_no_selection_new (G_LIST_MODEL (list_dialog->store));
-
-	/* Create ColumnView */
-	list_dialog->column_view = gtk_column_view_new (GTK_SELECTION_MODEL (selection));
+	list_dialog->column_view  = gtk_column_view_new (GTK_SELECTION_MODEL (selection));
 	gtk_column_view_set_show_column_separators (GTK_COLUMN_VIEW (list_dialog->column_view), TRUE);
 
-	/* Action column */
-	GtkListItemFactory *action_factory = gtk_signal_list_item_factory_new ();
-	g_signal_connect (action_factory, "setup", G_CALLBACK (setup_label_factory), NULL);
-	g_signal_connect (action_factory, "bind", G_CALLBACK (bind_action_factory), NULL);
-	GtkColumnViewColumn *action_col = gtk_column_view_column_new ("Action", action_factory);
-	gtk_column_view_column_set_resizable (action_col, TRUE);
-	gtk_column_view_column_set_fixed_width (action_col, 100);
-	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), action_col);
+	TerminalConfigCellBindData bind_ranges	  = {list_dialog, 0};
+	TerminalConfigCellBindData bind_command	  = {list_dialog, 1};
+	TerminalConfigCellBindData bind_directory = {list_dialog, 2};
+	TerminalConfigCellBindData bind_env		  = {list_dialog, 3};
 
-	/* Binding column */
-	GtkListItemFactory *binding_factory = gtk_signal_list_item_factory_new ();
-	g_signal_connect (binding_factory, "setup", G_CALLBACK (setup_label_factory), NULL);
-	g_signal_connect (binding_factory, "bind", G_CALLBACK (bind_binding_factory), NULL);
-	GtkColumnViewColumn *binding_col = gtk_column_view_column_new ("Binding", binding_factory);
-	gtk_column_view_column_set_resizable (binding_col, TRUE);
-	gtk_column_view_column_set_fixed_width (binding_col, 180);
-	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), binding_col);
+	GtkListItemFactory *ranges_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (ranges_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
+	g_signal_connect (ranges_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_ranges);
+	GtkColumnViewColumn *ranges_col = gtk_column_view_column_new ("Terminals", ranges_factory);
+	gtk_column_view_column_set_resizable (ranges_col, TRUE);
+	gtk_column_view_column_set_fixed_width (ranges_col, 100);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), ranges_col);
 
-	/* Base column */
-	GtkListItemFactory *base_factory = gtk_signal_list_item_factory_new ();
-	g_signal_connect (base_factory, "setup", G_CALLBACK (setup_label_factory), NULL);
-	g_signal_connect (base_factory, "bind", G_CALLBACK (bind_base_factory), NULL);
-	GtkColumnViewColumn *base_col = gtk_column_view_column_new ("Base", base_factory);
-	gtk_column_view_column_set_resizable (base_col, TRUE);
-	gtk_column_view_column_set_fixed_width (base_col, 60);
-	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), base_col);
+	GtkListItemFactory *command_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (command_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
+	g_signal_connect (command_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_command);
+	GtkColumnViewColumn *command_col = gtk_column_view_column_new ("Command", command_factory);
+	gtk_column_view_column_set_resizable (command_col, TRUE);
+	gtk_column_view_column_set_expand (command_col, TRUE);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), command_col);
 
-	/* Command column */
-	GtkListItemFactory *cmd_factory = gtk_signal_list_item_factory_new ();
-	g_signal_connect (cmd_factory, "setup", G_CALLBACK (setup_label_factory), NULL);
-	g_signal_connect (cmd_factory, "bind", G_CALLBACK (bind_command_factory), NULL);
-	GtkColumnViewColumn *cmd_col = gtk_column_view_column_new ("Command", cmd_factory);
-	gtk_column_view_column_set_resizable (cmd_col, TRUE);
-	gtk_column_view_column_set_expand (cmd_col, TRUE);
-	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), cmd_col);
+	GtkListItemFactory *directory_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (directory_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
+	g_signal_connect (directory_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_directory);
+	GtkColumnViewColumn *directory_col = gtk_column_view_column_new ("Directory", directory_factory);
+	gtk_column_view_column_set_resizable (directory_col, TRUE);
+	gtk_column_view_column_set_expand (directory_col, TRUE);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), directory_col);
 
-	/* Buttons column */
+	GtkListItemFactory *env_factory = gtk_signal_list_item_factory_new ();
+	g_signal_connect (env_factory, "setup", G_CALLBACK (setup_terminal_config_entry_factory), NULL);
+	g_signal_connect (env_factory, "bind", G_CALLBACK (terminal_config_editable_cell_bind), &bind_env);
+	GtkColumnViewColumn *env_col = gtk_column_view_column_new ("Environment", env_factory);
+	gtk_column_view_column_set_resizable (env_col, TRUE);
+	gtk_column_view_column_set_fixed_width (env_col, 140);
+	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), env_col);
+
 	GtkListItemFactory *buttons_factory = gtk_signal_list_item_factory_new ();
-	g_signal_connect (buttons_factory, "setup", G_CALLBACK (setup_buttons_factory), NULL);
-	g_signal_connect (buttons_factory, "bind", G_CALLBACK (bind_buttons_factory), list_dialog);
+	g_signal_connect (buttons_factory, "setup", G_CALLBACK (setup_terminal_config_buttons_factory), NULL);
+	g_signal_connect (buttons_factory, "bind", G_CALLBACK (terminal_config_buttons_factory), list_dialog);
 	GtkColumnViewColumn *buttons_col = gtk_column_view_column_new ("", buttons_factory);
-	gtk_column_view_column_set_fixed_width (buttons_col, 80);
 	gtk_column_view_append_column (GTK_COLUMN_VIEW (list_dialog->column_view), buttons_col);
 
-	/* Scrolled window for column view */
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
 	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 	gtk_widget_set_vexpand (scrolled, TRUE);
-	gtk_widget_set_size_request (scrolled, 600, 300);
+	gtk_widget_set_size_request (scrolled, 540, 280);
 	gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), list_dialog->column_view);
 	gtk_box_append (GTK_BOX (main_box), scrolled);
 
-	refresh_key_bind_list (list_dialog);
+	refresh_terminal_config_list (list_dialog);
 
-	/* Buttons */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
-
 	GtkWidget *add_btn	 = gtk_button_new_with_mnemonic ("_Add");
 	GtkWidget *close_btn = gtk_button_new_with_mnemonic ("_Close");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
 	gtk_box_append (GTK_BOX (button_box), close_btn);
+	g_signal_connect (add_btn, "clicked", G_CALLBACK (terminal_config_add_clicked), list_dialog);
+	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (terminal_config_list_close), list_dialog);
 
-	g_signal_connect (add_btn, "clicked", G_CALLBACK (key_bind_add_clicked), list_dialog);
-	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (key_bind_list_close), list_dialog);
-
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 700, 450);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 600, 400);
 	gtk_window_present (GTK_WINDOW (dialog));
+}
+
+static void show_terminal_config_editor (GtkButton *button, gpointer user_data)
+{
+	PrefsDialog *prefs = (PrefsDialog *) user_data;
+	show_terminal_config_editor_impl (prefs->dialog, prefs->window_n, -1, -1);
+}
+
+static void show_terminal_config_editor_for_range (GtkWidget *parent_dialog, long int window_n, int range_start, int range_end)
+{
+	show_terminal_config_editor_impl (parent_dialog, window_n, range_start, range_end);
 }
 
 /* ==================== Mouse Button Bindings Editor ==================== */
@@ -1833,9 +3248,12 @@ typedef struct {
 } ButtonBindEditDialog;
 
 typedef struct ButtonBindListDialog_s {
-	GtkWidget *dialog;
-	GtkWidget *list_box;
-	long int   window_n;
+	GtkWidget	   *dialog;
+	GtkWidget	   *list_box;
+	long int		window_n;
+	bind_button_t  *working_buttons;
+	bind_button_t  *original_buttons;
+	ListSettingsOps ops;
 } ButtonBindListDialog;
 
 static void refresh_button_bind_list (ButtonBindListDialog *list_dialog);
@@ -1852,22 +3270,15 @@ static void button_bind_edit_ok (ButtonBindEditDialog *edit)
 	const char *state_str  = gtk_editable_get_text (GTK_EDITABLE (edit->state_entry));
 	int			button	   = gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON (edit->button_spin));
 
-	/* Only OPEN_URI and CUT_URI are valid for button bindings */
-	bind_actions_t action;
-	if (action_idx == 0) {
-		action = BIND_ACT_OPEN_URI;
-	} else {
-		action = BIND_ACT_CUT_URI;
-	}
-
-	/* Parse state */
-	GdkModifierType state = 0;
+	bind_actions_t	action = (action_idx == 0) ? BIND_ACT_OPEN_URI : BIND_ACT_CUT_URI;
+	GdkModifierType state  = 0;
 	gtk_accelerator_parse (state_str, NULL, &state);
 
-	/* Check for duplicate binding (same button + state combination) */
-	for (bind_button_t *cur = terms.buttons; cur; cur = cur->next) {
+	ButtonBindListDialog *list_dialog = edit->list_dialog;
+	bind_button_t		 *check_list  = list_dialog ? list_dialog->working_buttons : terms.buttons;
+
+	for (bind_button_t *cur = check_list; cur; cur = cur->next) {
 		if (cur != edit->editing_bind && cur->button == button && cur->state == state) {
-			/* Duplicate found - don't add */
 			GtkAlertDialog *alert = gtk_alert_dialog_new ("A binding for this button and modifier combination already exists.");
 			gtk_alert_dialog_show (alert, GTK_WINDOW (edit->dialog));
 			g_object_unref (alert);
@@ -1878,6 +3289,10 @@ static void button_bind_edit_ok (ButtonBindEditDialog *edit)
 	bind_button_t *bind;
 	if (edit->editing_bind) {
 		bind = edit->editing_bind;
+	} else if (list_dialog) {
+		bind						 = calloc (1, sizeof (bind_button_t));
+		bind->next					 = list_dialog->working_buttons;
+		list_dialog->working_buttons = bind;
 	} else {
 		bind		  = calloc (1, sizeof (bind_button_t));
 		bind->next	  = terms.buttons;
@@ -1888,12 +3303,10 @@ static void button_bind_edit_ok (ButtonBindEditDialog *edit)
 	bind->button = button;
 	bind->state	 = state;
 
-	zterm_save_config ();
-
-	/* Refresh the list dialog if available */
-	if (edit->list_dialog) {
-		refresh_button_bind_list (edit->list_dialog);
-	}
+	if (list_dialog)
+		refresh_button_bind_list (list_dialog);
+	else
+		zterm_save_config ();
 
 	gtk_window_destroy (GTK_WINDOW (edit->dialog));
 	free (edit);
@@ -1946,6 +3359,7 @@ static void show_button_bind_edit_dialog (bind_button_t *editing_bind, long int 
 	/* State (modifiers) */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Modifiers:"), 0, row, 1, 1);
 	edit->state_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (edit->state_entry), 20);
 	gtk_entry_set_placeholder_text (GTK_ENTRY (edit->state_entry), "e.g. <Control>");
 	if (editing_bind) {
 		gchar *state_str = gtk_accelerator_name (0, editing_bind->state);
@@ -1986,7 +3400,7 @@ static void show_button_bind_edit_dialog (bind_button_t *editing_bind, long int 
 	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (button_bind_edit_cancel), edit);
 	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (button_bind_edit_ok), edit);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 400, -1);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 500, 280);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
@@ -2011,9 +3425,8 @@ static void button_bind_delete_clicked (GtkButton *button, gpointer user_data)
 	bind_button_t		 *bind		  = (bind_button_t *) g_object_get_data (G_OBJECT (button), "bind_ptr");
 	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) user_data;
 
-	/* Remove from linked list */
-	bind_button_t **prev = &terms.buttons;
-	for (bind_button_t *cur = terms.buttons; cur; cur = cur->next) {
+	bind_button_t **prev = &list_dialog->working_buttons;
+	for (bind_button_t *cur = list_dialog->working_buttons; cur; cur = cur->next) {
 		if (cur == bind) {
 			*prev = cur->next;
 			free (cur);
@@ -2021,8 +3434,6 @@ static void button_bind_delete_clicked (GtkButton *button, gpointer user_data)
 		}
 		prev = &cur->next;
 	}
-
-	zterm_save_config ();
 	refresh_button_bind_list (list_dialog);
 }
 
@@ -2036,8 +3447,7 @@ static void refresh_button_bind_list (ButtonBindListDialog *list_dialog)
 		child = next;
 	}
 
-	/* Add rows for each button binding */
-	for (bind_button_t *cur = terms.buttons; cur; cur = cur->next) {
+	for (bind_button_t *cur = list_dialog->working_buttons; cur; cur = cur->next) {
 		GtkWidget *row_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 		gtk_widget_set_margin_start (row_box, 6);
 		gtk_widget_set_margin_end (row_box, 6);
@@ -2080,10 +3490,47 @@ static void refresh_button_bind_list (ButtonBindListDialog *list_dialog)
 	}
 }
 
-static void button_bind_list_close (ButtonBindListDialog *list_dialog)
+static void button_bind_commit (void *ctx)
 {
-	gtk_window_destroy (GTK_WINDOW (list_dialog->dialog));
+	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) ctx;
+	button_bind_list_free (terms.buttons);
+	terms.buttons = button_bind_list_clone (list_dialog->working_buttons);
+}
+
+static void button_bind_snapshot (void *ctx)
+{
+	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) ctx;
+	button_bind_list_free (list_dialog->original_buttons);
+	list_dialog->original_buttons = button_bind_list_clone (list_dialog->working_buttons);
+}
+
+static void button_bind_restore_config (void *ctx)
+{
+	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) ctx;
+	button_bind_list_free (terms.buttons);
+	terms.buttons = button_bind_list_clone (list_dialog->original_buttons);
+}
+
+static void button_bind_restore_working (void *ctx)
+{
+	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) ctx;
+	button_bind_list_free (list_dialog->working_buttons);
+	list_dialog->working_buttons = button_bind_list_clone (list_dialog->original_buttons);
+}
+
+static void button_bind_refresh_ui (void *ctx)
+{
+	refresh_button_bind_list ((ButtonBindListDialog *) ctx);
+}
+
+static void button_bind_destroy (void *ctx)
+{
+	ButtonBindListDialog *list_dialog = (ButtonBindListDialog *) ctx;
+	GtkWidget			 *dialog	  = list_dialog->dialog;
+	button_bind_list_free (list_dialog->working_buttons);
+	button_bind_list_free (list_dialog->original_buttons);
 	free (list_dialog);
+	gtk_window_destroy (GTK_WINDOW (dialog));
 }
 
 static void show_button_bind_editor (GtkButton *button, gpointer user_data)
@@ -2091,6 +3538,16 @@ static void show_button_bind_editor (GtkButton *button, gpointer user_data)
 	PrefsDialog			 *prefs		  = (PrefsDialog *) user_data;
 	ButtonBindListDialog *list_dialog = g_new0 (ButtonBindListDialog, 1);
 	list_dialog->window_n			  = prefs->window_n;
+	list_dialog->working_buttons	  = button_bind_list_clone (terms.buttons);
+	list_dialog->original_buttons	  = button_bind_list_clone (terms.buttons);
+	list_dialog->ops.ctx			  = list_dialog;
+	list_dialog->ops.commit			  = button_bind_commit;
+	list_dialog->ops.snapshot		  = button_bind_snapshot;
+	list_dialog->ops.restore_config	  = button_bind_restore_config;
+	list_dialog->ops.restore_working  = button_bind_restore_working;
+	list_dialog->ops.refresh_ui		  = button_bind_refresh_ui;
+	list_dialog->ops.destroy		  = button_bind_destroy;
+	list_dialog->ops.after_commit	  = NULL;
 
 	GtkWidget *dialog = gtk_window_new ();
 	gtk_window_set_title (GTK_WINDOW (dialog), "Mouse Button Bindings");
@@ -2110,7 +3567,7 @@ static void show_button_bind_editor (GtkButton *button, gpointer user_data)
 	GtkWidget *scrolled = gtk_scrolled_window_new ();
 	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
 	gtk_widget_set_vexpand (scrolled, TRUE);
-	gtk_widget_set_size_request (scrolled, 350, 200);
+	gtk_widget_set_size_request (scrolled, 420, 260);
 	gtk_box_append (GTK_BOX (main_box), scrolled);
 
 	list_dialog->list_box = gtk_list_box_new ();
@@ -2119,21 +3576,31 @@ static void show_button_bind_editor (GtkButton *button, gpointer user_data)
 
 	refresh_button_bind_list (list_dialog);
 
-	/* Buttons */
+	/* Buttons: Add, then Reset | Cancel | Apply | OK */
 	GtkWidget *button_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_halign (button_box, GTK_ALIGN_END);
 	gtk_widget_set_margin_top (button_box, 12);
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
-	GtkWidget *add_btn	 = gtk_button_new_with_mnemonic ("_Add");
-	GtkWidget *close_btn = gtk_button_new_with_mnemonic ("_Close");
+	GtkWidget *add_btn	  = gtk_button_new_with_mnemonic ("_Add");
+	GtkWidget *reset_btn  = gtk_button_new_with_mnemonic ("_Reset");
+	GtkWidget *cancel_btn = gtk_button_new_with_mnemonic ("_Cancel");
+	GtkWidget *apply_btn  = gtk_button_new_with_mnemonic ("_Apply");
+	GtkWidget *ok_btn	  = gtk_button_new_with_mnemonic ("_OK");
 	gtk_box_append (GTK_BOX (button_box), add_btn);
-	gtk_box_append (GTK_BOX (button_box), close_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
+	gtk_box_append (GTK_BOX (button_box), cancel_btn);
+	gtk_box_append (GTK_BOX (button_box), apply_btn);
+	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
 	g_signal_connect (add_btn, "clicked", G_CALLBACK (button_bind_add_clicked), list_dialog);
-	g_signal_connect_swapped (close_btn, "clicked", G_CALLBACK (button_bind_list_close), list_dialog);
+	g_signal_connect (reset_btn, "clicked", G_CALLBACK (list_settings_reset), &list_dialog->ops);
+	g_signal_connect (cancel_btn, "clicked", G_CALLBACK (list_settings_cancel), &list_dialog->ops);
+	g_signal_connect (apply_btn, "clicked", G_CALLBACK (list_settings_apply), &list_dialog->ops);
+	g_signal_connect (ok_btn, "clicked", G_CALLBACK (list_settings_ok), &list_dialog->ops);
+	debugf ("list_dialog: %p, ops: %p", list_dialog, &list_dialog->ops);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 500, 300);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 360);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
@@ -2184,6 +3651,7 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Font:"), 0, row, 1, 1);
 	GtkWidget *font_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
 	prefs->font_entry	= gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (prefs->font_entry), 32);
 	gtk_editable_set_text (GTK_EDITABLE (prefs->font_entry), terms.font ? terms.font : "");
 	gtk_widget_set_hexpand (prefs->font_entry, TRUE);
 	gtk_box_append (GTK_BOX (font_box), prefs->font_entry);
@@ -2202,6 +3670,7 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	/* Word Character Exceptions */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Word Char Exceptions:"), 0, row, 1, 1);
 	prefs->word_char_entry = gtk_entry_new ();
+	gtk_editable_set_width_chars (GTK_EDITABLE (prefs->word_char_entry), 24);
 	gtk_editable_set_text (GTK_EDITABLE (prefs->word_char_entry), terms.word_char_exceptions ? terms.word_char_exceptions : "");
 	gtk_widget_set_hexpand (prefs->word_char_entry, TRUE);
 	gtk_grid_attach (GTK_GRID (grid), prefs->word_char_entry, 1, row++, 2, 1);
@@ -2257,6 +3726,12 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	gtk_widget_set_margin_bottom (separator2, 6);
 	gtk_grid_attach (GTK_GRID (grid), separator2, 0, row++, 3, 1);
 
+	/* Environment button */
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Environment:"), 0, row, 1, 1);
+	GtkWidget *env_btn = gtk_button_new_with_label ("Edit Global Environment...");
+	g_signal_connect (env_btn, "clicked", G_CALLBACK (show_env_editor), prefs);
+	gtk_grid_attach (GTK_GRID (grid), env_btn, 1, row++, 2, 1);
+
 	/* Color Schemes button */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Color Schemes:"), 0, row, 1, 1);
 	GtkWidget *color_scheme_btn = gtk_button_new_with_label ("Edit Color Schemes...");
@@ -2275,6 +3750,12 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	g_signal_connect (key_bind_btn, "clicked", G_CALLBACK (show_key_bind_editor), prefs);
 	gtk_grid_attach (GTK_GRID (grid), key_bind_btn, 1, row++, 2, 1);
 
+	/* Terminal Configuration button */
+	gtk_grid_attach (GTK_GRID (grid), create_label ("Terminal Configuration:"), 0, row, 1, 1);
+	GtkWidget *terminal_config_btn = gtk_button_new_with_label ("Configure Terminals...");
+	g_signal_connect (terminal_config_btn, "clicked", G_CALLBACK (show_terminal_config_editor), prefs);
+	gtk_grid_attach (GTK_GRID (grid), terminal_config_btn, 1, row++, 2, 1);
+
 	/* Mouse Button Bindings button */
 	gtk_grid_attach (GTK_GRID (grid), create_label ("Mouse Bindings:"), 0, row, 1, 1);
 	GtkWidget *button_bind_btn = gtk_button_new_with_label ("Edit Mouse Bindings...");
@@ -2288,25 +3769,26 @@ void do_preferences (GSimpleAction *self, GVariant *parameter, gpointer data)
 	gtk_box_append (GTK_BOX (main_box), button_box);
 
 	GtkWidget *preview_btn = gtk_button_new_with_mnemonic ("_Preview");
-	GtkWidget *revert_btn  = gtk_button_new_with_mnemonic ("_Revert");
+	GtkWidget *reset_btn   = gtk_button_new_with_mnemonic ("_Reset");
 	GtkWidget *cancel_btn  = gtk_button_new_with_mnemonic ("_Cancel");
 	GtkWidget *apply_btn   = gtk_button_new_with_mnemonic ("_Apply");
 	GtkWidget *ok_btn	   = gtk_button_new_with_mnemonic ("_OK");
 
+	/* Button order: Reset | Cancel | Apply | OK (GNOME convention; Preview first) */
 	gtk_box_append (GTK_BOX (button_box), preview_btn);
-	gtk_box_append (GTK_BOX (button_box), revert_btn);
+	gtk_box_append (GTK_BOX (button_box), reset_btn);
 	gtk_box_append (GTK_BOX (button_box), cancel_btn);
 	gtk_box_append (GTK_BOX (button_box), apply_btn);
 	gtk_box_append (GTK_BOX (button_box), ok_btn);
 
 	/* Connect button signals */
 	g_signal_connect_swapped (preview_btn, "clicked", G_CALLBACK (prefs_preview_clicked), prefs);
-	g_signal_connect_swapped (revert_btn, "clicked", G_CALLBACK (prefs_revert_clicked), prefs);
+	g_signal_connect_swapped (reset_btn, "clicked", G_CALLBACK (prefs_revert_clicked), prefs);
 	g_signal_connect_swapped (cancel_btn, "clicked", G_CALLBACK (prefs_cancel_clicked), prefs);
 	g_signal_connect_swapped (apply_btn, "clicked", G_CALLBACK (prefs_apply_clicked), prefs);
 	g_signal_connect_swapped (ok_btn, "clicked", G_CALLBACK (prefs_ok_clicked), prefs);
 
-	gtk_window_set_default_size (GTK_WINDOW (dialog), 400, -1);
+	gtk_window_set_default_size (GTK_WINDOW (dialog), 540, 520);
 	gtk_window_present (GTK_WINDOW (dialog));
 }
 
