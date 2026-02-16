@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+TryExec=zterm
+Exec=zterm
+Icon=utilities-terminal
+Categories=System;TerminalEmulator;
+Actions=NewWindow;NewTab;
+StartupNotify=true
+X-KDE-AuthorizeAction=shell_access
+X-KDE-Shortcuts=Ctrl+Alt+T
+StartupWMClass=zterm
+Keywords=terminal;console;script;run;execute;command;command-line;commandline;cli;bash;sh;shell;zsh;cmd;command prompt
+
+Name=zterm
+GenericName=Terminal
+Comment=Use the command line
+
+[Desktop Action NewWindow]
+Name=Open a New Window
+Icon=window-new
+Exec=zterm
+
+[Desktop Action NewTab]
+Name=Open a New Tab
+Icon=tab-new
+Exec=zterm
